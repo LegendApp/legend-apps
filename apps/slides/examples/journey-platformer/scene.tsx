@@ -1,59 +1,76 @@
 import type { ReactNode } from "react";
-import { Bloom, Box, Card, Environment, Fog, JourneyStop, KeyLight, Material, RoundedBox, Sphere, Spray, Tube,
+import { Bloom, Box, Card, Fog, JourneyStop, KeyLight, Material, RoundedBox, Sphere, Spray, Sprite, Tube,
   type Keyframe, type Vec3 } from "slides:journey/Journey";
+import { BUTTERFLY, CRATE } from "./art";
 
-/** Camera x for each slide; the scene is authored once in fixed coordinates and the camera slides sideways past it. */
-export const STOPS = [0, 24, 48, 72, 96];
-/** First beat of each slide: slides 2 and 5 have two builds. */
-const FIRST_BEAT = [0, 1, 3, 4, 5];
-const BEATS = 7;
-
-/** The hero's feet per beat. */
+/** The hero's feet at each step of the journey, counted across slides. */
 const HERO: Vec3[] = [[-5, 0, 0], [21, 0, 0], [26, 3, 0], [48.6, 5, 0], [69, 0, 0], [91, 0, 0], [95.6, 0, 0]];
-/** Which beat collects each gem. */
-const GEMS: { at: Vec3; beat: number }[] = [
-  ...[-1, 1, 3].map(x => ({ at: [x, 1.6, 0] as Vec3, beat: 1 })),
-  { at: [22, 6.4, 0], beat: 2 },
-  ...[51, 52.6, 54.2].map(x => ({ at: [x, 6.4, 0] as Vec3, beat: 4 })),
-  ...[74.5, 76, 77.5].map((x, i) => ({ at: [x, 2.4 + i * 1.5, 0] as Vec3, beat: 5 })),
+/** Which step collects each gem. */
+const GEMS: { at: Vec3; step: number }[] = [
+  ...[-1, 1, 3].map(x => ({ at: [x, 1.6, 0] as Vec3, step: 1 })),
+  { at: [22, 6.4, 0], step: 2 },
+  ...[51, 52.6, 54.2].map(x => ({ at: [x, 6.4, 0] as Vec3, step: 4 })),
+  ...[74.5, 76, 77.5].map((x, i) => ({ at: [x, 2.4 + i * 1.5, 0] as Vec3, step: 5 })),
 ];
-
-/** A step map with one value per beat. */
-const beats = <T,>(value: (beat: number) => T): Record<number, T> =>
-  Object.fromEntries(Array.from({ length: BEATS }, (_, beat) => [beat, value(beat)]));
-const add = (a: Vec3, b: Vec3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
-/** Seconds the camera takes between stops; the hero's hop lasts as long. */
+/** Seconds the camera takes between stops; untimed keyframes last as long. */
 const FLIGHT = 1.4;
-/** A parabolic hop into each beat, sampled at quarters with linear segments. */
-function hop(offset: Vec3): Keyframe<Vec3>[] {
-  const frames: Keyframe<Vec3>[] = [{ step: 0, value: add(HERO[0], offset) }];
-  for (let beat = 1; beat < BEATS; beat++) {
-    const from = HERO[beat - 1], to = HERO[beat], height = 2 + Math.max(0, to[1] - from[1]) * 0.4;
-    for (let q = 1; q <= 4; q++) {
-      const t = q / 4, y = from[1] + (to[1] - from[1]) * t + 4 * height * t * (1 - t);
-      frames.push({ step: beat, delay: (q - 1) * FLIGHT / 4, duration: FLIGHT / 4, ease: "linear",
-        value: add([from[0] + (to[0] - from[0]) * t, y, 0], offset) });
-    }
-  }
-  return frames;
-}
+const add = (a: Vec3, b: Vec3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 
-/** Boxes take a full-extent size: `size` 0.5 with `scale` as width, height and depth. */
-function block(id: string, center: Vec3, extent: Vec3, material: string) {
-  return <Box key={id} id={id} position={center} size={0.5} scale={extent} material={material} emissive={0} />;
-}
-/** Bevelled tiles read as separate blocks where plain boxes merge into one face. */
-function tile(id: string, center: Vec3, extent: Vec3, material: string) {
-  return <RoundedBox key={id} id={id} position={center} size={0.5} scale={extent} radius={0.1} edge={0} material={material} emissive={0} />;
-}
+/** A hop into each step's position: one keyframe per step, bowed by `arc`. */
+const hop = (offset: Vec3): Keyframe<Vec3>[] => HERO.map((feet, step) => ({ step, value: add(feet, offset),
+  arc: step ? 2 + Math.max(0, feet[1] - HERO[step - 1][1]) * 0.4 : 0 }));
+
+// Original pixel art: a round, antennaed walker and a small bird.
+const HERO_FRAMES = [[
+  ".....yy.....",
+  ".....kk.....",
+  "...oooooo...",
+  "..oooooooo..",
+  ".oowwoowwoo.",
+  ".oowkoowkoo.",
+  ".oooooooooo.",
+  ".oommmmmmoo.",
+  ".ddoooooodd.",
+  "..dddddddd..",
+  "...bb..bb...",
+  "..bbb..bbb..",
+], [
+  ".....yy.....",
+  ".....kk.....",
+  "...oooooo...",
+  "..oooooooo..",
+  ".oowwoowwoo.",
+  ".oowkoowkoo.",
+  ".oooooooooo.",
+  ".oooommmooo.",
+  ".ddoooooodd.",
+  "..dddddddd..",
+  "..bb....bb..",
+  ".bbb....bbb.",
+]];
+const HERO_COLORS = { o: "#ff8a3d", d: "#d9622b", w: "#ffffff", k: "#1b1b2b", m: "#7a2e1d", y: "#ffd34d", b: "#5b3a29" };
+const BIRD_FRAMES = [[
+  "k......k",
+  "kk....kk",
+  ".kkwwkk.",
+  "..wwwwr.",
+  "...ww...",
+], [
+  "........",
+  "........",
+  ".kkwwkk.",
+  "kkwwwwr.",
+  "k..ww..k",
+]];
+const BIRD_COLORS = { k: "#2b3a55", w: "#f2f4f8", r: "#ff9f1c" };
 
 function ground(): ReactNode[] {
   const tiles: ReactNode[] = [];
   for (let x = -18; x < 116; x += 2) {
     if (x >= 54 && x < 60) continue; // a pit under the ladder platform
     const top = (x / 2) % 2 === 0 ? "grass" : "grass2";
-    tiles.push(block(`ground/top${x}`, [x + 1, -0.2, 0], [2, 0.4, 4], top));
-    tiles.push(block(`ground/dirt${x}`, [x + 1, -2.4, 0], [2, 4, 4], "dirt"));
+    tiles.push(<Box key={`top${x}`} id={`ground/top${x}`} position={[x + 1, -0.2, 0]} extent={[2, 0.4, 4]} material={top} />);
+    tiles.push(<Box key={`dirt${x}`} id={`ground/dirt${x}`} position={[x + 1, -2.4, 0]} extent={[2, 4, 4]} material="dirt" />);
   }
   return tiles;
 }
@@ -63,114 +80,108 @@ function backdrop(): ReactNode[] {
   // Far range: large, hazy spheres sunk into the ground.
   for (let i = 0; i < 9; i++) {
     const x = -30 + i * 19, r = 9 + (i * 7) % 5;
-    parts.push(<Sphere key={`far${i}`} id={`far/${i}`} position={[x, -r * 0.35, -46]} size={r} scale={[1.3, 1, 0.6]} material="far" emissive={0} />);
+    parts.push(<Sphere key={`far${i}`} id={`far/${i}`} position={[x, -r * 0.35, -46]} size={r} scale={[1.3, 1, 0.6]} material="far" />);
   }
   // Near hills: rounder, greener, closer.
   for (let i = 0; i < 12; i++) {
     const x = -22 + i * 12 + (i % 3) * 2, r = 3 + (i % 3);
-    parts.push(<Sphere key={`hill${i}`} id={`hill/${i}`} position={[x, -r * 0.3, -14]} size={r} scale={[1.4, 1, 0.8]} material="hill" emissive={0} />);
+    parts.push(<Sphere key={`hill${i}`} id={`hill/${i}`} position={[x, -r * 0.3, -14]} size={r} scale={[1.4, 1, 0.8]} material="hill" />);
   }
-  // Clouds: three puffs each, slightly self-lit so they stay white under the haze.
+  // Clouds: three flat white puffs each.
   for (let i = 0; i < 10; i++) {
     const c: Vec3 = [-20 + i * 15 + (i % 2) * 4, 13 + (i % 3) * 1.5, -26];
     [[-1.4, 0, 0, 1.2], [0, 0.5, 0.2, 1.6], [1.5, 0, 0, 1.1]].forEach(([dx, dy, dz, r], j) =>
-      parts.push(<Sphere key={`cloud${i}-${j}`} id={`cloud${i}/${j}`} position={add(c, [dx, dy, dz])} size={r} scale={[1.3, 0.85, 0.8]} color="#ffffff" emissive={0.35} material="cloud" />));
+      parts.push(<Sphere key={`cloud${i}-${j}`} id={`cloud${i}/${j}`} position={add(c, [dx, dy, dz])} size={r} scale={[1.3, 0.85, 0.8]} material="cloud" />));
   }
+  // A bird crossing the sky on the step clock, flapping on its own.
+  parts.push(<Sprite key="bird" id="bird" pixels={BIRD_FRAMES} palette={BIRD_COLORS} fps={4} size={0.9}
+    position={HERO.map((feet, step) => ({ step, value: [feet[0] + 7, 8.5 + (step % 2) * 0.8, -2] as Vec3 }))} />);
   return parts;
 }
 
 function sign(id: string, x: number, title: string) {
   return [
-    block(`${id}/post`, [x, 1.2, -1], [0.3, 2.4, 0.3], "wood"),
+    <Box key={`${id}/post`} id={`${id}/post`} position={[x, 1.2, -1]} extent={[0.3, 2.4, 0.3]} material="wood" />,
     <Card key={`${id}/board`} id={`${id}/board`} position={[x, 3, -0.9]} scale={[4.4, 1.3, 0.12]} flat color="#8a5a2b" textColor="#fff7e0"
       title={title} avatar={0} radius={0.18} weight="bold" />,
   ];
 }
 
-function hero(): ReactNode[] {
-  return [
-    <RoundedBox key="body" id="hero/body" position={hop([0, 0.65, 0])} size={0.5} scale={[1.2, 1.3, 1]} radius={0.35} edge={0} color="#ff7a3d" emissive={0} material="hero" />,
-    ...[-0.25, 0.25].flatMap(dx => [
-      <Sphere key={`eye${dx}`} id={`hero/eye${dx}`} position={hop([dx, 0.9, 0.52])} size={0.17} color="#ffffff" emissive={0.2} material="eye" />,
-      <Sphere key={`pupil${dx}`} id={`hero/pupil${dx}`} position={hop([dx + 0.04, 0.9, 0.66])} size={0.08} color="#1b1b2b" emissive={0} material="pupil" />,
-    ]),
-  ];
-}
-
 function gems(): ReactNode[] {
-  return GEMS.map(({ at, beat }, i) => {
-    // Hidden gems (the one inside the bonus block) start at zero scale and pop out on their beat.
+  // Gems spin on a loop until their step collects them.
+  const spin: Keyframe<Vec3>[] = [{ step: 0, value: [0, 0, 45], loop: { every: 2.4, frames: [{ at: 0, value: [0, 360, 45], duration: 2.4, ease: "linear" }] } }];
+  return GEMS.map(({ at, step }, i) => {
+    // The gem inside the bonus block starts at zero scale and pops out on its step.
     const hidden = i === 3;
-    const scale: Keyframe<Vec3>[] = [{ step: 0, value: [0.45, 0.45, 0.2] }, { step: beat, delay: FLIGHT * 0.6, duration: 0.25, value: [0, 0, 0] }];
-    if (hidden) scale.splice(0, 2, { step: 0, value: [0, 0, 0] }, { step: beat, delay: FLIGHT / 2, value: [0.5, 0.5, 0.22] }, { step: beat + 1, delay: FLIGHT / 2, value: [0, 0, 0] });
-    const position: Keyframe<Vec3>[] | Vec3 = hidden ? [{ step: 0, value: add(at, [0, -2, 0]) }, { step: beat, delay: FLIGHT / 2, value: at }] : at;
-    return <Box key={`gem${i}`} id={`gem/${i}`} position={position} size={1} scale={scale} color="#2ee6d6" emissive={0.9}
-      rotation={[0, 0, 45]} />;
+    const scale: Keyframe<Vec3>[] = hidden
+      ? [{ step: 0, value: [0, 0, 0] }, { step, delay: FLIGHT / 2, duration: 0.65, value: [0.5, 0.5, 0.22] }, { step: step + 1, delay: FLIGHT / 2, duration: 0.25, value: [0, 0, 0] }]
+      : [{ step: 0, value: [0.45, 0.45, 0.2] }, { step, delay: FLIGHT * 0.6, duration: 0.25, value: [0, 0, 0] }];
+    const position: Keyframe<Vec3>[] | Vec3 = hidden ? [{ step: 0, value: add(at, [0, -2, 0]) }, { step, delay: FLIGHT / 2, duration: 0.65, value: at }] : at;
+    return <Box key={`gem${i}`} id={`gem/${i}`} position={position} size={1} scale={scale} material="gem" rotation={spin} />;
   });
 }
 
 function stopOne(): ReactNode[] {
   // A row of bonus blocks and a floating platform.
   return [
-    ...[20, 22, 24].map(x => tile(`bonus/${x}`, [x, 4.5, 0], [1.6, 1.6, 1.6], x === 22 ? "bonus" : "brick")),
-    block("bonus/bump", [22, 4.5, 0.81], [0.5, 0.5, 0.02], "stud"),
-    block("ledge1/top", [27, 2.75, 0], [5, 0.5, 2.4], "grass"),
-    block("ledge1/under", [27, 2.15, 0], [5, 0.7, 2.4], "dirt"),
+    ...[20, 22, 24].map(x => <RoundedBox key={`bonus${x}`} id={`bonus/${x}`} position={[x, 4.5, 0]} size={0.5} scale={[1.6, 1.6, 1.6]} radius={0.1} edge={0}
+      material={x === 22 ? "bonus" : "brick"} />),
+    <Box key="bump" id="bonus/bump" position={[22, 4.5, 0.81]} extent={[0.5, 0.5, 0.02]} material="stud" />,
+    <Box key="ledge1top" id="ledge1/top" position={[27, 2.75, 0]} extent={[5, 0.5, 2.4]} material="grass" />,
+    <Box key="ledge1under" id="ledge1/under" position={[27, 2.15, 0]} extent={[5, 0.7, 2.4]} material="dirt" />,
   ];
 }
 
 function stopTwo(): ReactNode[] {
-  const rungs = Array.from({ length: 7 }, (_, i) => block(`ladder/rung${i}`, [46, 0.6 + i * 0.7, 0.4], [1.2, 0.14, 0.14], "wood"));
   return [
-    <Tube key="ladder/l" id="ladder/l" position={[45.45, 0, 0.4]} end={[45.45, 5.2, 0.4]} thickness={0.08} color="#a06a35" emissive={0} material="wood" />,
-    <Tube key="ladder/r" id="ladder/r" position={[46.55, 0, 0.4]} end={[46.55, 5.2, 0.4]} thickness={0.08} color="#a06a35" emissive={0} material="wood" />,
-    ...rungs,
-    block("ledge2/top", [51, 4.75, 0], [9, 0.5, 2.4], "grass2"),
-    block("ledge2/under", [51, 4.05, 0], [9, 0.9, 2.4], "brick"),
-    ...[47.5, 54.5].map(x => block(`ledge2/leg${x}`, [x, 1.8, -0.6], [0.6, 3.6, 0.6], "wood")),
+    ...[45.45, 46.55].map(x => <Tube key={`rail${x}`} id={`ladder/${x}`} position={[x, 0, 0.4]} end={[x, 5.2, 0.4]} thickness={0.08} material="wood" />),
+    ...Array.from({ length: 7 }, (_, i) => <Box key={`rung${i}`} id={`ladder/rung${i}`} position={[46, 0.6 + i * 0.7, 0.4]} extent={[1.2, 0.14, 0.14]} material="wood" />),
+    <Box key="ledge2top" id="ledge2/top" position={[51, 4.75, 0]} extent={[9, 0.5, 2.4]} material="grass2" />,
+    <Box key="ledge2under" id="ledge2/under" position={[51, 4.05, 0]} extent={[9, 0.9, 2.4]} material="brick" />,
+    ...[47.5, 54.5].map(x => <Box key={`leg${x}`} id={`ledge2/leg${x}`} position={[x, 1.8, -0.6]} extent={[0.6, 3.6, 0.6]} material="wood" />),
   ];
 }
 
 function stopThree(): ReactNode[] {
-  // A staircase of crates.
+  // A staircase of image-mapped crates, and a butterfly drawn from an image strip.
   const steps: ReactNode[] = [];
   for (let col = 0; col < 4; col++) for (let row = 0; row <= col; row++)
-    steps.push(tile(`stairs/${col}-${row}`, [75 + col * 1.5, 0.75 + row * 1.5, 0], [1.5, 1.5, 1.5], (col + row) % 2 ? "crate" : "crate2"));
+    steps.push(<Box key={`stairs${col}-${row}`} id={`stairs/${col}-${row}`} position={[75 + col * 1.5, 0.75 + row * 1.5, 0]} extent={[1.5, 1.5, 1.5]}
+      material={(col + row) % 2 ? "crate" : "crate2"} />);
+  steps.push(<Sprite key="butterfly" id="butterfly" source={BUTTERFLY} frames={2} fps={6} size={0.4}
+    position={[{ step: 0, value: [70, 3.5, 1] }, { step: 5, value: [73, 7.5, 1], arc: 1 }]} />);
   return steps;
 }
 
 function goal(): ReactNode[] {
-  const x = 98;
+  const x = 98, raised = HERO.length - 1;
   return [
-    block("goal/base", [x, 0.4, 0], [1.6, 0.8, 1.6], "brick"),
-    <Tube key="goal/pole" id="goal/pole" position={[x, 0.8, 0]} end={[x, 8.6, 0]} thickness={0.1} color="#e7edf5" emissive={0} material="pole" />,
-    <Sphere key="goal/top" id="goal/top" position={[x, 8.8, 0]} size={0.32} color="#ffd34d" emissive={0.6} material="gold" />,
-    <Box key="goal/flag" id="goal/flag" size={0.5} scale={[2.2, 1.4, 0.08]} material="flag" emissive={beats(b => b >= 6 ? 0.12 : 0)}
-      position={beats<Vec3>(b => b >= 6 ? [x + 1.2, 7.8, 0] : [x + 1.2, 1.8, 0])} />,
-    <Spray key="goal/confetti" id="goal/confetti" position={[x, 9, 0]} step={6} rate={60} lifetime={2.2} size={0.08}
+    <Box key="goalbase" id="goal/base" position={[x, 0.4, 0]} extent={[1.6, 0.8, 1.6]} material="brick" />,
+    <Tube key="goalpole" id="goal/pole" position={[x, 0.8, 0]} end={[x, 8.6, 0]} thickness={0.1} material="pole" />,
+    <Sphere key="goaltop" id="goal/top" position={[x, 8.8, 0]} size={0.32} material="gold" />,
+    <Box key="goalflag" id="goal/flag" extent={[2.2, 1.4, 0.08]} material="flag" position={{ 0: [x + 1.2, 1.8, 0], [raised]: [x + 1.2, 7.8, 0] }} />,
+    <Spray key="confetti" id="goal/confetti" position={[x, 9, 0]} step={raised} rate={60} lifetime={2.2} size={0.08}
       spread={[2, 0.5, 1]} velocity={[0, 2.2, 0]} color="#ffd34d" />,
   ];
 }
 
 const scene: ReactNode[] = [
-  <Material key="m-grass" id="grass" albedo="#5cc94a" roughness={0.9} metal={0} rim={0} />,
-  <Material key="m-grass2" id="grass2" albedo="#4fb840" roughness={0.9} metal={0} rim={0} />,
-  <Material key="m-dirt" id="dirt" albedo="#a8683a" roughness={1} metal={0} rim={0} />,
-  <Material key="m-brick" id="brick" albedo="#c8553d" roughness={0.85} metal={0} rim={0} />,
-  <Material key="m-bonus" id="bonus" albedo="#f4b63f" roughness={0.6} metal={0} rim={0} />,
-  <Material key="m-stud" id="stud" albedo="#fff1c2" roughness={0.6} metal={0} rim={0} />,
-  <Material key="m-wood" id="wood" albedo="#9a6634" roughness={0.9} metal={0} rim={0} />,
-  <Material key="m-crate" id="crate" albedo="#d29a52" roughness={0.9} metal={0} rim={0} />,
-  <Material key="m-crate2" id="crate2" albedo="#bf8442" roughness={0.9} metal={0} rim={0} />,
-  <Material key="m-hill" id="hill" albedo="#3fa85a" roughness={1} metal={0} rim={0} />,
-  <Material key="m-far" id="far" albedo="#6e9fd0" roughness={1} metal={0} rim={0} />,
-  <Material key="m-cloud" id="cloud" albedo="#ffffff" roughness={1} metal={0} rim={0} />,
-  <Material key="m-hero" id="hero" albedo="#ff7a3d" roughness={0.5} metal={0} rim={0} />,
-  <Material key="m-eye" id="eye" albedo="#ffffff" roughness={0.4} metal={0} rim={0} />,
-  <Material key="m-pupil" id="pupil" albedo="#1b1b2b" roughness={0.4} metal={0} rim={0} />,
-  <Material key="m-pole" id="pole" albedo="#e7edf5" roughness={0.3} metal={0.4} rim={0} />,
-  <Material key="m-gold" id="gold" albedo="#ffd34d" roughness={0.3} metal={0.6} rim={0} />,
-  <Material key="m-flag" id="flag" albedo="#ff4f7b" roughness={0.8} metal={0} rim={0} />,
+  <Material key="m-grass" id="grass" albedo="#5cc94a" />,
+  <Material key="m-grass2" id="grass2" albedo="#4fb840" />,
+  <Material key="m-dirt" id="dirt" albedo="#a8683a" />,
+  <Material key="m-brick" id="brick" albedo="#c8553d" />,
+  <Material key="m-bonus" id="bonus" albedo="#f4b63f" />,
+  <Material key="m-stud" id="stud" albedo="#fff1c2" />,
+  <Material key="m-wood" id="wood" albedo="#9a6634" />,
+  <Material key="m-crate" id="crate" albedo="#ffffff" map={CRATE} />,
+  <Material key="m-crate2" id="crate2" albedo="#e8e0d4" map={CRATE} />,
+  <Material key="m-hill" id="hill" albedo="#3fa85a" />,
+  <Material key="m-far" id="far" albedo="#8fb8e0" shading="flat" />,
+  <Material key="m-cloud" id="cloud" albedo="#ffffff" shading="flat" />,
+  <Material key="m-pole" id="pole" albedo="#e7edf5" />,
+  <Material key="m-gold" id="gold" albedo="#ffd34d" />,
+  <Material key="m-flag" id="flag" albedo="#ff4f7b" />,
+  <Material key="m-gem" id="gem" albedo="#2ee6d6" emissive={0.4} />,
   ...backdrop(),
   ...ground(),
   ...sign("sign0", 4, "START"),
@@ -180,22 +191,18 @@ const scene: ReactNode[] = [
   ...sign("sign4", 90, "GOAL"),
   ...stopOne(), ...stopTwo(), ...stopThree(), ...goal(),
   ...gems(),
-  ...hero(),
-  <KeyLight key="key" position={beats<Vec3>(b => [HERO[b][0] - 14, 26, 18])} target={beats<Vec3>(b => [HERO[b][0], 0, 0])}
-    intensity={2.4} color="#fff4e0" shadowSize={18} softness={2} shadowStrength={0.55} />,
-  <Environment key="env" intensity={1} />,
-  <Fog key="fog" density={0.006} color="#bfe4ff" />,
+  <Sprite key="hero" id="hero" pixels={HERO_FRAMES} palette={HERO_COLORS} fps={3} size={0.75} position={hop([0, 0.75, 0.6])} />,
+  // Offsets from the camera target: the light and its shadow box travel with the view.
+  <KeyLight key="key" follow="camera" position={[-14, 22.4, 18]} target={[0, -3.6, 0]} intensity={2.4} color="#fff4e0" shadowSize={18} />,
+  <Fog key="fog" density={0.003} color="#bfe4ff" />,
   <Bloom key="bloom" intensity={0.25} threshold={1.2} />,
 ];
 
-/** Beats run across the deck: a slide's local step `step` is beat FIRST_BEAT[slide] + step. */
-export function Stop({ slide }: { slide: number }) {
-  const x = STOPS[slide];
-  // The rail always advances in depth; tiny spacing plus a matching camera z keeps it a pure sideways pan.
-  const spacing = 0.01, z = slide * spacing;
-  return <JourneyStop journey="platformer" clock="step" stepOffset={FIRST_BEAT[slide]} buildDuration={FLIGHT}
-    backgroundColor="#8fd3ff" toneMapping="neutral" exposure={1.05} quality="auto"
-    track={{ frame: "world", spacing, duration: FLIGHT, blur: 0, position: [x, 5.2, 21 + z], target: [x, 3.6, z] }}>
+/** Every slide shows the same scene; the rail pans sideways one stop per slide and steps count across slides. */
+export function Stop() {
+  return <JourneyStop journey="platformer" clock="step" stepOffset="auto" keyframeDuration="flight" look="cartoon" buildDuration={FLIGHT}
+    backgroundColor="#8fd3ff" quality="auto"
+    track={{ frame: "world", advance: [1, 0, 0], spacing: 24, duration: FLIGHT, blur: 0, position: [0, 5.2, 21], target: [0, 3.6, 0] }}>
     {scene}
   </JourneyStop>;
 }
