@@ -200,3 +200,38 @@ it("keeps immutable and metadata reads available while another process holds ind
   await expect(service.diff(["base..head", "--"])).resolves.toBe("value\n");
   await expect(service.status()).rejects.toBeInstanceOf(GitIndexLockedError);
 });
+
+it("serializes a write with reads, cancels queued writes, and logs failed writes", async () => {
+  const started = deferred<void>();
+  const release = deferred<ReturnType<typeof processResult>>();
+  const commands: string[] = [];
+  const runner = runnerFor(async options => {
+    if (options.args?.includes("--show-toplevel")) return processResult({ stdout: "/write-queue\n" });
+    if (options.args?.includes("status")) return processResult({ stdout: "# branch.oid (initial)\0? file.txt\0" });
+    if (options.args?.includes("--add")) { commands.push("add"); started.resolve(); return release.promise; }
+    commands.push("read"); return processResult();
+  });
+  const git = new GitService("/write-queue", runner);
+  const writing = git.stageFile("file.txt");
+  await started.promise;
+  const controller = new AbortController();
+  const canceled = git.unstageFile("file.txt", { signal: controller.signal });
+  controller.abort();
+  await expect(canceled).rejects.toMatchObject({ code: "aborted" });
+  const reading = git.diff([]);
+  await new Promise<void>(resolve => setImmediate(resolve));
+  expect(commands).toEqual(["add"]);
+  release.resolve(processResult({ exitCode: 128, stderr: "write failed" }));
+  await expect(writing).rejects.toMatchObject({ code: "command-failed" });
+  await reading;
+  expect(commands).toEqual(["add", "read"]);
+  expect(git.getOperationLog().find(log => log.args.includes("--add"))).toMatchObject({ stderrTail: "write failed", exit: { type: "exited", code: 128 } });
+});
+
+it.each(["", "/absolute", "../outside", "nested/../outside", "file\0bad", ".", "folder/"])("rejects unsafe file path %p before running Git", async path => {
+  const runner = runnerFor();
+  const git = new GitService("/unsafe", runner);
+  await expect(git.stageFile(path)).rejects.toThrow("repository-relative");
+  await expect(git.unstageFile(path)).rejects.toThrow("repository-relative");
+  expect(runner).not.toHaveBeenCalled();
+});

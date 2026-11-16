@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdirSync, readFileSync, realpathSync, rmSync, unlinkSync, watch as watchFS, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, realpathSync, renameSync, rmSync, unlinkSync, watch as watchFS, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runCommand } from "@legendapp/spark/processes";
 import { createDiffGitSource } from "../../src/gitSource";
@@ -13,9 +13,11 @@ import { fixtureGit, makeGitRepos } from "../fixtures/make-repos";
 
 const realRunner: GitRunner = (options) => new Promise((resolve, reject) => {
   const command = options.target.type === "executable" ? options.target.path : options.target.name;
-  const child = spawn(command, [...(options.args ?? [])], { cwd: options.cwd, env: { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null", ...options.env }, signal: options.signal, stdio: ["ignore", "pipe", "pipe"] });
+  const child = spawn(command, [...(options.args ?? [])], { cwd: options.cwd, env: { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null", ...options.env }, signal: options.signal, stdio: ["pipe", "pipe", "pipe"] });
   const stdout: Buffer[] = [];
   const stderr: Buffer[] = [];
+  child.stdin.on("error", error => { if ((error as NodeJS.ErrnoException).code !== "EPIPE") reject(error); });
+  child.stdin.end(options.input);
   child.stdout.on("data", (bytes: Buffer) => stdout.push(bytes));
   child.stderr.on("data", (bytes: Buffer) => stderr.push(bytes));
   child.on("error", (error) => {
@@ -231,4 +233,128 @@ it("discovers worktree/common watch roots from a subdirectory and renders real d
   expect(locations.commonDir).not.toBe(locations.gitDir);
   const detached = await service(repos.detached).repoState();
   expect(getDiffRepoStateBanner(detached)).toBe(`Detached HEAD — ${detached.detachedCommit!.slice(0, 8)}`);
+});
+
+function writeRepo(name: string, born = true) {
+  const path = join(repos.root, name);
+  mkdirSync(path);
+  fixtureGit(path, "init", "--initial-branch=main", "--template=");
+  fixtureGit(path, "config", "user.name", "Git Test");
+  fixtureGit(path, "config", "user.email", "git@example.test");
+  fixtureGit(path, "config", "core.hooksPath", "/dev/null");
+  if (born) fixtureGit(path, "-c", "commit.gpgsign=false", "commit", "--allow-empty", "-m", "Initial");
+  return path;
+}
+
+it("stages and unstages literal paths without touching neighboring files, including from a nested folder", async () => {
+  const path = writeRepo("writes space\tline\n");
+  mkdirSync(join(path, "nested"));
+  const git = service(join(path, "nested"));
+  const names = ["space name.txt", "tab\tname.txt", "line\nname.txt", "-leading.txt", ":(glob)*", "neighbor.txt"];
+  for (const name of names) writeFileSync(join(path, name), "initial\n");
+  for (const name of names.slice(0, -1)) {
+    await git.stageFile(name);
+    expect((await git.status()).entries.find(entry => entry.path === name)?.indexStatus).toBe("A");
+    expect((await git.status()).entries.find(entry => entry.path === "neighbor.txt")?.kind).toBe("untracked");
+    await git.unstageFile(name);
+    expect((await git.status()).entries.find(entry => entry.path === name)?.kind).toBe("untracked");
+  }
+  expect(git.getOperationLog().some(log => log.args.includes("--literal-pathspecs") && log.args.includes("-leading.txt") && log.exit?.type === "exited")).toBe(true);
+});
+
+it("keeps a partially staged file in both lists, stages deletions, and unstages both sides of a rename", async () => {
+  const path = writeRepo("write-transitions");
+  const git = service(path);
+  writeFileSync(join(path, "old name.txt"), "base\n");
+  await git.stageFile("old name.txt");
+  fixtureGit(path, "-c", "commit.gpgsign=false", "commit", "-m", "File");
+  writeFileSync(join(path, "old name.txt"), "index\n");
+  await git.stageFile("old name.txt");
+  writeFileSync(join(path, "old name.txt"), "worktree\n");
+  expect((await git.status()).entries[0]).toMatchObject({ indexStatus: "M", worktreeStatus: "M" });
+  await git.unstageFile("old name.txt");
+  expect((await git.status()).entries[0]).toMatchObject({ indexStatus: ".", worktreeStatus: "M" });
+  writeFileSync(join(path, "old name.txt"), "base\n");
+  renameSync(join(path, "old name.txt"), join(path, "new\nname.txt"));
+  await git.stageFile("old name.txt");
+  await git.stageFile("new\nname.txt");
+  expect((await git.status()).entries[0]).toMatchObject({ kind: "renamed", originalPath: "old name.txt", path: "new\nname.txt" });
+  await git.unstageFile("new\nname.txt");
+  expect((await git.status()).entries.every(entry => entry.indexStatus === "." || entry.kind === "untracked")).toBe(true);
+  expect(readFileSync(join(path, "new\nname.txt"), "utf8")).toBe("base\n");
+});
+
+it("unstages an unborn HEAD even when the staged file has further edits, without deleting worktree contents", async () => {
+  const path = writeRepo("unborn-writes", false);
+  const git = service(path);
+  writeFileSync(join(path, "-new\tfile.txt"), "index\n");
+  await git.stageFile("-new\tfile.txt");
+  writeFileSync(join(path, "-new\tfile.txt"), "worktree\n");
+  expect((await git.status()).branch.oid).toBe("(initial)");
+  await git.unstageFile("-new\tfile.txt");
+  expect((await git.status()).entries).toEqual([{ kind: "untracked", path: "-new\tfile.txt", indexStatus: "?", worktreeStatus: "?" }]);
+  expect(readFileSync(join(path, "-new\tfile.txt"), "utf8")).toBe("worktree\n");
+});
+
+it("does not remove an external index lock or mutate the index when writes are blocked", async () => {
+  const path = writeRepo("locked-writes");
+  writeFileSync(join(path, "file.txt"), "file\n");
+  const lock = join(path, ".git/index.lock");
+  writeFileSync(lock, "other process");
+  const git = service(path);
+  await expect(git.stageFile("file.txt")).rejects.toMatchObject({ code: "index-locked" });
+  await expect(git.unstageFile("file.txt")).rejects.toMatchObject({ code: "index-locked" });
+  expect(readFileSync(lock, "utf8")).toBe("other process");
+  unlinkSync(lock);
+  await git.stageFile("file.txt");
+  expect((await git.status()).entries[0]?.indexStatus).toBe("A");
+});
+
+it("stages a deleted file replaced by a directory without staging any descendants", async () => {
+  const path = writeRepo("file-to-directory");
+  const git = service(path);
+  writeFileSync(join(path, "item"), "base\n");
+  await git.stageFile("item");
+  fixtureGit(path, "-c", "commit.gpgsign=false", "commit", "-m", "File");
+  unlinkSync(join(path, "item")); mkdirSync(join(path, "item"));
+  writeFileSync(join(path, "item/other.txt"), "unselected\n");
+  await git.stageFile("item");
+  expect((await git.status()).entries).toEqual([
+    expect.objectContaining({ path: "item", indexStatus: "D", worktreeStatus: "." }),
+    expect.objectContaining({ path: "item/other.txt", kind: "untracked" }),
+  ]);
+});
+
+it("unstages a new file replacing a committed directory without unstaging descendant deletions", async () => {
+  const path = writeRepo("directory-to-file");
+  const git = service(path);
+  mkdirSync(join(path, "item")); writeFileSync(join(path, "item/other.txt"), "base\n");
+  await git.stageFile("item/other.txt");
+  fixtureGit(path, "-c", "commit.gpgsign=false", "commit", "-m", "Directory");
+  rmSync(join(path, "item"), { recursive: true }); writeFileSync(join(path, "item"), "replacement\n");
+  fixtureGit(path, "add", "--all", "--", "item");
+  await git.unstageFile("item");
+  expect((await git.status()).entries).toEqual([
+    expect.objectContaining({ path: "item/other.txt", indexStatus: "D", worktreeStatus: "." }),
+    expect.objectContaining({ path: "item", kind: "untracked" }),
+  ]);
+  expect(readFileSync(join(path, "item"), "utf8")).toBe("replacement\n");
+});
+
+it("refuses to unstage a file deletion when restoring it would evict an unselected staged descendant", async () => {
+  const path = writeRepo("unstage-directory-collision");
+  const git = service(path);
+  writeFileSync(join(path, "item"), "base\n");
+  await git.stageFile("item");
+  fixtureGit(path, "-c", "commit.gpgsign=false", "commit", "-m", "File");
+  unlinkSync(join(path, "item")); mkdirSync(join(path, "item"));
+  writeFileSync(join(path, "item/other.txt"), "replacement\n");
+  await git.stageFile("item"); await git.stageFile("item/other.txt");
+  const indexBefore = readFileSync(join(path, ".git/index"));
+  await expect(git.unstageFile("item")).rejects.toThrow("Unstage the replacement first");
+  expect(readFileSync(join(path, ".git/index"))).toEqual(indexBefore);
+  expect((await git.status()).entries).toEqual([
+    expect.objectContaining({ path: "item", indexStatus: "D" }),
+    expect.objectContaining({ path: "item/other.txt", indexStatus: "A" }),
+  ]);
 });

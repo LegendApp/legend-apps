@@ -1,6 +1,10 @@
 # Git core
 
-Shared Git service, porcelain v2 status and for-each-ref parsers, and Git comparison source helpers for Legend Diff and Legend Git. The service owns per-repository serialization, cancellation, index-lock detection, and operation logs. Its runtime process adapter uses `@legendapp/spark/processes`.
+Shared Git service, porcelain v2 status and for-each-ref parsers, and Git comparison source helpers for Legend Diff and Legend Git. The service owns per-repository serialization, cancellation, index-lock detection, and operation logs. `stageFile` and `unstageFile` accept one repository-relative literal path, serialize
+with reads, and preserve worktree contents when unstaging (including unborn HEAD).
+Rename unstaging resets both source and destination. `watchGitRepo` coalesces changes
+across worktree, gitdir and common-dir using an injected directory watcher.
+Its runtime process adapter uses `@legendapp/spark/processes`.
 
 From the repository root:
 

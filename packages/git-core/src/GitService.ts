@@ -105,7 +105,7 @@ export class GitService {
     return Promise.race([pending, aborted]).finally(() => signal.removeEventListener("abort", onAbort));
   }
 
-  private async process(command: string, args: readonly string[], options: GitReadOptions, timeoutMs = 60_000): Promise<string> {
+  private async process(command: string, args: readonly string[], options: GitReadOptions, timeoutMs = 60_000, input?: string): Promise<string> {
     checkAborted(options.signal);
     const entry: GitOperationLog = { command, args: [...args], startedAt: Date.now(), endedAt: null, exit: null, stderrTail: "" };
     this.operations.push(entry);
@@ -117,6 +117,7 @@ export class GitService {
         cwd: this.repoRoot,
         env: { GIT_TERMINAL_PROMPT: "0", GIT_OPTIONAL_LOCKS: "0" },
         signal: options.signal,
+        input,
         timeoutMs,
       });
       entry.exit = result.exit;
@@ -139,8 +140,8 @@ export class GitService {
     }
   }
 
-  private git(args: readonly string[], options: GitReadOptions, timeoutMs = 60_000) {
-    return this.process("git", ["-c", "core.quotepath=off", ...args], options, timeoutMs);
+  private git(args: readonly string[], options: GitReadOptions, timeoutMs = 60_000, input?: string) {
+    return this.process("git", ["-c", "core.quotepath=off", ...args], options, timeoutMs, input);
   }
 
   private async inspect(gitDir: string, options: GitReadOptions): Promise<GitRepoState> {
@@ -169,6 +170,49 @@ export class GitService {
 
   status(options: GitReadOptions = {}) {
     return this.read(["status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all", "--ignored=no"], options, 60_000, true).then(parseGitStatus);
+  }
+
+  private changeFile(path: string, stage: boolean, options: GitReadOptions) {
+    if (!path || path.includes("\0") || path.startsWith("/") || path.split("/").some(part => part === ".." || part === "." || !part)) {
+      return Promise.reject(new Error("Expected a repository-relative file path."));
+    }
+    return this.enqueue(options, async (gitDir) => {
+      await this.inspect(gitDir, options);
+      const root = (await this.git(["rev-parse", "--show-toplevel"], options)).replace(/\n$/, "");
+      const status = parseGitStatus(await this.git(["-C", root, "status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all"], options));
+      const entry = status.entries.find(entry => entry.path === path);
+      if (!entry) throw new Error("The file is no longer in Git status. Refresh and try again.");
+      const paths = [path];
+      if (entry.kind === "renamed" && entry.originalPath && (!stage || entry.worktreeStatus === "R")) paths.push(entry.originalPath);
+      const prefix = ["-C", root, "--literal-pathspecs"];
+      if (stage) {
+        await this.git([...prefix, "update-index", "--add", "--remove", "--", ...paths], options);
+      } else if (status.branch.oid === "(initial)") {
+        await this.git([...prefix, "update-index", "--force-remove", "--", ...paths], options);
+      } else {
+        const head = status.branch.oid;
+        if (!head) throw new Error("Git status did not report HEAD.");
+        const entries = (await this.git([...prefix, "ls-tree", "--full-tree", "-z", head, "--", ...paths], options)).split("\0").filter(record => {
+          const separator = record.indexOf("\t");
+          return separator >= 0 && paths.includes(record.slice(separator + 1)) && !record.startsWith("040000 ");
+        });
+        const indexedPaths = (await this.git([...prefix, "ls-files", "--stage", "-z"], options)).split("\0").filter(Boolean).map(record => record.slice(record.indexOf("\t") + 1));
+        const restoredPaths = entries.map(record => record.slice(record.indexOf("\t") + 1));
+        if (restoredPaths.some(restored => indexedPaths.some(indexed => !paths.includes(indexed) && (indexed.startsWith(`${restored}/`) || restored.startsWith(`${indexed}/`))))) {
+          throw new Error("Cannot unstage this file while a staged replacement occupies its parent or child path. Unstage the replacement first.");
+        }
+        const removals = paths.map(path => `0 ${"0".repeat(head.length)}\t${path}`);
+        await this.git([...prefix, "update-index", "-z", "--index-info"], options, 60_000, [...removals, ...entries, ""].join("\0"));
+      }
+    });
+  }
+
+  stageFile(path: string, options: GitReadOptions = {}) {
+    return this.changeFile(path, true, options);
+  }
+
+  unstageFile(path: string, options: GitReadOptions = {}) {
+    return this.changeFile(path, false, options);
   }
 
   repoState(options: GitReadOptions = {}) {
