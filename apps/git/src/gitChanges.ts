@@ -126,6 +126,16 @@ export function createGitChanges(onChange: (state: ChangesState) => void, watch:
       if (!git || !controller || state.status?.branch.oid === "(initial)") return null;
       try { return await git.headMessage({ signal: controller.signal }); } catch (error) { report(error, controller); return null; }
     },
+    /** The open repository's staged diff; aborted by `signal` or by opening another repository. */
+    async stagedDiff(signal: AbortSignal) {
+      const git = service, controller = active, root = state.root;
+      if (!git || !controller || !root || !current(controller)) throw new Error("Open a repository first.");
+      const linked = new AbortController();
+      const abort = () => linked.abort();
+      for (const source of [signal, controller.signal]) { source.addEventListener("abort", abort, { once: true }); if (source.aborted) abort(); }
+      try { return { root, staged: await git.stagedDiff({ signal: linked.signal }) }; }
+      finally { for (const source of [signal, controller.signal]) source.removeEventListener("abort", abort); }
+    },
     async refresh() {
       const git = service, controller = active;
       if (git && controller) try { await refresh(git, controller); } catch (error) { report(error, controller); }

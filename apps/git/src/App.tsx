@@ -5,7 +5,7 @@ import type { GitStatusEntry } from "@legend-apps/git-core";
 import { Button } from "@legendapp/spark/ui";
 import { conflictedEntries, createGitChanges, emptyChanges, stagedEntries, unstagedEntries } from "./gitChanges";
 import { DiffPane } from "./DiffPane";
-import { CommitComposer } from "./CommitComposer";
+import { CommitComposer, type CommitMessageGenerator } from "./CommitComposer";
 import { openFileDialog, showMessage } from "@legendapp/spark/dialogs";
 import { useMenu } from "@legendapp/spark/menus";
 import { Sidebar, SidebarItem } from "@legendapp/spark/ui/sidebar";
@@ -24,6 +24,8 @@ export function App() {
   const applyLines = useRef<(() => void) | null>(null);
   const discardLines = useRef<(() => void) | null>(null);
   const commit = useRef<(() => void) | null>(null);
+  const generator = useRef<CommitMessageGenerator | null>(null);
+  const [generating, setGenerating] = useState(false);
   const conflicts = conflictedEntries(changes.status).length;
   const selectedEntry = selected?.section === "unstaged" ? unstaged.find(entry => entry.path === selected.path) : undefined;
   const canDiscardFile = !busy && !!selectedEntry && selectedEntry.kind !== "unmerged";
@@ -52,6 +54,7 @@ export function App() {
           { type: "action", id: "discard-lines", label: "Discard Selected Lines…", disabled: busy || changes.patch?.section !== "unstaged" || !changes.patch.file?.hunks.length },
           { type: "action", id: "restore-discard", label: "Restore Last Discard…", disabled: busy || !lastDiscard },
           { type: "separator" },
+          { type: "action", id: "generate-message", label: generating ? "Cancel Generating Commit Message" : "Generate Commit Message", shortcut: "Cmd+Alt+g", disabled: !generating && (busy || !staged.length || !!conflicts) },
           { type: "action", id: "commit", label: "Commit", shortcut: "Cmd+Enter", disabled: busy },
         ],
       },
@@ -63,6 +66,7 @@ export function App() {
       if (action.itemId === "discard-file") void discardFile();
       if (action.itemId === "discard-lines") discardLines.current?.();
       if (action.itemId === "restore-discard") void restoreDiscard();
+      if (action.itemId === "generate-message") generator.current?.toggle();
       if (action.itemId === "commit") commit.current?.();
     },
   });
@@ -131,6 +135,7 @@ export function App() {
     });
     const closeRegistration = addWindowListener("main", "closed", () => {
       disposed = true;
+      generator.current?.reset();
       owner.dispose();
       controller.current = null;
       void registration.then(listener => listener.remove()).catch(console.error);
@@ -181,8 +186,11 @@ export function App() {
                 <ChangesList title="Staged" entries={staged} selectedPath={selected?.section === "staged" ? selected.path : null}
                   onSelect={path => void controller.current?.select(path === null ? null : { section: "staged", path })}
                   action="Unstage" disabled={busy} onAction={path => void controller.current?.changeFile(path, false)} />
-                <CommitComposer disabled={busy} stagedCount={staged.length} conflictCount={conflicts} merging={changes.merging} unborn={changes.status?.branch.oid === "(initial)"}
-                  commitRef={commit} onCommit={input => controller.current?.commit(input) ?? Promise.resolve(false)} headMessage={() => controller.current?.headMessage() ?? Promise.resolve(null)} />
+                <CommitComposer disabled={busy} stagedCount={staged.length} conflictCount={conflicts} merging={changes.merging} unborn={changes.status?.branch.oid === "(initial)"} root={changes.root}
+                  commitRef={commit} onCommit={input => controller.current?.commit(input) ?? Promise.resolve(false)} headMessage={() => controller.current?.headMessage() ?? Promise.resolve(null)}
+                  readStaged={signal => controller.current?.stagedDiff(signal) ?? Promise.reject(new Error("Open a repository first."))}
+                  confirmReplace={() => confirmDestructive("Replace the commit message?", "Replace", "The generated message replaces the summary and description you wrote.")}
+                  generatorRef={generator} onGeneratingChange={setGenerating} />
               </View>
               {changes.patch ? <DiffPane patch={changes.patch} disabled={busy} applyRef={applyLines} discardRef={discardLines}
                 onApply={(keys, text) => void controller.current?.changeLines(keys, text)}

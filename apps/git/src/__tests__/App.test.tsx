@@ -8,6 +8,8 @@ import { SidebarSplitView } from "@legendapp/spark/ui/split-view";
 import { addWindowListener, setWindowOptions } from "@legendapp/spark/windows";
 import { addMacOSWindowListener } from "@legendapp/spark/windows/macos";
 import { Switch, Text, TextInput } from "react-native";
+import { useMenu } from "@legendapp/spark/menus";
+import { runCommand } from "@legendapp/spark/processes";
 import { App } from "../App";
 
 jest.mock("@legend-apps/git-core", () => ({ ...jest.requireActual("@legend-apps/git-core"), getGitService: jest.fn() }));
@@ -21,6 +23,7 @@ jest.mock("@legend-apps/file-system-watcher", () => ({ watchDirectories: jest.fn
 jest.mock("@legendapp/spark/ui", () => ({ Button: "Button" }));
 jest.mock("@legendapp/spark/dialogs", () => ({ openFileDialog: jest.fn(async () => ({ canceled: true })), showMessage: jest.fn(async () => ({ buttonId: "confirm" })) }));
 jest.mock("@legendapp/spark/menus", () => ({ useMenu: jest.fn() }));
+jest.mock("@legendapp/spark/ai", () => ({ ...jest.requireActual("@legendapp/spark/ai"), getAICommandAvailability: jest.fn(async () => ({ claude: true, codex: false, preferredTool: "claude" })) }));
 jest.mock("@legendapp/spark/ui/sidebar", () => ({ Sidebar: "Sidebar", SidebarItem: "SidebarItem" }));
 jest.mock("@legendapp/spark/ui/split-view", () => ({
   SidebarSplitView: ({ sidebar, content }: any) => <>{sidebar}{content}</>,
@@ -118,4 +121,60 @@ it("opens a repository, selects a native file row, stages and unstages it, and r
   expect(registration.remove).toHaveBeenCalledTimes(1);
   await act(async () => { renderer.unmount(); });
   expect(remove).toHaveBeenCalledTimes(1);
+});
+
+it("generates a commit message from the staged diff, shows progress, cancels on a second press and on window close", async () => {
+  jest.clearAllMocks();
+  jest.mocked(watchDirectories).mockReturnValue({ remove: jest.fn() });
+  const branch = { oid: "abc", head: "main", upstream: null, ahead: 0, behind: 0 };
+  const entry = { kind: "ordinary" as const, path: "app.ts", indexStatus: "M", worktreeStatus: "." };
+  const stagedDiff = { files: [{ path: "app.ts", originalPath: null, binary: false, added: 1, deleted: 1 }], patch: "diff --git a/app.ts b/app.ts\n", truncated: false, omitted: [] };
+  const git = { resolveRoot: jest.fn(async () => "/repo"), watchLocations: jest.fn(async () => ({ root: "/repo", gitDir: "/repo/.git", commonDir: "/repo/.git", ignoredPaths: [] })),
+    status: jest.fn(async () => ({ branch, entries: [entry] })), fileDiff: jest.fn(async () => ""), lastDiscard: jest.fn(async () => null), repoState: jest.fn(async () => ({ merging: false })),
+    stagedDiff: jest.fn(async () => stagedDiff), commit: jest.fn(async () => {}) };
+  jest.mocked(getGitService).mockReturnValue(git as unknown as GitService);
+  jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
+  let renderer!: ReactTestRenderer;
+  await act(async () => { renderer = create(<App />); });
+  await act(async () => { jest.mocked(addMacOSWindowListener).mock.calls[0][1]({ type: "toolbarAction", windowId: "main", itemId: "open-repository" }); });
+  const button = (label: string) => renderer.root.findAllByType(Button).find(node => node.props.children === label);
+  const menuItem = () => jest.mocked(useMenu).mock.calls.at(-1)![0].items.flatMap((item: any) => item.items ?? []).find((item: any) => item.id === "generate-message");
+  const inputs = () => renderer.root.findAllByType(TextInput);
+  expect(button("Generate")!.props.disabled).toBe(false);
+  expect(menuItem()).toMatchObject({ label: "Generate Commit Message", shortcut: "Cmd+Alt+g", disabled: false });
+
+  let finish!: (value: unknown) => void;
+  const signals: AbortSignal[] = [];
+  jest.mocked(runCommand).mockImplementation(async (options: any) => { signals.push(options.signal); return new Promise(resolve => { finish = resolve; }) as never; });
+  await act(async () => { button("Generate")!.props.onPress(); });
+  expect(git.stagedDiff).toHaveBeenCalledTimes(1);
+  expect(jest.mocked(runCommand).mock.calls[0]![0]).toMatchObject({ target: { name: "claude" }, cwd: "/repo", input: expect.stringContaining("diff --git a/app.ts b/app.ts") });
+  expect(button("Generating…")).toBeDefined();
+  expect(button("Cancel")).toBeDefined();
+  expect(menuItem()).toMatchObject({ label: "Cancel Generating Commit Message", disabled: false });
+  await act(async () => { button("Generating…")!.props.onPress(); });
+  expect(signals[0]!.aborted).toBe(true);
+  expect(button("Generate")).toBeDefined();
+
+  // A finished run fills the empty fields, which then commit as usual.
+  await act(async () => { jest.mocked(useMenu).mock.calls.at(-1)![0].onAction!({ type: "action", itemId: "generate-message" }); });
+  await act(async () => { finish({ exit: { type: "exited", code: 0 }, stdout: new TextEncoder().encode("{\"subject\": \"fix: keep app state\", \"body\": \"Body\"}"), stderr: new Uint8Array(), timedOut: false, aborted: false, outputTruncated: false }); });
+  expect(inputs().map(input => input.props.value)).toEqual(["fix: keep app state", "Body"]);
+  await act(async () => { button("Commit")!.props.onPress(); });
+  expect(git.commit).toHaveBeenLastCalledWith({ message: "fix: keep app state\n\nBody\n", amend: false, signoff: false }, expect.anything());
+
+  // Closing the window cancels a running generation.
+  await act(async () => { button("Generate")!.props.onPress(); });
+  await act(async () => { jest.mocked(addWindowListener).mock.calls[0][2]({ windowId: "main" }); });
+  expect(signals.at(-1)!.aborted).toBe(true);
+
+  // Nothing staged or a conflict disables it.
+  await act(async () => { renderer.unmount(); });
+  git.status.mockResolvedValue({ branch, entries: [{ kind: "unmerged", path: "app.ts", indexStatus: "U", worktreeStatus: "U" }, { ...entry, path: "b.ts" }] } as never);
+  jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
+  await act(async () => { renderer = create(<App />); });
+  await act(async () => { jest.mocked(addMacOSWindowListener).mock.calls.at(-1)![1]({ type: "toolbarAction", windowId: "main", itemId: "open-repository" }); });
+  expect(button("Generate")!.props.disabled).toBe(true);
+  expect(menuItem().disabled).toBe(true);
+  await act(async () => { renderer.unmount(); });
 });

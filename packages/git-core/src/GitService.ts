@@ -28,6 +28,9 @@ export type GitErrorCode = "aborted" | "index-locked" | "command-failed" | "time
 export type GitBackupEntry = { path: string; mode: "100644" | "100755" | "120000"; oid: string } | { path: string; mode: null; oid?: undefined };
 export type GitDiscardBackup = { ref: string; oid: string; entries: GitBackupEntry[] };
 export type GitCommitInput = { message: string; amend?: boolean; signoff?: boolean };
+export type GitStagedFile = { path: string; originalPath: string | null; binary: boolean; added: number; deleted: number };
+/** The staged changes as `git diff --cached` text; files past the size cap are listed but left out of `patch`. */
+export type GitStagedDiff = { files: GitStagedFile[]; patch: string; truncated: boolean; omitted: string[] };
 export const discardRefPrefix = "refs/legend-git/discarded/";
 const restoredRefPrefix = "refs/legend-git/restored/";
 const replacedRefPrefix = "refs/legend-git/replaced/";
@@ -88,6 +91,8 @@ printf '\\0'
 for name in index.lock MERGE_HEAD rebase-apply rebase-merge CHERRY_PICK_HEAD REVERT_HEAD BISECT_LOG; do
   if test -e "$1/$name"; then printf '%s\\0' "$name"; fi
 done`;
+
+const diffFormat = ["-c", "diff.suppressBlankEmpty=false", "-c", "diff.noprefix=false", "diff", "--no-ext-diff", "--no-textconv", "--no-color", "--unified=3", "--src-prefix=a/", "--dst-prefix=b/", "--ignore-submodules=none"];
 
 function isRepoPath(path: string) {
   return !!path && !path.includes("\0") && !path.startsWith("/") && !path.split("/").some(part => part === ".." || part === "." || !part);
@@ -260,9 +265,41 @@ export class GitService {
   fileDiff(file: { path: string; originalPath?: string | null; untracked?: boolean }, staged: boolean, options: GitReadOptions = {}) {
     const paths = [file.path, ...(staged && file.originalPath ? [file.originalPath] : [])];
     if (paths.some(path => !isRepoPath(path))) return Promise.reject(new Error("Expected a repository-relative file path."));
-    const format = ["-c", "diff.suppressBlankEmpty=false", "-c", "diff.noprefix=false", "diff", "--no-ext-diff", "--no-textconv", "--no-color", "--unified=3", "--src-prefix=a/", "--dst-prefix=b/", "--ignore-submodules=none"];
-    if (!staged && file.untracked) return this.read([...format, "--no-index", "--", "/dev/null", file.path], options, 60_000, false, [0, 1]);
-    return this.read(["--literal-pathspecs", ...format, ...(staged ? ["--cached", "-M"] : ["--no-renames"]), "--", ...paths], options, 60_000, true);
+    if (!staged && file.untracked) return this.read([...diffFormat, "--no-index", "--", "/dev/null", file.path], options, 60_000, false, [0, 1]);
+    return this.read(["--literal-pathspecs", ...diffFormat, ...(staged ? ["--cached", "-M"] : ["--no-renames"]), "--", ...paths], options, 60_000, true);
+  }
+
+  /**
+   * Reads the whole staged diff (HEAD → index, renames detected) in `fileDiff`'s format, one file at a time, until the
+   * patch reaches `maxChars` characters; the file that crosses it is cut on a line boundary. Binary files are listed by
+   * name only, and files past the cap or with more than `maxFileLines` changed lines are reported in `omitted`.
+   */
+  stagedDiff(options: GitReadOptions & { maxChars?: number; maxFileLines?: number } = {}): Promise<GitStagedDiff> {
+    const { maxChars = 48_000, maxFileLines = 20_000 } = options;
+    return this.enqueue(options, async (gitDir) => {
+      await this.inspect(gitDir, options);
+      const root = (await this.git(["rev-parse", "--show-toplevel"], options)).replace(/\n$/, "");
+      const fields = (await this.git(["-C", root, "-c", "diff.submodule=short", "diff", "--cached", "-M", "--no-ext-diff", "--no-textconv", "--ignore-submodules=none", "--numstat", "-z"], options)).split("\0");
+      const files: GitStagedFile[] = [];
+      for (let index = 0; index < fields.length - 1;) {
+        // "added<TAB>deleted<TAB>path", or "added<TAB>deleted<TAB>" followed by the old and new paths for a rename.
+        const [, added = "", deleted = "", path = ""] = /^([^\t]*)\t([^\t]*)\t([\s\S]*)$/.exec(fields[index++]!) ?? [];
+        const originalPath = path === "" ? fields[index++]! : null;
+        files.push({ path: originalPath === null ? path : fields[index++]!, originalPath, binary: added === "-", added: Number(added) || 0, deleted: Number(deleted) || 0 });
+      }
+      let patch = "";
+      const omitted: string[] = [];
+      for (const file of files) {
+        if (file.binary) continue;
+        if (patch.length >= maxChars || file.added + file.deleted > maxFileLines) { omitted.push(file.path); continue; }
+        const paths = file.originalPath ? [file.originalPath, file.path] : [file.path];
+        const text = (await this.git(["-C", root, "--literal-pathspecs", "-c", "diff.submodule=short", ...diffFormat, "--cached", "-M", "--", ...paths], options)).replace(/\0/g, "\\0");
+        if (patch.length + text.length <= maxChars) { patch += text; continue; }
+        patch += text.slice(0, text.lastIndexOf("\n", maxChars - patch.length) + 1);
+        omitted.push(file.path);
+      }
+      return { files, patch, truncated: omitted.length > 0, omitted };
+    });
   }
 
   /** Applies a patch to the index only (`git apply --cached`), optionally reversed, after checking index.lock. */
