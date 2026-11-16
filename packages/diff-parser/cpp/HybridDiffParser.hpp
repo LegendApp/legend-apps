@@ -14,7 +14,8 @@ public:
       const std::string& compareBaseKind,
       const std::string& compareBaseRef,
       bool compareUseMergeBase,
-      bool ignoreWhitespaceChanges) override;
+      bool ignoreWhitespaceChanges,
+      const std::vector<std::string>& excludePaths) override;
   std::shared_ptr<HybridDiffLoadSessionSpec> startUnifiedDiffFromUrl(
       const std::string& diffUrl,
       const std::string& sourceLabel) override;
@@ -25,7 +26,8 @@ public:
       const std::string& compareBaseKind,
       const std::string& compareBaseRef,
       bool compareUseMergeBase,
-      bool ignoreWhitespaceChanges) override;
+      bool ignoreWhitespaceChanges,
+      const std::vector<std::string>& excludePaths) override;
   std::shared_ptr<Promise<DiffLoadResult>> loadUnifiedDiff(
       const std::string& diffText,
       const std::string& sourceLabel,

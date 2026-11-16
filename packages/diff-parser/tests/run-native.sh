@@ -13,6 +13,7 @@ TEST_BINARY="$BUILD_DIR/native_unified_diff_parser_test"
 GIT_FIXTURE="$BUILD_DIR/git-fixture"
 NO_NEWLINE_FIXTURE="$BUILD_DIR/no-newline-fixture"
 NO_NEWLINE_DIFF="$BUILD_DIR/no-newline-fixture.diff"
+EXCLUDE_FIXTURE="$BUILD_DIR/exclude-fixture"
 
 MISSING_PATHS=()
 for required_path in \
@@ -110,6 +111,25 @@ git -C "$NO_NEWLINE_FIXTURE" mv "old name.txt" 'renamed "quoted" näme.txt'
 sed -i '' 's/^rename 6$/rename six/' "$NO_NEWLINE_FIXTURE/renamed \"quoted\" näme.txt"
 git -C "$NO_NEWLINE_FIXTURE" -c core.quotepath=on diff --no-color -M HEAD > "$NO_NEWLINE_DIFF"
 
+rm -rf "$EXCLUDE_FIXTURE"
+mkdir -p "$EXCLUDE_FIXTURE/src" "$EXCLUDE_FIXTURE/.review" "$EXCLUDE_FIXTURE/docs/generated"
+echo "keep" > "$EXCLUDE_FIXTURE/src/keep.ts"
+echo "review" > "$EXCLUDE_FIXTURE/.review/tracked.md"
+echo "generated" > "$EXCLUDE_FIXTURE/docs/generated/tracked.md"
+git -C "$EXCLUDE_FIXTURE" init --quiet
+git -C "$EXCLUDE_FIXTURE" config user.email "diff-parser-native@example.com"
+git -C "$EXCLUDE_FIXTURE" config user.name "Diff Parser Native"
+git -C "$EXCLUDE_FIXTURE" add .
+git -C "$EXCLUDE_FIXTURE" commit --quiet -m "initial fixture"
+echo "keep changed" > "$EXCLUDE_FIXTURE/src/keep.ts"
+echo "review changed" > "$EXCLUDE_FIXTURE/.review/tracked.md"
+echo "generated changed" > "$EXCLUDE_FIXTURE/docs/generated/tracked.md"
+mkdir -p "$EXCLUDE_FIXTURE/.review/nested/deep" "$EXCLUDE_FIXTURE/.reviewer" "$EXCLUDE_FIXTURE/docs/.review"
+echo "untracked" > "$EXCLUDE_FIXTURE/.review/nested/deep/story.md"
+echo "untracked" > "$EXCLUDE_FIXTURE/.reviewer/keep.md"
+echo "untracked" > "$EXCLUDE_FIXTURE/docs/.review/keep.md"
+echo "untracked" > "$EXCLUDE_FIXTURE/docs/generated-notes.md"
+
 clang++ \
   -std=c++20 \
   -Wall \
@@ -136,4 +156,4 @@ clang++ \
   -framework Security \
   -o "$TEST_BINARY"
 
-"$TEST_BINARY" "$GIT_FIXTURE" "$NO_NEWLINE_FIXTURE" "$NO_NEWLINE_DIFF"
+"$TEST_BINARY" "$GIT_FIXTURE" "$NO_NEWLINE_FIXTURE" "$NO_NEWLINE_DIFF" "$EXCLUDE_FIXTURE"

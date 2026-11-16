@@ -21,6 +21,7 @@ namespace margelo::nitro::legendapps::diffparser { struct DiffLoadResult; }
 #include <memory>
 #include "HybridDiffLoadSessionSpec.hpp"
 #include <string>
+#include <vector>
 #include "DiffLoadResult.hpp"
 #include <NitroModules/Promise.hpp>
 
@@ -55,9 +56,9 @@ namespace margelo::nitro::legendapps::diffparser {
 
     public:
       // Methods
-      virtual std::shared_ptr<HybridDiffLoadSessionSpec> startGitFolderDiff(const std::string& folderPath, bool showOnlyHunks, const std::string& compareBaseKind, const std::string& compareBaseRef, bool compareUseMergeBase, bool ignoreWhitespaceChanges) = 0;
+      virtual std::shared_ptr<HybridDiffLoadSessionSpec> startGitFolderDiff(const std::string& folderPath, bool showOnlyHunks, const std::string& compareBaseKind, const std::string& compareBaseRef, bool compareUseMergeBase, bool ignoreWhitespaceChanges, const std::vector<std::string>& excludePaths) = 0;
       virtual std::shared_ptr<HybridDiffLoadSessionSpec> startUnifiedDiffFromUrl(const std::string& diffUrl, const std::string& sourceLabel) = 0;
-      virtual std::shared_ptr<Promise<DiffLoadResult>> loadGitFolderDiff(const std::string& folderPath, double initialRowCount, bool showOnlyHunks, const std::string& compareBaseKind, const std::string& compareBaseRef, bool compareUseMergeBase, bool ignoreWhitespaceChanges) = 0;
+      virtual std::shared_ptr<Promise<DiffLoadResult>> loadGitFolderDiff(const std::string& folderPath, double initialRowCount, bool showOnlyHunks, const std::string& compareBaseKind, const std::string& compareBaseRef, bool compareUseMergeBase, bool ignoreWhitespaceChanges, const std::vector<std::string>& excludePaths) = 0;
       virtual std::shared_ptr<Promise<DiffLoadResult>> loadUnifiedDiff(const std::string& diffText, const std::string& sourceLabel, double initialRowCount, bool ignoreWhitespaceChanges) = 0;
       virtual std::shared_ptr<Promise<DiffLoadResult>> loadUnifiedDiffFile(const std::string& filePath, const std::string& sourceLabel, double initialRowCount, bool ignoreWhitespaceChanges) = 0;
       virtual std::shared_ptr<Promise<DiffLoadResult>> loadUnifiedDiffFromUrl(const std::string& diffUrl, const std::string& sourceLabel, double initialRowCount, bool ignoreWhitespaceChanges) = 0;

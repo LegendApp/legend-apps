@@ -435,8 +435,35 @@ DiffFileSources createStatusFileSources(const DiffFileSummary& file) {
   return sources;
 }
 
+bool isExcludedGitPath(std::string_view path, const std::vector<std::string>& excludePaths) {
+  for (std::string_view prefix : excludePaths) {
+    while (!prefix.empty() && prefix.back() == '/') {
+      prefix.remove_suffix(1);
+    }
+    if (!prefix.empty() && path.starts_with(prefix) && (path.size() == prefix.size() || path[prefix.size()] == '/')) {
+      return true;
+    }
+  }
+  return false;
+}
+
+int onGitDiffNotify(const git_diff*, const git_diff_delta* delta, const char*, void* payload) {
+  const auto& excludePaths = *static_cast<const std::vector<std::string>*>(payload);
+  const char* path = delta->new_file.path != nullptr ? delta->new_file.path : delta->old_file.path;
+  return path != nullptr && isExcludedGitPath(path, excludePaths) ? 1 : 0;
+}
+
+void applyGitDiffExcludePaths(git_diff_options& options, const std::vector<std::string>& excludePaths) {
+  if (excludePaths.empty()) {
+    return;
+  }
+  options.notify_cb = onGitDiffNotify;
+  options.payload = const_cast<std::vector<std::string>*>(&excludePaths);
+}
+
 struct StatusPathCollectState {
   const DiffProgressiveCallbacks& callbacks;
+  const std::vector<std::string>& excludePaths;
   std::vector<StatusPathSummary> paths;
   bool stopAfterFirst = false;
   bool stoppedAfterFirst = false;
@@ -449,7 +476,7 @@ int onStatusPath(const char* rawPath, unsigned int status, void* payload) {
     state->cancelled = true;
     return 1;
   }
-  if (rawPath == nullptr || rawPath[0] == '\0' || status == GIT_STATUS_CURRENT) {
+  if (rawPath == nullptr || rawPath[0] == '\0' || status == GIT_STATUS_CURRENT || isExcludedGitPath(rawPath, state->excludePaths)) {
     return 0;
   }
 
@@ -1502,6 +1529,7 @@ DiffLoadTiming parseGitRepositoryDiffProgressive(
   if (!showOnlyHunks) {
     options.context_lines = fullFileDiffContextLines;
   }
+  applyGitDiffExcludePaths(options, compareOptions.excludePaths);
 
   const auto compareBase = resolveCompareBase(repo.get(), compareOptions);
   const char* rawRepositoryPath = git_repository_path(repo.get());
@@ -1524,7 +1552,7 @@ DiffLoadTiming parseGitRepositoryDiffProgressive(
   statusOptions.show = GIT_STATUS_SHOW_INDEX_AND_WORKDIR;
   statusOptions.flags = GIT_STATUS_OPT_NO_REFRESH;
 
-  StatusPathCollectState statusState{ .callbacks = callbacks };
+  StatusPathCollectState statusState{ .callbacks = callbacks, .excludePaths = compareOptions.excludePaths };
   if (isHeadCompare(compareOptions)) {
     const auto statusResult = git_status_foreach_ext(repo.get(), &statusOptions, onStatusPath, &statusState);
     if (statusResult < 0 || (statusResult > 0 && !statusState.cancelled)) {
@@ -1614,6 +1642,7 @@ DiffLoadTiming parseGitRepositoryDiffProgressiveByFile(
   if (!showOnlyHunks) {
     diffOptions.context_lines = fullFileDiffContextLines;
   }
+  applyGitDiffExcludePaths(diffOptions, compareOptions.excludePaths);
 
   std::vector<DiffFileSummary> files;
   std::vector<DiffFileSources> fileSources;
@@ -1658,6 +1687,7 @@ DiffLoadTiming parseGitRepositoryDiffProgressiveByFile(
 
   StatusPathCollectState firstStatusState{
       .callbacks = callbacks,
+      .excludePaths = compareOptions.excludePaths,
       .stopAfterFirst = true,
   };
   const auto firstStatusResult = git_status_foreach_ext(repo.get(), &statusOptions, onStatusPath, &firstStatusState);
@@ -1677,7 +1707,7 @@ DiffLoadTiming parseGitRepositoryDiffProgressiveByFile(
   const auto firstDiffCreatedAt = DiffClock::now();
 
   statusOptions.flags = GIT_STATUS_OPT_INCLUDE_UNTRACKED | GIT_STATUS_OPT_RECURSE_UNTRACKED_DIRS | GIT_STATUS_OPT_NO_REFRESH;
-  StatusPathCollectState statusState{ .callbacks = callbacks };
+  StatusPathCollectState statusState{ .callbacks = callbacks, .excludePaths = compareOptions.excludePaths };
   const auto statusResult = git_status_foreach_ext(repo.get(), &statusOptions, onStatusPath, &statusState);
   if (statusResult < 0 || (statusResult > 0 && !statusState.cancelled)) {
     throw std::runtime_error(gitErrorMessage("Failed to read git status"));

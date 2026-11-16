@@ -57,12 +57,14 @@ DiffGitCompareOptions createCompareOptions(
     const std::string& compareBaseKind,
     const std::string& compareBaseRef,
     bool compareUseMergeBase,
-    bool ignoreWhitespaceChanges) {
+    bool ignoreWhitespaceChanges,
+    const std::vector<std::string>& excludePaths) {
   return DiffGitCompareOptions{
       .baseKind = compareBaseKind,
       .baseRef = compareBaseRef,
       .useMergeBase = compareUseMergeBase,
       .ignoreWhitespace = ignoreWhitespaceChanges,
+      .excludePaths = excludePaths,
   };
 }
 
@@ -94,11 +96,12 @@ std::shared_ptr<HybridDiffLoadSessionSpec> HybridDiffParser::startGitFolderDiff(
     const std::string& compareBaseKind,
     const std::string& compareBaseRef,
     bool compareUseMergeBase,
-    bool ignoreWhitespaceChanges) {
+    bool ignoreWhitespaceChanges,
+    const std::vector<std::string>& excludePaths) {
   return HybridDiffLoadSession::create(
       folderPath,
       showOnlyHunks,
-      createCompareOptions(compareBaseKind, compareBaseRef, compareUseMergeBase, ignoreWhitespaceChanges));
+      createCompareOptions(compareBaseKind, compareBaseRef, compareUseMergeBase, ignoreWhitespaceChanges, excludePaths));
 }
 
 std::shared_ptr<HybridDiffLoadSessionSpec> HybridDiffParser::startUnifiedDiffFromUrl(
@@ -118,13 +121,11 @@ std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadGitFolderDiff(
     const std::string& compareBaseKind,
     const std::string& compareBaseRef,
     bool compareUseMergeBase,
-    bool ignoreWhitespaceChanges) {
-  return Promise<DiffLoadResult>::async([folderPath, initialRowCount, showOnlyHunks, compareBaseKind, compareBaseRef, compareUseMergeBase, ignoreWhitespaceChanges]() -> DiffLoadResult {
+    bool ignoreWhitespaceChanges,
+    const std::vector<std::string>& excludePaths) {
+  return Promise<DiffLoadResult>::async([folderPath, initialRowCount, showOnlyHunks, compareOptions = createCompareOptions(compareBaseKind, compareBaseRef, compareUseMergeBase, ignoreWhitespaceChanges, excludePaths)]() mutable -> DiffLoadResult {
     const auto startedAt = DiffClock::now();
-    auto document = loadGitDiffDocument(
-        folderPath,
-        showOnlyHunks,
-        createCompareOptions(compareBaseKind, compareBaseRef, compareUseMergeBase, ignoreWhitespaceChanges));
+    auto document = loadGitDiffDocument(folderPath, showOnlyHunks, std::move(compareOptions));
     const auto documentCreatedAt = DiffClock::now();
     DiffLoadResult result;
     result.document = document;

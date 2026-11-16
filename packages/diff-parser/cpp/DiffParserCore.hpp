@@ -31,6 +31,8 @@ struct DiffGitCompareOptions {
   std::string baseRef;
   bool useMergeBase = true;
   bool ignoreWhitespace = false;
+  // Repo-relative path prefixes matched on whole segments: ".review" excludes ".review/x", not ".reviewer".
+  std::vector<std::string> excludePaths;
 };
 
 struct DiffProgressiveCallbacks {

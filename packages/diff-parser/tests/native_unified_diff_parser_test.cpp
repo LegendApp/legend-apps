@@ -471,7 +471,10 @@ void assertSideBySideProjection(const diffparser::DiffParsedDocument& parsed) {
   expect(expectedHunkStarts > 0, "projection fixture should contain hunks");
 }
 
-diffparser::DiffParsedDocument parseGitRepositoryDiffByFileForTest(const std::string& fixturePath, bool showOnlyHunks = true) {
+diffparser::DiffParsedDocument parseGitRepositoryDiffByFileForTest(
+    const std::string& fixturePath,
+    bool showOnlyHunks = true,
+    diffparser::DiffGitCompareOptions compareOptions = {}) {
   std::vector<diffparser::DiffFileSummary> files;
   std::vector<diffparser::DiffRenderRow> rows;
   std::vector<diffparser::DiffFileSources> fileSources;
@@ -521,7 +524,7 @@ diffparser::DiffParsedDocument parseGitRepositoryDiffByFileForTest(const std::st
           }
         }
       },
-  }, showOnlyHunks);
+  }, showOnlyHunks, std::move(compareOptions));
 
   return {
     .files = std::move(files),
@@ -802,6 +805,70 @@ void assertUnifiedGitDiffNoNewline(const std::string& diffPath) {
   assertSameUnifiedParse(parseUnifiedDiffStreamForTest(diffText, 7), parsed);
 }
 
+std::vector<std::string> sortedFilePaths(const diffparser::DiffParsedDocument& parsed) {
+  std::vector<std::string> paths;
+  for (const auto& file : parsed.files) {
+    paths.push_back(file.path);
+  }
+  std::sort(paths.begin(), paths.end());
+  return paths;
+}
+
+void expectFilePaths(const diffparser::DiffParsedDocument& parsed, const std::vector<std::string>& expected, const std::string& label) {
+  const auto actual = sortedFilePaths(parsed);
+  std::string actualText;
+  for (const auto& path : actual) {
+    actualText += path + ", ";
+  }
+  expect(actual == expected, label + " file paths, got: " + actualText);
+  expectEqual(parsed.timing.fileCount, static_cast<double>(expected.size()), label + " timing file count");
+  expectEqual(static_cast<double>(parsed.fileSources.size()), static_cast<double>(expected.size()), label + " file source count");
+}
+
+void assertGitRepositoryExcludePaths(const std::string& fixturePath) {
+  const std::vector<std::string> allPaths = {
+      ".review/nested/deep/story.md",
+      ".review/tracked.md",
+      ".reviewer/keep.md",
+      "docs/.review/keep.md",
+      "docs/generated-notes.md",
+      "docs/generated/tracked.md",
+      "src/keep.ts",
+  };
+  // Root ".review" goes with its tracked and nested untracked files; ".reviewer", "docs/.review" and "docs/generated-notes.md" stay.
+  const std::vector<std::string> keptPaths = {
+      ".reviewer/keep.md",
+      "docs/.review/keep.md",
+      "docs/generated-notes.md",
+      "src/keep.ts",
+  };
+  const diffparser::DiffGitCompareOptions excludeOptions{.excludePaths = {".review", "docs/generated/"}};
+  const diffparser::DiffGitCompareOptions emptyOptions{.excludePaths = {}};
+  const diffparser::DiffGitCompareOptions refExcludeOptions{
+      .baseKind = "ref",
+      .baseRef = "HEAD",
+      .useMergeBase = false,
+      .excludePaths = excludeOptions.excludePaths,
+  };
+
+  expectFilePaths(diffparser::parseGitRepositoryDiff(fixturePath), allPaths, "git exclude absent");
+  expectFilePaths(diffparser::parseGitRepositoryDiff(fixturePath, true, emptyOptions), allPaths, "git exclude empty");
+  expectFilePaths(diffparser::parseGitRepositoryDiff(fixturePath, true, excludeOptions), keptPaths, "git exclude");
+  expectFilePaths(diffparser::parseGitRepositoryDiff(fixturePath, true, refExcludeOptions), keptPaths, "git exclude ref compare");
+  expectFilePaths(parseGitRepositoryDiffByFileForTest(fixturePath), allPaths, "git by-file exclude absent");
+  expectFilePaths(parseGitRepositoryDiffByFileForTest(fixturePath, true, emptyOptions), allPaths, "git by-file exclude empty");
+  expectFilePaths(parseGitRepositoryDiffByFileForTest(fixturePath, true, excludeOptions), keptPaths, "git by-file exclude");
+
+  const auto parsed = diffparser::parseGitRepositoryDiff(fixturePath, true, excludeOptions);
+  for (const auto& row : parsed.rows) {
+    expect(row.text.find("review changed") == std::string::npos, "git exclude should drop excluded tracked rows");
+    expect(row.text.find("generated changed") == std::string::npos, "git exclude should drop excluded nested tracked rows");
+  }
+  const auto& keep = findFile(parsed, "src/keep.ts");
+  expectEqual(keep.status, "modified", "git exclude kept tracked status");
+  expectEqual(findFile(parsed, ".reviewer/keep.md").status, "untracked", "git exclude kept sibling status");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -826,6 +893,9 @@ int main(int argc, char** argv) {
     if (argc > 3) {
       assertGitRepositoryNoNewline(argv[2]);
       assertUnifiedGitDiffNoNewline(argv[3]);
+    }
+    if (argc > 4) {
+      assertGitRepositoryExcludePaths(argv[4]);
     }
     std::cout << "native diff parser fixtures passed\n";
     return 0;

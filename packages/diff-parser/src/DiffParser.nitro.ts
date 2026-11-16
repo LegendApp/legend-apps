@@ -157,6 +157,8 @@ export interface DiffGitFolderLoadOptions {
   compareUseMergeBase: boolean;
   ignoreWhitespaceChanges: boolean;
   showOnlyHunks: boolean;
+  /** Repo-relative path prefixes to leave out, matched on whole path segments: ".review" excludes ".review/x" but not ".reviewer". */
+  excludePaths?: string[];
 }
 
 export interface DiffDocument
@@ -236,9 +238,9 @@ export interface DiffParser
   extends HybridObject<{
     ios: "c++";
   }> {
-  startGitFolderDiff(folderPath: string, showOnlyHunks: boolean, compareBaseKind: string, compareBaseRef: string, compareUseMergeBase: boolean, ignoreWhitespaceChanges: boolean): DiffLoadSession;
+  startGitFolderDiff(folderPath: string, showOnlyHunks: boolean, compareBaseKind: string, compareBaseRef: string, compareUseMergeBase: boolean, ignoreWhitespaceChanges: boolean, excludePaths: string[]): DiffLoadSession;
   startUnifiedDiffFromUrl(diffUrl: string, sourceLabel: string): DiffLoadSession;
-  loadGitFolderDiff(folderPath: string, initialRowCount: number, showOnlyHunks: boolean, compareBaseKind: string, compareBaseRef: string, compareUseMergeBase: boolean, ignoreWhitespaceChanges: boolean): Promise<DiffLoadResult>;
+  loadGitFolderDiff(folderPath: string, initialRowCount: number, showOnlyHunks: boolean, compareBaseKind: string, compareBaseRef: string, compareUseMergeBase: boolean, ignoreWhitespaceChanges: boolean, excludePaths: string[]): Promise<DiffLoadResult>;
   loadUnifiedDiff(diffText: string, sourceLabel: string, initialRowCount: number, ignoreWhitespaceChanges: boolean): Promise<DiffLoadResult>;
   loadUnifiedDiffFile(filePath: string, sourceLabel: string, initialRowCount: number, ignoreWhitespaceChanges: boolean): Promise<DiffLoadResult>;
   loadUnifiedDiffFromUrl(diffUrl: string, sourceLabel: string, initialRowCount: number, ignoreWhitespaceChanges: boolean): Promise<DiffLoadResult>;

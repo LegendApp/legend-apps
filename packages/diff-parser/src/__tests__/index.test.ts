@@ -58,7 +58,7 @@ describe("@legend-apps/diff-parser", () => {
 
     await expect(diffParser.loadGitFolderDiff("/tmp/repo")).resolves.toEqual({ ok: "git" });
 
-    expect(parser.loadGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", 200, true, "head", "", true, false);
+    expect(parser.loadGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", 200, true, "head", "", true, false, []);
   });
 
   it("passes explicit git folder diff row count", async () => {
@@ -66,7 +66,7 @@ describe("@legend-apps/diff-parser", () => {
 
     await diffParser.loadGitFolderDiff("/tmp/repo", 25);
 
-    expect(parser.loadGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", 25, true, "head", "", true, false);
+    expect(parser.loadGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", 25, true, "head", "", true, false, []);
   });
 
   it("passes git folder diff load options", async () => {
@@ -77,7 +77,7 @@ describe("@legend-apps/diff-parser", () => {
       showOnlyHunks: false,
     });
 
-    expect(parser.loadGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", 25, false, "head", "", true, true);
+    expect(parser.loadGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", 25, false, "head", "", true, true, []);
   });
 
   it("passes git folder compare base options", async () => {
@@ -89,7 +89,17 @@ describe("@legend-apps/diff-parser", () => {
       compareUseMergeBase: false,
     });
 
-    expect(parser.loadGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", 25, true, "ref", "origin/main", false, false);
+    expect(parser.loadGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", 25, true, "ref", "origin/main", false, false, []);
+  });
+
+  it("passes git folder exclude paths to both load paths", async () => {
+    const { diffParser, parser } = loadModuleWithParser();
+
+    await diffParser.loadGitFolderDiff("/tmp/repo", 25, { excludePaths: [".review"] });
+    diffParser.startGitFolderDiff("/tmp/repo", { excludePaths: [".review", "docs/generated"] });
+
+    expect(parser.loadGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", 25, true, "head", "", true, false, [".review"]);
+    expect(parser.startGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", true, "head", "", true, false, [".review", "docs/generated"]);
   });
 
   it("starts progressive git folder diff sessions", () => {
@@ -97,7 +107,7 @@ describe("@legend-apps/diff-parser", () => {
 
     expect(diffParser.startGitFolderDiff("/tmp/repo")).toEqual({ ok: "session" });
 
-    expect(parser.startGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", true, "head", "", true, false);
+    expect(parser.startGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", true, "head", "", true, false, []);
   });
 
   it("starts progressive git folder diff sessions with options", () => {
@@ -108,7 +118,7 @@ describe("@legend-apps/diff-parser", () => {
       showOnlyHunks: false,
     })).toEqual({ ok: "session" });
 
-    expect(parser.startGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", false, "head", "", true, true);
+    expect(parser.startGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", false, "head", "", true, true, []);
   });
 
   it("passes progressive git folder compare base options", () => {
@@ -120,7 +130,7 @@ describe("@legend-apps/diff-parser", () => {
       compareUseMergeBase: false,
     })).toEqual({ ok: "session" });
 
-    expect(parser.startGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", true, "ref", "origin/main", false, false);
+    expect(parser.startGitFolderDiff).toHaveBeenCalledWith("/tmp/repo", true, "ref", "origin/main", false, false, []);
   });
 
   it("starts progressive unified diff URL sessions", () => {

@@ -8,13 +8,14 @@ function getDiffParser() {
   return diffParser;
 }
 
-function normalizeGitFolderLoadOptions(options?: Partial<DiffGitFolderLoadOptions>): DiffGitFolderLoadOptions {
+function normalizeGitFolderLoadOptions(options?: Partial<DiffGitFolderLoadOptions>): Required<DiffGitFolderLoadOptions> {
   return {
     compareBaseKind: options?.compareBaseKind ?? "head",
     compareBaseRef: options?.compareBaseRef ?? "",
     compareUseMergeBase: options?.compareUseMergeBase ?? true,
     ignoreWhitespaceChanges: options?.ignoreWhitespaceChanges ?? false,
     showOnlyHunks: options?.showOnlyHunks ?? true,
+    excludePaths: options?.excludePaths ?? [],
   };
 }
 
@@ -28,6 +29,7 @@ export function loadGitFolderDiff(folderPath: string, initialRowCount = 200, opt
     normalizedOptions.compareBaseRef,
     normalizedOptions.compareUseMergeBase,
     normalizedOptions.ignoreWhitespaceChanges,
+    normalizedOptions.excludePaths,
   );
 }
 
@@ -40,6 +42,7 @@ export function startGitFolderDiff(folderPath: string, options?: Partial<DiffGit
     normalizedOptions.compareBaseRef,
     normalizedOptions.compareUseMergeBase,
     normalizedOptions.ignoreWhitespaceChanges,
+    normalizedOptions.excludePaths,
   );
 }
 
