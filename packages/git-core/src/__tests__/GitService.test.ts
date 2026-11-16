@@ -1,5 +1,6 @@
 import type { ProcessOptions } from "@legendapp/spark/processes";
-import { GitIndexLockedError, GitService, getGitService, type GitRunner } from "../GitService";
+import { GitIndexLockedError, GitService, type GitRunner } from "../GitService";
+import { getGitService } from "../sparkGitService";
 import { parseGitStatus } from "../gitStatus";
 import { processResult } from "../../test/fixtures/processFixtures";
 

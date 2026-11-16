@@ -1,9 +1,19 @@
-import { decodeProcessText } from "@legend-apps/runtime-utils";
-import { runCommand, type ProcessExit, type ProcessOptions, type ProcessResult } from "@legendapp/spark/processes";
-import { parseGitStatus } from "./gitStatus";
+// Plain Node with type stripping loads this module: keep runtime imports to `./gitStatus.ts` and avoid TypeScript-only
+// runtime syntax such as parameter properties. The Spark process runner is wired in by `sparkGitService.ts`.
+import type { ProcessExit, ProcessOptions, ProcessResult } from "@legendapp/spark/processes";
+import { parseGitStatus } from "./gitStatus.ts";
 
 export type GitRunner = (options: ProcessOptions) => Promise<ProcessResult>;
+export type GitDecoder = (bytes: Uint8Array) => string;
 export type GitReadOptions = { signal?: AbortSignal };
+/**
+ * `index` (default) applies with `git apply --cached`. `worktree` runs `verify`, `git apply --check`, `verify` and
+ * `git apply` as one queued operation; once the apply starts it finishes even if `signal` aborts.
+ */
+export type GitApplyPatchOptions = GitReadOptions & { reverse?: boolean } & (
+  | { target?: "index" }
+  | { target: "worktree"; verify?: (signal?: AbortSignal) => Promise<void> }
+);
 export type GitOperationLog = {
   command: string;
   args: readonly string[];
@@ -70,22 +80,29 @@ s=$(git cat-file --filters --path="$2" "$r" | git hash-object --no-filters --std
 if test "$r" = "$c" && test "$r" = "$s"; then echo plain; fi`;
 
 export class GitServiceError extends Error {
-  constructor(readonly code: GitErrorCode, message: string, readonly args: readonly string[] = []) {
+  readonly code: GitErrorCode;
+  readonly args: readonly string[];
+
+  constructor(code: GitErrorCode, message: string, args: readonly string[] = []) {
     super(message);
     this.name = "GitServiceError";
+    this.code = code;
+    this.args = args;
   }
 }
 
 export class GitIndexLockedError extends GitServiceError {
-  constructor(readonly lockPath: string) {
+  readonly lockPath: string;
+
+  constructor(lockPath: string) {
     super("index-locked", `Git index is locked at ${lockPath}. Wait for the other Git operation to finish, then retry.`);
     this.name = "GitIndexLockedError";
+    this.lockPath = lockPath;
   }
 }
 
 const discoveryQueues = new Map<string, Promise<void>>();
 const repoQueues = new Map<string, Promise<void>>();
-const services = new Map<string, GitService>();
 const stateProbe = `cat "$1/HEAD" || exit
 printf '\\0'
 for name in index.lock MERGE_HEAD rebase-apply rebase-merge CHERRY_PICK_HEAD REVERT_HEAD BISECT_LOG; do
@@ -148,43 +165,47 @@ export function githubCommitUrl(remoteUrl: string | null, oid: string) {
   return match ? `https://github.com/${match[1]}/${match[2]}/commit/${oid}` : null;
 }
 
-export function getGitService(repoRoot: string) {
-  const root = repoRoot.replace(/\/+$/, "") || "/";
-  let service = services.get(root);
-  if (!service) {
-    service = new GitService(root);
-    services.set(root, service);
-  }
-  return service;
-}
-
 export class GitService {
   private gitDir: string | undefined;
   private readonly operations: GitOperationLog[] = [];
+  private readonly runner: GitRunner;
+  private readonly decode: GitDecoder;
   readonly repoRoot: string;
 
-  constructor(repoRoot: string, private readonly runner: GitRunner = runCommand) {
+  /** `decode` defaults to TextDecoder; React Native hosts without it pass their own. */
+  constructor(repoRoot: string, runner: GitRunner, decode: GitDecoder = bytes => new TextDecoder().decode(bytes)) {
     this.repoRoot = repoRoot.replace(/\/+$/, "") || "/";
+    this.runner = runner;
+    this.decode = decode;
   }
 
   getOperationLog(): readonly GitOperationLog[] {
     return this.operations.map((entry) => ({ ...entry, args: [...entry.args] }));
   }
 
-  private enqueue<T>(options: GitReadOptions, operation: (gitDir: string) => Promise<T>): Promise<T> {
+  /**
+   * Runs `operation` on the repository queue. An abort rejects the caller at once unless the operation has called
+   * `commit`, after which the caller waits for its real outcome.
+   */
+  private enqueue<T>(options: GitReadOptions, operation: (gitDir: string, commit: () => void) => Promise<T>): Promise<T> {
     const { signal } = options;
+    let committed = false;
+    const commit = () => {
+      checkAborted(signal);
+      committed = true;
+    };
     const pending = serialize(discoveryQueues, this.repoRoot, async () => {
       checkAborted(signal);
       const gitDir = this.gitDir ??= (await this.git(["rev-parse", "--absolute-git-dir"], options)).replace(/\n$/, "");
       return serialize(repoQueues, gitDir, () => {
         checkAborted(signal);
-        return operation(gitDir);
+        return operation(gitDir, commit);
       });
     });
     if (!signal) return pending;
     let onAbort: () => void;
     const aborted = new Promise<never>((_resolve, reject) => {
-      onAbort = () => reject(new GitServiceError("aborted", "Git operation was cancelled."));
+      onAbort = () => { if (!committed) reject(new GitServiceError("aborted", "Git operation was cancelled.")); };
       signal.addEventListener("abort", onAbort, { once: true });
       if (signal.aborted) onAbort();
     });
@@ -207,7 +228,7 @@ export class GitService {
         timeoutMs,
       });
       entry.exit = result.exit;
-      entry.stderrTail = decodeProcessText(result.stderr).slice(-4096);
+      entry.stderrTail = this.decode(result.stderr).slice(-4096);
       checkAborted(options.signal);
       if (result.aborted) throw new GitServiceError("aborted", "Git operation was cancelled.", args);
       if (result.timedOut) throw new GitServiceError("timed-out", `${command} timed out.`, args);
@@ -216,7 +237,7 @@ export class GitService {
         if (/index\.lock/.test(entry.stderrTail)) throw new GitIndexLockedError(`${this.gitDir ?? `${this.repoRoot}/.git`}/index.lock`);
         throw new GitServiceError("command-failed", entry.stderrTail || `${command} failed (${result.exit.type === "exited" ? result.exit.code : "terminated"}).`, args);
       }
-      return decodeProcessText(result.stdout);
+      return this.decode(result.stdout);
     } catch (error) {
       if (!entry.stderrTail) entry.stderrTail = (error instanceof Error ? error.message : String(error)).slice(-4096);
       checkAborted(options.signal);
@@ -338,11 +359,25 @@ export class GitService {
     });
   }
 
-  /** Applies a patch to the index only (`git apply --cached`), optionally reversed, after checking index.lock. */
-  applyPatch(patch: string, options: GitReadOptions & { reverse?: boolean } = {}) {
-    return this.enqueue(options, async (gitDir) => {
+  /**
+   * Applies a patch, optionally reversed, after checking index.lock: to the index only (`git apply --cached`) by default,
+   * or to the worktree only with `target: "worktree"` (see `GitApplyPatchOptions`). `verify` runs on the repository
+   * queue, so it must not call this service for the same repository.
+   */
+  applyPatch(patch: string, options: GitApplyPatchOptions = {}) {
+    const flags = ["--whitespace=nowarn", "--no-ignore-whitespace", ...(options.reverse ? ["--reverse"] : [])];
+    return this.enqueue(options, async (gitDir, commit) => {
       await this.inspect(gitDir, options);
-      await this.git(["apply", "--cached", "--whitespace=nowarn", "--no-ignore-whitespace", ...(options.reverse ? ["--reverse"] : []), "-"], options, 60_000, patch);
+      if (options.target !== "worktree") {
+        await this.git(["apply", "--cached", ...flags, "-"], options, 60_000, patch);
+        return;
+      }
+      const root = (await this.git(["rev-parse", "--show-toplevel"], options)).replace(/\n$/, "");
+      await options.verify?.(options.signal);
+      await this.git(["-C", root, "apply", "--check", ...flags, "-"], options, 60_000, patch);
+      await options.verify?.(options.signal);
+      commit();
+      await this.git(["-C", root, "apply", ...flags, "-"], {}, 60_000, patch);
     });
   }
 

@@ -1,6 +1,6 @@
 import { decodeProcessText } from "@legend-apps/runtime-utils";
 import { runCommand } from "@legendapp/spark/processes";
-import { getGitService, GitService } from "@legend-apps/git-core";
+import { createGitService, getGitService } from "@legend-apps/git-core";
 type DiffMergeCommands = Pick<typeof import("@legendapp/spark/processes"), "runCommand">;
 
 export type DiffMergeConflictStage = {
@@ -1115,7 +1115,7 @@ export async function loadDiffMergeState(
   runner: DiffMergeCommands = { runCommand },
 ): Promise<DiffMergeState> {
   try {
-    const git = runner.runCommand === runCommand ? getGitService(folderPath) : new GitService(folderPath, runner.runCommand);
+    const git = runner.runCommand === runCommand ? getGitService(folderPath) : createGitService(folderPath, runner.runCommand);
     const conflictFiles = parseGitUnmergedEntries(await git.unmerged());
     if (conflictFiles.length === 0) {
       return createReadyMergeState([]);

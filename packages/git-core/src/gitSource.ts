@@ -1,4 +1,5 @@
-import { getGitService, type GitReadOptions, type GitService } from "./GitService";
+import type { GitReadOptions, GitService } from "./GitService";
+import { getGitService } from "./sparkGitService";
 
 export async function readDiffGitSource(
   source: GitSource,
