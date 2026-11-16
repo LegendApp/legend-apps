@@ -7,8 +7,12 @@
 #include "HybridDiffUrlLoader.hpp"
 #include "../../syntax-parser/cpp/SyntaxHighlighter.hpp"
 
+#include <atomic>
 #include <chrono>
+#include <cmath>
 #include <fstream>
+#include <map>
+#include <mutex>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -57,12 +61,14 @@ DiffGitCompareOptions createCompareOptions(
     const std::string& compareBaseKind,
     const std::string& compareBaseRef,
     bool compareUseMergeBase,
-    bool ignoreWhitespaceChanges) {
+    bool ignoreWhitespaceChanges,
+    const std::vector<std::string>& excludePaths) {
   return DiffGitCompareOptions{
       .baseKind = compareBaseKind,
       .baseRef = compareBaseRef,
       .useMergeBase = compareUseMergeBase,
       .ignoreWhitespace = ignoreWhitespaceChanges,
+      .excludePaths = excludePaths,
   };
 }
 
@@ -84,6 +90,31 @@ std::shared_ptr<HybridDiffDocument> loadGitDiffDocument(
       parsed.timing);
 }
 
+struct GitHistoryEntry {
+  std::shared_ptr<GitHistoryWalker> walker;
+  std::shared_ptr<std::atomic<bool>> closed;
+};
+
+std::mutex gitHistoryMutex;
+std::map<double, GitHistoryEntry> gitHistories;
+double nextGitHistoryHandle = 1;
+
+GitHistoryEntry findGitHistory(double handle) {
+  std::lock_guard<std::mutex> lock(gitHistoryMutex);
+  const auto found = gitHistories.find(handle);
+  if (found == gitHistories.end()) throw std::runtime_error("History read was cancelled.");
+  return found->second;
+}
+
+struct GitBlameEntry {
+  std::shared_ptr<GitBlameReader> reader;
+  std::shared_ptr<std::atomic<bool>> closed;
+};
+
+std::mutex gitBlameMutex;
+std::map<double, GitBlameEntry> gitBlames;
+double nextGitBlameHandle = 1;
+
 } // namespace
 
 HybridDiffParser::HybridDiffParser() : HybridObject(TAG) {}
@@ -94,11 +125,12 @@ std::shared_ptr<HybridDiffLoadSessionSpec> HybridDiffParser::startGitFolderDiff(
     const std::string& compareBaseKind,
     const std::string& compareBaseRef,
     bool compareUseMergeBase,
-    bool ignoreWhitespaceChanges) {
+    bool ignoreWhitespaceChanges,
+    const std::vector<std::string>& excludePaths) {
   return HybridDiffLoadSession::create(
       folderPath,
       showOnlyHunks,
-      createCompareOptions(compareBaseKind, compareBaseRef, compareUseMergeBase, ignoreWhitespaceChanges));
+      createCompareOptions(compareBaseKind, compareBaseRef, compareUseMergeBase, ignoreWhitespaceChanges, excludePaths));
 }
 
 std::shared_ptr<HybridDiffLoadSessionSpec> HybridDiffParser::startUnifiedDiffFromUrl(
@@ -118,13 +150,11 @@ std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadGitFolderDiff(
     const std::string& compareBaseKind,
     const std::string& compareBaseRef,
     bool compareUseMergeBase,
-    bool ignoreWhitespaceChanges) {
-  return Promise<DiffLoadResult>::async([folderPath, initialRowCount, showOnlyHunks, compareBaseKind, compareBaseRef, compareUseMergeBase, ignoreWhitespaceChanges]() -> DiffLoadResult {
+    bool ignoreWhitespaceChanges,
+    const std::vector<std::string>& excludePaths) {
+  return Promise<DiffLoadResult>::async([folderPath, initialRowCount, showOnlyHunks, compareOptions = createCompareOptions(compareBaseKind, compareBaseRef, compareUseMergeBase, ignoreWhitespaceChanges, excludePaths)]() mutable -> DiffLoadResult {
     const auto startedAt = DiffClock::now();
-    auto document = loadGitDiffDocument(
-        folderPath,
-        showOnlyHunks,
-        createCompareOptions(compareBaseKind, compareBaseRef, compareUseMergeBase, ignoreWhitespaceChanges));
+    auto document = loadGitDiffDocument(folderPath, showOnlyHunks, std::move(compareOptions));
     const auto documentCreatedAt = DiffClock::now();
     DiffLoadResult result;
     result.document = document;
@@ -228,6 +258,91 @@ std::shared_ptr<Promise<DiffLoadResult>> HybridDiffParser::loadUnifiedDiffFromUr
     result.timing = timing;
     return result;
   });
+}
+
+std::shared_ptr<Promise<GitHistoryHead>> HybridDiffParser::openGitHistory(const std::string& folderPath) {
+  return Promise<GitHistoryHead>::async([folderPath]() -> GitHistoryHead {
+    auto walker = std::make_shared<GitHistoryWalker>(folderPath);
+    GitHistoryHead head;
+    head.headOid = walker->headOid();
+    head.unborn = walker->unborn();
+    head.detached = walker->detached();
+    std::lock_guard<std::mutex> lock(gitHistoryMutex);
+    head.handle = nextGitHistoryHandle++;
+    gitHistories.emplace(head.handle, GitHistoryEntry{std::move(walker), std::make_shared<std::atomic<bool>>(false)});
+    return head;
+  });
+}
+
+std::shared_ptr<Promise<GitHistoryPage>> HybridDiffParser::readGitHistoryPage(double handle, double offset, double count) {
+  return Promise<GitHistoryPage>::async([handle, offset, count]() -> GitHistoryPage {
+    if (!(offset >= 0) || !(count >= 0) || std::floor(offset) != offset || std::floor(count) != count) {
+      throw std::runtime_error("History pages need a whole, non-negative offset and count.");
+    }
+    const auto entry = findGitHistory(handle);
+    const auto start = static_cast<size_t>(offset);
+    const auto rows = entry.walker->page(start, static_cast<size_t>(count), [closed = entry.closed] { return closed->load(); });
+    if (entry.closed->load()) throw std::runtime_error("History read was cancelled.");
+    GitHistoryPage page;
+    page.offset = offset;
+    page.done = rows.size() < static_cast<size_t>(count);
+    page.commits.reserve(rows.size());
+    for (const auto& row : rows) {
+      page.commits.push_back(GitHistoryCommit(row.oid, row.parents, row.authorName, row.authorEmail, row.time, row.summary,
+                                              row.lane, row.color, std::vector<double>(row.edges.begin(), row.edges.end())));
+    }
+    return page;
+  });
+}
+
+void HybridDiffParser::closeGitHistory(double handle) {
+  std::lock_guard<std::mutex> lock(gitHistoryMutex);
+  const auto found = gitHistories.find(handle);
+  if (found == gitHistories.end()) return;
+  found->second.closed->store(true);
+  gitHistories.erase(found);
+}
+
+std::shared_ptr<Promise<double>> HybridDiffParser::openGitBlame(const std::string& folderPath, const std::string& path, const std::string& source) {
+  return Promise<double>::async([folderPath, path, source]() -> double {
+    auto reader = std::make_shared<GitBlameReader>(folderPath, path, source);
+    std::lock_guard<std::mutex> lock(gitBlameMutex);
+    const double handle = nextGitBlameHandle++;
+    gitBlames.emplace(handle, GitBlameEntry{std::move(reader), std::make_shared<std::atomic<bool>>(false)});
+    return handle;
+  });
+}
+
+std::shared_ptr<Promise<std::vector<GitBlameHunk>>> HybridDiffParser::readGitBlame(double handle, double startLine, double lineCount) {
+  return Promise<std::vector<GitBlameHunk>>::async([handle, startLine, lineCount]() -> std::vector<GitBlameHunk> {
+    if (!(startLine >= 1) || !(lineCount >= 0) || std::floor(startLine) != startLine || std::floor(lineCount) != lineCount) {
+      throw std::runtime_error("Blame reads need a whole start line from 1 and a whole line count.");
+    }
+    GitBlameEntry entry;
+    {
+      std::lock_guard<std::mutex> lock(gitBlameMutex);
+      const auto found = gitBlames.find(handle);
+      if (found == gitBlames.end()) throw std::runtime_error("Blame was cancelled.");
+      entry = found->second;
+    }
+    const auto rows = entry.reader->lines(static_cast<size_t>(startLine), static_cast<size_t>(lineCount), [closed = entry.closed] { return closed->load(); });
+    if (entry.closed->load()) throw std::runtime_error("Blame was cancelled.");
+    std::vector<GitBlameHunk> hunks;
+    hunks.reserve(rows.size());
+    for (const auto& row : rows) {
+      hunks.emplace_back(row.oid, row.path, static_cast<double>(row.startLine), static_cast<double>(row.originalStartLine), static_cast<double>(row.lineCount),
+                         row.authorName, row.authorEmail, row.time, row.summary);
+    }
+    return hunks;
+  });
+}
+
+void HybridDiffParser::closeGitBlame(double handle) {
+  std::lock_guard<std::mutex> lock(gitBlameMutex);
+  const auto found = gitBlames.find(handle);
+  if (found == gitBlames.end()) return;
+  found->second.closed->store(true);
+  gitBlames.erase(found);
 }
 
 } // namespace margelo::nitro::legendapps::diffparser

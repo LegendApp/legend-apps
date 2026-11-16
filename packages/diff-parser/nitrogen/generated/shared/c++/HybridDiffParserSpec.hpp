@@ -17,12 +17,22 @@
 namespace margelo::nitro::legendapps::diffparser { class HybridDiffLoadSessionSpec; }
 // Forward declaration of `DiffLoadResult` to properly resolve imports.
 namespace margelo::nitro::legendapps::diffparser { struct DiffLoadResult; }
+// Forward declaration of `GitHistoryHead` to properly resolve imports.
+namespace margelo::nitro::legendapps::diffparser { struct GitHistoryHead; }
+// Forward declaration of `GitHistoryPage` to properly resolve imports.
+namespace margelo::nitro::legendapps::diffparser { struct GitHistoryPage; }
+// Forward declaration of `GitBlameHunk` to properly resolve imports.
+namespace margelo::nitro::legendapps::diffparser { struct GitBlameHunk; }
 
 #include <memory>
 #include "HybridDiffLoadSessionSpec.hpp"
 #include <string>
+#include <vector>
 #include "DiffLoadResult.hpp"
 #include <NitroModules/Promise.hpp>
+#include "GitHistoryHead.hpp"
+#include "GitHistoryPage.hpp"
+#include "GitBlameHunk.hpp"
 
 namespace margelo::nitro::legendapps::diffparser {
 
@@ -55,12 +65,18 @@ namespace margelo::nitro::legendapps::diffparser {
 
     public:
       // Methods
-      virtual std::shared_ptr<HybridDiffLoadSessionSpec> startGitFolderDiff(const std::string& folderPath, bool showOnlyHunks, const std::string& compareBaseKind, const std::string& compareBaseRef, bool compareUseMergeBase, bool ignoreWhitespaceChanges) = 0;
+      virtual std::shared_ptr<HybridDiffLoadSessionSpec> startGitFolderDiff(const std::string& folderPath, bool showOnlyHunks, const std::string& compareBaseKind, const std::string& compareBaseRef, bool compareUseMergeBase, bool ignoreWhitespaceChanges, const std::vector<std::string>& excludePaths) = 0;
       virtual std::shared_ptr<HybridDiffLoadSessionSpec> startUnifiedDiffFromUrl(const std::string& diffUrl, const std::string& sourceLabel) = 0;
-      virtual std::shared_ptr<Promise<DiffLoadResult>> loadGitFolderDiff(const std::string& folderPath, double initialRowCount, bool showOnlyHunks, const std::string& compareBaseKind, const std::string& compareBaseRef, bool compareUseMergeBase, bool ignoreWhitespaceChanges) = 0;
+      virtual std::shared_ptr<Promise<DiffLoadResult>> loadGitFolderDiff(const std::string& folderPath, double initialRowCount, bool showOnlyHunks, const std::string& compareBaseKind, const std::string& compareBaseRef, bool compareUseMergeBase, bool ignoreWhitespaceChanges, const std::vector<std::string>& excludePaths) = 0;
       virtual std::shared_ptr<Promise<DiffLoadResult>> loadUnifiedDiff(const std::string& diffText, const std::string& sourceLabel, double initialRowCount, bool ignoreWhitespaceChanges) = 0;
       virtual std::shared_ptr<Promise<DiffLoadResult>> loadUnifiedDiffFile(const std::string& filePath, const std::string& sourceLabel, double initialRowCount, bool ignoreWhitespaceChanges) = 0;
       virtual std::shared_ptr<Promise<DiffLoadResult>> loadUnifiedDiffFromUrl(const std::string& diffUrl, const std::string& sourceLabel, double initialRowCount, bool ignoreWhitespaceChanges) = 0;
+      virtual std::shared_ptr<Promise<GitHistoryHead>> openGitHistory(const std::string& folderPath) = 0;
+      virtual std::shared_ptr<Promise<GitHistoryPage>> readGitHistoryPage(double handle, double offset, double count) = 0;
+      virtual void closeGitHistory(double handle) = 0;
+      virtual std::shared_ptr<Promise<double>> openGitBlame(const std::string& folderPath, const std::string& path, const std::string& source) = 0;
+      virtual std::shared_ptr<Promise<std::vector<GitBlameHunk>>> readGitBlame(double handle, double startLine, double lineCount) = 0;
+      virtual void closeGitBlame(double handle) = 0;
 
     protected:
       // Hybrid Setup

@@ -191,6 +191,14 @@ test("Chat History release does not exclude peer native dependencies of included
   }
 });
 
+for (const name of ["@legend-apps/instrumentation", "react-native-worklets"]) {
+  test(`Diff release selects the bundled native dependency ${name}`, async () => {
+    const config = sparkConfig(await loadAppManifest("diff"), "release");
+    assert.ok(config.include.includes(name), `${name} must be explicitly selected`);
+    assert.ok(!config.expo.autolinking.exclude.includes(name), `${name} must not be excluded`);
+  });
+}
+
 test("manifests declare Spark modules by import subpath", async () => {
   assert.deepEqual(expandSparkSubpath("@legendapp/spark/dialogs"), ["@legendapp/spark-file-dialog", "@legendapp/spark-message-dialog"]);
   assert.equal(expandSparkSubpath("@legendapp/spark/system")[0], "@legendapp/spark-system");

@@ -1,9 +1,19 @@
-import { decodeProcessText } from "@legend-apps/runtime-utils";
-import { runCommand, type ProcessExit, type ProcessOptions, type ProcessResult } from "@legendapp/spark/processes";
-import { parseGitStatus } from "./gitStatus";
+// Plain Node with type stripping loads this module: keep runtime imports to `./gitStatus.ts` and avoid TypeScript-only
+// runtime syntax such as parameter properties. The Spark process runner is wired in by `sparkGitService.ts`.
+import type { ProcessExit, ProcessOptions, ProcessResult } from "@legendapp/spark/processes";
+import { parseGitStatus } from "./gitStatus.ts";
 
 export type GitRunner = (options: ProcessOptions) => Promise<ProcessResult>;
+export type GitDecoder = (bytes: Uint8Array) => string;
 export type GitReadOptions = { signal?: AbortSignal };
+/**
+ * `index` (default) applies with `git apply --cached`. `worktree` runs `verify`, `git apply --check`, `verify` and
+ * `git apply` as one queued operation; once the apply starts it finishes even if `signal` aborts.
+ */
+export type GitApplyPatchOptions = GitReadOptions & { reverse?: boolean } & (
+  | { target?: "index" }
+  | { target: "worktree"; verify?: (signal?: AbortSignal) => Promise<void> }
+);
 export type GitOperationLog = {
   command: string;
   args: readonly string[];
@@ -28,6 +38,9 @@ export type GitErrorCode = "aborted" | "index-locked" | "command-failed" | "time
 export type GitBackupEntry = { path: string; mode: "100644" | "100755" | "120000"; oid: string } | { path: string; mode: null; oid?: undefined };
 export type GitDiscardBackup = { ref: string; oid: string; entries: GitBackupEntry[] };
 export type GitCommitInput = { message: string; amend?: boolean; signoff?: boolean };
+export type GitStagedFile = { path: string; originalPath: string | null; binary: boolean; added: number; deleted: number };
+/** The staged changes as `git diff --cached` text; files past the size cap are listed but left out of `patch`. */
+export type GitStagedDiff = { files: GitStagedFile[]; patch: string; truncated: boolean; omitted: string[] };
 export const discardRefPrefix = "refs/legend-git/discarded/";
 const restoredRefPrefix = "refs/legend-git/restored/";
 const replacedRefPrefix = "refs/legend-git/replaced/";
@@ -67,27 +80,36 @@ s=$(git cat-file --filters --path="$2" "$r" | git hash-object --no-filters --std
 if test "$r" = "$c" && test "$r" = "$s"; then echo plain; fi`;
 
 export class GitServiceError extends Error {
-  constructor(readonly code: GitErrorCode, message: string, readonly args: readonly string[] = []) {
+  readonly code: GitErrorCode;
+  readonly args: readonly string[];
+
+  constructor(code: GitErrorCode, message: string, args: readonly string[] = []) {
     super(message);
     this.name = "GitServiceError";
+    this.code = code;
+    this.args = args;
   }
 }
 
 export class GitIndexLockedError extends GitServiceError {
-  constructor(readonly lockPath: string) {
+  readonly lockPath: string;
+
+  constructor(lockPath: string) {
     super("index-locked", `Git index is locked at ${lockPath}. Wait for the other Git operation to finish, then retry.`);
     this.name = "GitIndexLockedError";
+    this.lockPath = lockPath;
   }
 }
 
 const discoveryQueues = new Map<string, Promise<void>>();
 const repoQueues = new Map<string, Promise<void>>();
-const services = new Map<string, GitService>();
 const stateProbe = `cat "$1/HEAD" || exit
 printf '\\0'
 for name in index.lock MERGE_HEAD rebase-apply rebase-merge CHERRY_PICK_HEAD REVERT_HEAD BISECT_LOG; do
   if test -e "$1/$name"; then printf '%s\\0' "$name"; fi
 done`;
+
+const diffFormat = ["-c", "diff.suppressBlankEmpty=false", "-c", "diff.noprefix=false", "diff", "--no-ext-diff", "--no-textconv", "--no-color", "--unified=3", "--src-prefix=a/", "--dst-prefix=b/", "--ignore-submodules=none"];
 
 function isRepoPath(path: string) {
   return !!path && !path.includes("\0") && !path.startsWith("/") && !path.split("/").some(part => part === ".." || part === "." || !part);
@@ -107,43 +129,128 @@ function serialize<T>(queues: Map<string, Promise<void>>, key: string, operation
   return pending;
 }
 
-export function getGitService(repoRoot: string) {
-  const root = repoRoot.replace(/\/+$/, "") || "/";
-  let service = services.get(root);
-  if (!service) {
-    service = new GitService(root);
-    services.set(root, service);
+export type GitPerson = { name: string; email: string; time: number };
+export type GitCommitDetails = { oid: string; parents: string[]; author: GitPerson; committer: GitPerson; message: string };
+export type GitRefDecoration = { kind: "branch" | "remote" | "tag"; name: string };
+
+export function parseCommitDetails(output: string): GitCommitDetails {
+  const [oid = "", parents = "", authorName = "", authorEmail = "", authorTime = "", committerName = "", committerEmail = "", committerTime = "", ...message] = output.split("\0");
+  return {
+    oid,
+    parents: parents.split(" ").filter(Boolean),
+    author: { name: authorName, email: authorEmail, time: Number(authorTime) },
+    committer: { name: committerName, email: committerEmail, time: Number(committerTime) },
+    message: message.join("\0").replace(/\n+$/, ""),
+  };
+}
+
+/** One commit in a file's history: the path the file had in it, and the path it was renamed from there. */
+export type GitFileHistoryCommit = {
+  oid: string;
+  parents: string[];
+  authorName: string;
+  authorEmail: string;
+  time: number;
+  summary: string;
+  status: string;
+  path: string;
+  oldPath: string | null;
+};
+export type GitFileHistoryPage = { commits: GitFileHistoryCommit[]; done: boolean };
+
+/**
+ * Parses `git log --follow -z --name-status` records that each start with \x1e. A record without a
+ * status line (a merge) keeps the path of the newer record, starting from `path`.
+ */
+export function parseFileHistory(output: string, path: string): GitFileHistoryCommit[] {
+  const commits: GitFileHistoryCommit[] = [];
+  let current = path;
+  for (const record of output.split("\x1e")) {
+    if (!record) continue;
+    const [oid = "", parents = "", authorName = "", authorEmail = "", time = "", summary = "", rawStatus = "", first = "", second] = record.split("\0");
+    const status = rawStatus.trim();
+    const renamed = status.startsWith("R") && second !== undefined;
+    if (status) current = renamed ? second : first;
+    commits.push({ oid, parents: parents.split(" ").filter(Boolean), authorName, authorEmail, time: Number(time), summary, status: status.slice(0, 1), path: current, oldPath: renamed ? first : null });
+    if (renamed) current = first;
   }
-  return service;
+  return commits;
+}
+
+export type GitHistorySearchScope = "message" | "author" | "path" | "content";
+export type GitHistorySearchPage = { commits: GitFileHistoryCommit[]; done: boolean };
+
+const searchArgs: Record<GitHistorySearchScope, (text: string) => { options: string[]; paths: string[] }> = {
+  // Fixed strings, case-insensitive, like a search field: "fix(" finds "fix(" and does not fail as a regex.
+  message: text => ({ options: ["--regexp-ignore-case", "--fixed-strings", `--grep=${text}`], paths: [] }),
+  author: text => ({ options: ["--regexp-ignore-case", "--fixed-strings", `--author=${text}`], paths: [] }),
+  // Without :(glob), `*` also matches `/`, so "parser" finds any path containing it.
+  path: text => ({ options: [], paths: [`:(icase)*${text.replace(/[*?[\\]/g, "\\$&")}*`] }),
+  content: text => ({ options: [`-S${text}`], paths: [] }),
+};
+
+export function parseRefDecorations(output: string) {
+  const decorations = new Map<string, GitRefDecoration[]>();
+  for (const line of output.split("\n")) {
+    const [object = "", peeled = "", ref = "", symref = ""] = line.split("\0");
+    if (!object || symref) continue;
+    const kind = ref.startsWith("refs/heads/") ? "branch" : ref.startsWith("refs/remotes/") ? "remote" : ref.startsWith("refs/tags/") ? "tag" : null;
+    if (!kind) continue;
+    const oid = peeled || object;
+    const list = decorations.get(oid) ?? [];
+    list.push({ kind, name: ref.slice(ref.indexOf("/", 5) + 1) });
+    decorations.set(oid, list);
+  }
+  return decorations;
+}
+
+/** The github.com page for a commit, or null when the remote URL is not on github.com. */
+export function githubCommitUrl(remoteUrl: string | null, oid: string) {
+  const match = remoteUrl?.trim().match(/^(?:(?:https?|ssh|git):\/\/(?:[^@/]+@)?github\.com(?::\d+)?\/|[^@/]+@github\.com:)([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/i);
+  return match ? `https://github.com/${match[1]}/${match[2]}/commit/${oid}` : null;
 }
 
 export class GitService {
   private gitDir: string | undefined;
   private readonly operations: GitOperationLog[] = [];
+  private readonly runner: GitRunner;
+  private readonly decode: GitDecoder;
   readonly repoRoot: string;
 
-  constructor(repoRoot: string, private readonly runner: GitRunner = runCommand) {
+  /** `decode` defaults to TextDecoder; React Native hosts without it pass their own. */
+  constructor(repoRoot: string, runner: GitRunner, decode: GitDecoder = bytes => new TextDecoder().decode(bytes)) {
     this.repoRoot = repoRoot.replace(/\/+$/, "") || "/";
+    this.runner = runner;
+    this.decode = decode;
   }
 
   getOperationLog(): readonly GitOperationLog[] {
     return this.operations.map((entry) => ({ ...entry, args: [...entry.args] }));
   }
 
-  private enqueue<T>(options: GitReadOptions, operation: (gitDir: string) => Promise<T>): Promise<T> {
+  /**
+   * Runs `operation` on the repository queue. An abort rejects the caller at once unless the operation has called
+   * `commit`, after which the caller waits for its real outcome.
+   */
+  private enqueue<T>(options: GitReadOptions, operation: (gitDir: string, commit: () => void) => Promise<T>): Promise<T> {
     const { signal } = options;
+    let committed = false;
+    const commit = () => {
+      checkAborted(signal);
+      committed = true;
+    };
     const pending = serialize(discoveryQueues, this.repoRoot, async () => {
       checkAborted(signal);
       const gitDir = this.gitDir ??= (await this.git(["rev-parse", "--absolute-git-dir"], options)).replace(/\n$/, "");
       return serialize(repoQueues, gitDir, () => {
         checkAborted(signal);
-        return operation(gitDir);
+        return operation(gitDir, commit);
       });
     });
     if (!signal) return pending;
     let onAbort: () => void;
     const aborted = new Promise<never>((_resolve, reject) => {
-      onAbort = () => reject(new GitServiceError("aborted", "Git operation was cancelled."));
+      onAbort = () => { if (!committed) reject(new GitServiceError("aborted", "Git operation was cancelled.")); };
       signal.addEventListener("abort", onAbort, { once: true });
       if (signal.aborted) onAbort();
     });
@@ -166,7 +273,7 @@ export class GitService {
         timeoutMs,
       });
       entry.exit = result.exit;
-      entry.stderrTail = decodeProcessText(result.stderr).slice(-4096);
+      entry.stderrTail = this.decode(result.stderr).slice(-4096);
       checkAborted(options.signal);
       if (result.aborted) throw new GitServiceError("aborted", "Git operation was cancelled.", args);
       if (result.timedOut) throw new GitServiceError("timed-out", `${command} timed out.`, args);
@@ -175,7 +282,7 @@ export class GitService {
         if (/index\.lock/.test(entry.stderrTail)) throw new GitIndexLockedError(`${this.gitDir ?? `${this.repoRoot}/.git`}/index.lock`);
         throw new GitServiceError("command-failed", entry.stderrTail || `${command} failed (${result.exit.type === "exited" ? result.exit.code : "terminated"}).`, args);
       }
-      return decodeProcessText(result.stdout);
+      return this.decode(result.stdout);
     } catch (error) {
       if (!entry.stderrTail) entry.stderrTail = (error instanceof Error ? error.message : String(error)).slice(-4096);
       checkAborted(options.signal);
@@ -260,16 +367,62 @@ export class GitService {
   fileDiff(file: { path: string; originalPath?: string | null; untracked?: boolean }, staged: boolean, options: GitReadOptions = {}) {
     const paths = [file.path, ...(staged && file.originalPath ? [file.originalPath] : [])];
     if (paths.some(path => !isRepoPath(path))) return Promise.reject(new Error("Expected a repository-relative file path."));
-    const format = ["-c", "diff.suppressBlankEmpty=false", "-c", "diff.noprefix=false", "diff", "--no-ext-diff", "--no-textconv", "--no-color", "--unified=3", "--src-prefix=a/", "--dst-prefix=b/", "--ignore-submodules=none"];
-    if (!staged && file.untracked) return this.read([...format, "--no-index", "--", "/dev/null", file.path], options, 60_000, false, [0, 1]);
-    return this.read(["--literal-pathspecs", ...format, ...(staged ? ["--cached", "-M"] : ["--no-renames"]), "--", ...paths], options, 60_000, true);
+    if (!staged && file.untracked) return this.read([...diffFormat, "--no-index", "--", "/dev/null", file.path], options, 60_000, false, [0, 1]);
+    return this.read(["--literal-pathspecs", ...diffFormat, ...(staged ? ["--cached", "-M"] : ["--no-renames"]), "--", ...paths], options, 60_000, true);
   }
 
-  /** Applies a patch to the index only (`git apply --cached`), optionally reversed, after checking index.lock. */
-  applyPatch(patch: string, options: GitReadOptions & { reverse?: boolean } = {}) {
+  /**
+   * Reads the whole staged diff (HEAD → index, renames detected) in `fileDiff`'s format, one file at a time, until the
+   * patch reaches `maxChars` characters; the file that crosses it is cut on a line boundary. Binary files are listed by
+   * name only, and files past the cap or with more than `maxFileLines` changed lines are reported in `omitted`.
+   */
+  stagedDiff(options: GitReadOptions & { maxChars?: number; maxFileLines?: number } = {}): Promise<GitStagedDiff> {
+    const { maxChars = 48_000, maxFileLines = 20_000 } = options;
     return this.enqueue(options, async (gitDir) => {
       await this.inspect(gitDir, options);
-      await this.git(["apply", "--cached", "--whitespace=nowarn", "--no-ignore-whitespace", ...(options.reverse ? ["--reverse"] : []), "-"], options, 60_000, patch);
+      const root = (await this.git(["rev-parse", "--show-toplevel"], options)).replace(/\n$/, "");
+      const fields = (await this.git(["-C", root, "-c", "diff.submodule=short", "diff", "--cached", "-M", "--no-ext-diff", "--no-textconv", "--ignore-submodules=none", "--numstat", "-z"], options)).split("\0");
+      const files: GitStagedFile[] = [];
+      for (let index = 0; index < fields.length - 1;) {
+        // "added<TAB>deleted<TAB>path", or "added<TAB>deleted<TAB>" followed by the old and new paths for a rename.
+        const [, added = "", deleted = "", path = ""] = /^([^\t]*)\t([^\t]*)\t([\s\S]*)$/.exec(fields[index++]!) ?? [];
+        const originalPath = path === "" ? fields[index++]! : null;
+        files.push({ path: originalPath === null ? path : fields[index++]!, originalPath, binary: added === "-", added: Number(added) || 0, deleted: Number(deleted) || 0 });
+      }
+      let patch = "";
+      const omitted: string[] = [];
+      for (const file of files) {
+        if (file.binary) continue;
+        if (patch.length >= maxChars || file.added + file.deleted > maxFileLines) { omitted.push(file.path); continue; }
+        const paths = file.originalPath ? [file.originalPath, file.path] : [file.path];
+        const text = (await this.git(["-C", root, "--literal-pathspecs", "-c", "diff.submodule=short", ...diffFormat, "--cached", "-M", "--", ...paths], options)).replace(/\0/g, "\\0");
+        if (patch.length + text.length <= maxChars) { patch += text; continue; }
+        patch += text.slice(0, text.lastIndexOf("\n", maxChars - patch.length) + 1);
+        omitted.push(file.path);
+      }
+      return { files, patch, truncated: omitted.length > 0, omitted };
+    });
+  }
+
+  /**
+   * Applies a patch, optionally reversed, after checking index.lock: to the index only (`git apply --cached`) by default,
+   * or to the worktree only with `target: "worktree"` (see `GitApplyPatchOptions`). `verify` runs on the repository
+   * queue, so it must not call this service for the same repository.
+   */
+  applyPatch(patch: string, options: GitApplyPatchOptions = {}) {
+    const flags = ["--whitespace=nowarn", "--no-ignore-whitespace", ...(options.reverse ? ["--reverse"] : [])];
+    return this.enqueue(options, async (gitDir, commit) => {
+      await this.inspect(gitDir, options);
+      if (options.target !== "worktree") {
+        await this.git(["apply", "--cached", ...flags, "-"], options, 60_000, patch);
+        return;
+      }
+      const root = (await this.git(["rev-parse", "--show-toplevel"], options)).replace(/\n$/, "");
+      await options.verify?.(options.signal);
+      await this.git(["-C", root, "apply", "--check", ...flags, "-"], options, 60_000, patch);
+      await options.verify?.(options.signal);
+      commit();
+      await this.git(["-C", root, "apply", ...flags, "-"], {}, 60_000, patch);
     });
   }
 
@@ -474,6 +627,83 @@ export class GitService {
       const commit = (await this.git(["rev-parse", "--verify", "--end-of-options", `${sha}^{commit}`], options)).trim();
       return this.git(["show", "-z", "--format=", "--first-parent", "--root", "--patch", "--no-ext-diff", "--no-color", ...(options.ignoreWhitespaceChanges ? ["--ignore-all-space"] : []), commit, "--"], options);
     });
+  }
+
+  /** One commit's message, people, dates and parents; `oid` must name a commit. */
+  commitDetails(oid: string, options: GitReadOptions = {}) {
+    return this.read(["show", "-s", "--no-show-signature", "--format=%H%x00%P%x00%an%x00%ae%x00%at%x00%cn%x00%ce%x00%ct%x00%B", "--end-of-options", `${oid}^{commit}`, "--"], options).then(parseCommitDetails);
+  }
+
+  /**
+   * A commit's patch against its first parent (or the empty tree for a root commit), in `fileDiff`'s
+   * stable format with renames detected.
+   */
+  commitPatch(oid: string, options: GitReadOptions = {}) {
+    if (!/^[0-9a-f]{4,64}$/i.test(oid)) return Promise.reject(new Error("Expected a commit id."));
+    return this.enqueue(options, async () => {
+      const [commit = "", parent] = (await this.git(["rev-list", "--parents", "--no-walk", `${oid}^{commit}`], options)).trim().split(" ");
+      const base = parent ?? (await this.git(["hash-object", "-t", "tree", "--stdin"], options, 60_000, "")).trim();
+      return this.git(["-c", "diff.submodule=short", ...diffFormat, "-M", base, commit, "--"], options);
+    });
+  }
+
+  /**
+   * Commits that touched `path` from HEAD back, following renames like `git log --follow`, `count` at a
+   * time from `offset`. Git's own walk is used because it applies its rename heuristics and the
+   * commit-graph's changed-path filters. Every page walks from HEAD: `--skip` would skip the commits
+   * where `--follow` learns a rename. An unborn HEAD has no history.
+   */
+  async fileHistory(path: string, { offset = 0, count = 500, ...options }: GitReadOptions & { offset?: number; count?: number } = {}): Promise<GitFileHistoryPage> {
+    if (!isRepoPath(path)) throw new Error(`Expected a repository path, got ${JSON.stringify(path)}.`);
+    const head = await this.read(["rev-parse", "--verify", "-q", "HEAD"], options, 5_000, false, [0, 1]);
+    if (!head.trim()) return { commits: [], done: true };
+    const output = await this.read([
+      "log", "--follow", "-z", "--no-show-signature", "--name-status", "-M", "--format=%x1e%H%x00%P%x00%an%x00%ae%x00%at%x00%s",
+      `--max-count=${offset + count + 1}`, "HEAD", "--", `:(literal)${path}`,
+    ], options);
+    const commits = parseFileHistory(output, path).slice(offset);
+    return { commits: commits.slice(0, count), done: commits.length <= count };
+  }
+
+  /**
+   * Commits reachable from `head` whose message, author, a changed path or content (`git log -S`)
+   * matches `text`, in `git log --topo-order` order, `count` at a time from `offset`. Pages walk from
+   * the same `head` oid, so they stay consistent while refs move. Git does the walk: it applies the
+   * commit-graph's changed-path filters for paths and has the pickaxe for content.
+   */
+  async searchHistory(head: string, scope: GitHistorySearchScope, text: string, { offset = 0, count = 500, ...options }: GitReadOptions & { offset?: number; count?: number } = {}): Promise<GitHistorySearchPage> {
+    if (!/^[0-9a-f]{40,64}$/i.test(head)) throw new Error("Expected a commit id.");
+    if (!text || text.includes("\0")) return { commits: [], done: true };
+    const { options: filters, paths } = searchArgs[scope](text);
+    // `--skip` counts commits before the pickaxe filters them, so content pages walk from `head` and drop the first `offset`.
+    const skip = scope === "content" ? 0 : offset;
+    const output = await this.read([
+      "log", "--topo-order", "-z", "--no-show-signature", "--format=%x1e%H%x00%P%x00%an%x00%ae%x00%at%x00%s",
+      ...filters, `--skip=${skip}`, `--max-count=${offset - skip + count + 1}`, head, "--", ...paths,
+    ], options);
+    const commits = parseFileHistory(output, "").slice(offset - skip);
+    return { commits: commits.slice(0, count), done: commits.length <= count };
+  }
+
+  /** The patch from commit `base` to commit `target` (`git diff base target`), in `commitPatch`'s format. */
+  compareCommits(base: string, target: string, options: GitReadOptions = {}) {
+    if (![base, target].every(oid => /^[0-9a-f]{4,64}$/i.test(oid))) return Promise.reject(new Error("Expected a commit id."));
+    return this.read(["-c", "diff.submodule=short", ...diffFormat, "-M", `${base}^{commit}`, `${target}^{commit}`, "--"], options);
+  }
+
+  /** Branches, remote branches and tags by the commit they point at; annotated tags are peeled. */
+  refDecorations(options: GitReadOptions = {}) {
+    return this.read(["for-each-ref", "--format=%(objectname)%00%(*objectname)%00%(refname)%00%(symref)", "refs/heads", "refs/remotes", "refs/tags"], options, 10_000).then(parseRefDecorations);
+  }
+
+  /** The checked-out branch's short name, or null when HEAD is detached. */
+  currentBranch(options: GitReadOptions = {}) {
+    return this.read(["symbolic-ref", "-q", "--short", "HEAD"], options, 5_000, false, [0, 1]).then(value => value.trim() || null);
+  }
+
+  /** The fetch URL of a remote, or null when it is not configured. */
+  remoteUrl(name: string, options: GitReadOptions = {}) {
+    return this.read(["config", "--get", `remote.${name}.url`], options, 5_000, false, [0, 1]).then(value => value.trim() || null);
   }
 
   mergeBase(a: string, b: string, options: GitReadOptions = {}) {

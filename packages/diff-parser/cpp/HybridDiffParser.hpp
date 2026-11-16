@@ -14,7 +14,8 @@ public:
       const std::string& compareBaseKind,
       const std::string& compareBaseRef,
       bool compareUseMergeBase,
-      bool ignoreWhitespaceChanges) override;
+      bool ignoreWhitespaceChanges,
+      const std::vector<std::string>& excludePaths) override;
   std::shared_ptr<HybridDiffLoadSessionSpec> startUnifiedDiffFromUrl(
       const std::string& diffUrl,
       const std::string& sourceLabel) override;
@@ -25,7 +26,8 @@ public:
       const std::string& compareBaseKind,
       const std::string& compareBaseRef,
       bool compareUseMergeBase,
-      bool ignoreWhitespaceChanges) override;
+      bool ignoreWhitespaceChanges,
+      const std::vector<std::string>& excludePaths) override;
   std::shared_ptr<Promise<DiffLoadResult>> loadUnifiedDiff(
       const std::string& diffText,
       const std::string& sourceLabel,
@@ -41,6 +43,12 @@ public:
       const std::string& sourceLabel,
       double initialRowCount,
       bool ignoreWhitespaceChanges) override;
+  std::shared_ptr<Promise<GitHistoryHead>> openGitHistory(const std::string& folderPath) override;
+  std::shared_ptr<Promise<GitHistoryPage>> readGitHistoryPage(double handle, double offset, double count) override;
+  void closeGitHistory(double handle) override;
+  std::shared_ptr<Promise<double>> openGitBlame(const std::string& folderPath, const std::string& path, const std::string& source) override;
+  std::shared_ptr<Promise<std::vector<GitBlameHunk>>> readGitBlame(double handle, double startLine, double lineCount) override;
+  void closeGitBlame(double handle) override;
 };
 
 } // namespace margelo::nitro::legendapps::diffparser

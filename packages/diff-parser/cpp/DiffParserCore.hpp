@@ -31,6 +31,8 @@ struct DiffGitCompareOptions {
   std::string baseRef;
   bool useMergeBase = true;
   bool ignoreWhitespace = false;
+  // Repo-relative path prefixes matched on whole segments: ".review" excludes ".review/x", not ".reviewer".
+  std::vector<std::string> excludePaths;
 };
 
 struct DiffProgressiveCallbacks {
@@ -73,5 +75,103 @@ DiffLoadTiming parseGitRepositoryDiffProgressiveByFile(
     bool showOnlyHunks = true,
     DiffGitCompareOptions compareOptions = {});
 std::vector<DiffSideBySideLine> createDiffSideBySideLines(const std::vector<DiffRenderRow>& rows);
+
+struct GitHistoryCommitRow {
+  std::string oid;
+  std::vector<std::string> parents;
+  std::string authorName;
+  std::string authorEmail;
+  double time = 0;
+  std::string summary;
+  /** The commit's graph column; `kGitGraphMaxLanes` stands for every column past the cap. */
+  int lane = 0;
+  /** Color index of the commit's lane. */
+  int color = 0;
+  /**
+   * Line segments in this row as (top, bottom, color) triples: `top` is the column the segment enters
+   * at the row's top edge, `bottom` the column it leaves at the bottom edge, and -1 means the commit's
+   * node. A column passing through has top == bottom.
+   */
+  std::vector<int> edges;
+};
+
+constexpr int kGitGraphMaxLanes = 12;
+
+/**
+ * Lays out graph lanes for commits fed in `git log --topo-order` order. State carries from one row to
+ * the next, so pages are laid out incrementally and a row never changes once returned.
+ */
+class GitGraphLayout {
+public:
+  /** Fills `row.lane`, `row.color` and `row.edges` from `row.oid` and `row.parents`. */
+  void add(GitHistoryCommitRow& row);
+  void reset();
+
+private:
+  struct Lane { std::string oid; int color = 0; bool active = false; };
+  int allocate(const std::string& oid);
+  std::vector<Lane> lanes_;
+  int nextColor_ = 0;
+};
+
+/**
+ * Walks HEAD's history in `git log --topo-order` order, in pages. The walk is anchored to the HEAD
+ * commit seen when the walker opened, so pages stay consistent while refs move.
+ */
+class GitHistoryWalker {
+public:
+  explicit GitHistoryWalker(const std::string& folderPath);
+  ~GitHistoryWalker();
+  GitHistoryWalker(const GitHistoryWalker&) = delete;
+  GitHistoryWalker& operator=(const GitHistoryWalker&) = delete;
+
+  const std::string& headOid() const;
+  bool unborn() const;
+  bool detached() const;
+  /** Up to `count` commits starting at `offset`; an offset other than the next one re-walks from the start. */
+  std::vector<GitHistoryCommitRow> page(size_t offset, size_t count, const std::function<bool()>& shouldCancel = {});
+
+private:
+  struct Impl;
+  std::unique_ptr<Impl> impl_;
+};
+
+/** Lines of a blamed file that last changed in one commit (or are not committed yet). */
+struct GitBlameHunkRow {
+  /** The commit that last changed these lines; empty when they are not committed yet. */
+  std::string oid;
+  /** The file's path in that commit (it differs after a rename). */
+  std::string path;
+  /** First line of the hunk in the blamed file, 1-based. */
+  size_t startLine = 0;
+  /** First line of the hunk in `path` as of `oid`. */
+  size_t originalStartLine = 0;
+  size_t lineCount = 0;
+  std::string authorName;
+  std::string authorEmail;
+  double time = 0;
+  std::string summary;
+};
+
+/**
+ * Blames one file with libgit2, a range of lines at a time. `source` is a commit (blame as of it),
+ * "index" (staged contents) or "workdir" (the file on disk); lines of the last two that differ from
+ * HEAD are not committed yet. A commit's blame covers only the asked lines; the index and workdir blame
+ * the whole committed file once and reuse it.
+ */
+class GitBlameReader {
+public:
+  GitBlameReader(const std::string& folderPath, const std::string& path, const std::string& source);
+  ~GitBlameReader();
+  GitBlameReader(const GitBlameReader&) = delete;
+  GitBlameReader& operator=(const GitBlameReader&) = delete;
+
+  /** Hunks covering lines `startLine` to `startLine + count - 1` (1-based), clipped to the file. */
+  std::vector<GitBlameHunkRow> lines(size_t startLine, size_t count, const std::function<bool()>& shouldCancel = {});
+
+private:
+  struct Impl;
+  std::unique_ptr<Impl> impl_;
+};
 
 } // namespace margelo::nitro::legendapps::diffparser

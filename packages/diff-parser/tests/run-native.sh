@@ -13,6 +13,7 @@ TEST_BINARY="$BUILD_DIR/native_unified_diff_parser_test"
 GIT_FIXTURE="$BUILD_DIR/git-fixture"
 NO_NEWLINE_FIXTURE="$BUILD_DIR/no-newline-fixture"
 NO_NEWLINE_DIFF="$BUILD_DIR/no-newline-fixture.diff"
+EXCLUDE_FIXTURE="$BUILD_DIR/exclude-fixture"
 
 MISSING_PATHS=()
 for required_path in \
@@ -110,6 +111,53 @@ git -C "$NO_NEWLINE_FIXTURE" mv "old name.txt" 'renamed "quoted" näme.txt'
 sed -i '' 's/^rename 6$/rename six/' "$NO_NEWLINE_FIXTURE/renamed \"quoted\" näme.txt"
 git -C "$NO_NEWLINE_FIXTURE" -c core.quotepath=on diff --no-color -M HEAD > "$NO_NEWLINE_DIFF"
 
+rm -rf "$EXCLUDE_FIXTURE"
+mkdir -p "$EXCLUDE_FIXTURE/src" "$EXCLUDE_FIXTURE/.review" "$EXCLUDE_FIXTURE/docs/generated"
+echo "keep" > "$EXCLUDE_FIXTURE/src/keep.ts"
+echo "review" > "$EXCLUDE_FIXTURE/.review/tracked.md"
+echo "generated" > "$EXCLUDE_FIXTURE/docs/generated/tracked.md"
+git -C "$EXCLUDE_FIXTURE" init --quiet
+git -C "$EXCLUDE_FIXTURE" config user.email "diff-parser-native@example.com"
+git -C "$EXCLUDE_FIXTURE" config user.name "Diff Parser Native"
+git -C "$EXCLUDE_FIXTURE" add .
+git -C "$EXCLUDE_FIXTURE" commit --quiet -m "initial fixture"
+echo "keep changed" > "$EXCLUDE_FIXTURE/src/keep.ts"
+echo "review changed" > "$EXCLUDE_FIXTURE/.review/tracked.md"
+echo "generated changed" > "$EXCLUDE_FIXTURE/docs/generated/tracked.md"
+mkdir -p "$EXCLUDE_FIXTURE/.review/nested/deep" "$EXCLUDE_FIXTURE/.reviewer" "$EXCLUDE_FIXTURE/docs/.review"
+echo "untracked" > "$EXCLUDE_FIXTURE/.review/nested/deep/story.md"
+echo "untracked" > "$EXCLUDE_FIXTURE/.reviewer/keep.md"
+echo "untracked" > "$EXCLUDE_FIXTURE/docs/.review/keep.md"
+echo "untracked" > "$EXCLUDE_FIXTURE/docs/generated-notes.md"
+
+HISTORY_FIXTURE="$BUILD_DIR/history-fixture"
+HISTORY_GRAPH_FIXTURE="$BUILD_DIR/history-graph-fixture"
+HISTORY_DETACHED_FIXTURE="$BUILD_DIR/history-detached-fixture"
+HISTORY_UNBORN_FIXTURE="$BUILD_DIR/history-unborn-fixture"
+rm -rf "$HISTORY_FIXTURE" "$HISTORY_GRAPH_FIXTURE" "$HISTORY_DETACHED_FIXTURE" "$HISTORY_UNBORN_FIXTURE"
+git init --quiet "$HISTORY_FIXTURE"
+python3 "$ROOT/packages/diff-parser/tests/history-fixture.py" | git -C "$HISTORY_FIXTURE" fast-import --quiet
+git -C "$HISTORY_FIXTURE" checkout --quiet main
+git -C "$HISTORY_FIXTURE" log --topo-order --format='%H %P' > "$HISTORY_FIXTURE.expected"
+git clone --quiet --no-local "$HISTORY_FIXTURE" "$HISTORY_GRAPH_FIXTURE"
+git -C "$HISTORY_GRAPH_FIXTURE" commit-graph write --reachable
+test -f "$HISTORY_GRAPH_FIXTURE/.git/objects/info/commit-graph"
+git -C "$HISTORY_GRAPH_FIXTURE" log --topo-order --format='%H %P' > "$HISTORY_GRAPH_FIXTURE.expected"
+git clone --quiet --no-local "$HISTORY_FIXTURE" "$HISTORY_DETACHED_FIXTURE"
+git -C "$HISTORY_DETACHED_FIXTURE" checkout --quiet --detach main~7
+git -C "$HISTORY_DETACHED_FIXTURE" log --topo-order --format='%H %P' > "$HISTORY_DETACHED_FIXTURE.expected"
+git init --quiet "$HISTORY_UNBORN_FIXTURE"
+GRAPH_FIXTURE="$BUILD_DIR/graph-fixture"
+rm -rf "$GRAPH_FIXTURE"
+git init --quiet "$GRAPH_FIXTURE"
+python3 "$ROOT/packages/diff-parser/tests/graph-fixture.py" | git -C "$GRAPH_FIXTURE" fast-import --quiet
+git -C "$GRAPH_FIXTURE" checkout --quiet main
+git -C "$GRAPH_FIXTURE" log --topo-order --format='%H %P' > "$GRAPH_FIXTURE.expected"
+git -C "$GRAPH_FIXTURE" log --topo-order --all --format='%H %P' > "$GRAPH_FIXTURE.all"
+git -C "$GRAPH_FIXTURE" log --topo-order --format='%H %P' unrelated > "$GRAPH_FIXTURE.linear"
+BLAME_FIXTURE="$BUILD_DIR/blame-fixture"
+bash "$ROOT/packages/diff-parser/tests/blame-fixture.sh" "$BLAME_FIXTURE" > /dev/null
+
 clang++ \
   -std=c++20 \
   -Wall \
@@ -136,4 +184,4 @@ clang++ \
   -framework Security \
   -o "$TEST_BINARY"
 
-"$TEST_BINARY" "$GIT_FIXTURE" "$NO_NEWLINE_FIXTURE" "$NO_NEWLINE_DIFF"
+"$TEST_BINARY" "$GIT_FIXTURE" "$NO_NEWLINE_FIXTURE" "$NO_NEWLINE_DIFF" "$EXCLUDE_FIXTURE" "$HISTORY_FIXTURE" "$HISTORY_GRAPH_FIXTURE" "$HISTORY_DETACHED_FIXTURE" "$HISTORY_UNBORN_FIXTURE" "$GRAPH_FIXTURE" "$BLAME_FIXTURE"

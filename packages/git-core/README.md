@@ -4,7 +4,7 @@ Shared Git service, porcelain v2 status and for-each-ref parsers, and Git compar
 with reads, and preserve worktree contents when unstaging (including unborn HEAD).
 Rename unstaging resets both source and destination. `watchGitRepo` coalesces changes
 across worktree, gitdir and common-dir using an injected directory watcher.
-Its runtime process adapter uses `@legendapp/spark/processes`.
+`GitService` takes an injected process runner and loads in plain Node with type stripping; `sparkGitService.ts` (`getGitService`, `createGitService`) wires in `@legendapp/spark/processes`. `applyPatch` writes the index by default; `target: "worktree"` runs `verify`, `git apply --check`, `verify` and `git apply` as one queued operation that finishes once the apply starts, even if the caller aborts.
 
 From the repository root:
 
