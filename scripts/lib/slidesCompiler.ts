@@ -200,7 +200,7 @@ export function signSlidesCompiler(directory: string, identity: string) {
     const entitlement = path.join(directory, "bun.entitlements.plist");
     fs.writeFileSync(entitlement, '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>com.apple.security.cs.allow-jit</key><true/></dict></plist>');
     function sign(file: string, jit = false) {
-      const result = spawnSync("codesign", ["--force", "--sign", identity, "--options", identity === "-" ? "0" : "runtime", ...(jit ? ["--entitlements", entitlement] : []), file], { encoding: "utf8" });
+      const result = spawnSync("codesign", ["--force", "--sign", identity, ...(identity === "-" ? ["--options", "0"] : ["--options", "runtime", "--timestamp"]), ...(jit ? ["--entitlements", entitlement] : []), file], { encoding: "utf8" });
       if (result.status !== 0) throw new Error(`Compiler signing failed: ${result.stderr}`);
     }
     function visit(at: string) {
@@ -230,6 +230,8 @@ export function writeSlidesCompilerBundle(output: string, archive: string) {
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   fs.mkdirSync(output, { recursive: true });
   fs.copyFileSync(archive, path.join(output, "compiler.zip"));
+  // codesign treats every directory in Contents/Helpers as a bundle and rejects one without Info.plist.
+  fs.writeFileSync(path.join(output, "Info.plist"), '<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>so.legend.slides.compiler-archive</string><key>CFBundleName</key><string>Slides Compiler</string><key>CFBundlePackageType</key><string>BNDL</string><key>CFBundleVersion</key><string>1</string></dict></plist>');
   fs.writeFileSync(path.join(output, "run"), `#!/bin/sh
 set -eu
 umask 077

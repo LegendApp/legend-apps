@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { assertDistributionArchitecture } from "./lib/distributionArchitectures";
 import { sparkWorkspace } from "./lib/sparkWorkspaces";
-import { signSlidesCompiler } from "./lib/slidesCompiler";
+import { signMacOSAppInsideOut } from "./lib/macosCodeSign";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -125,22 +125,7 @@ function signApp(appPath: string, entitlementsPath: string, options: PackageOpti
     return;
   }
 
-  const identity = getDeveloperIdApplicationIdentity();
-  const args = [
-    "--force",
-    "--deep",
-    "--sign",
-    identity,
-    "--options",
-    "runtime",
-  ];
-
-  if (fs.existsSync(entitlementsPath)) {
-    args.push("--entitlements", entitlementsPath);
-  }
-
-  signSlidesCompiler(path.join(appPath, "Contents/Helpers/diff-customizer.helper"), identity);
-  runCommand("codesign", [...args, appPath]);
+  signMacOSAppInsideOut(appPath, getDeveloperIdApplicationIdentity(), fs.existsSync(entitlementsPath) ? entitlementsPath : undefined);
 }
 
 function notarizeApp(appPath: string, safeAppName: string, options: PackageOptions) {

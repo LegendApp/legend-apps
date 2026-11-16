@@ -970,6 +970,7 @@
     "lottie-react-native@7.3.8": "patches/lottie-react-native@7.3.8.patch",
     "react-native-webgpu@0.20.0": "patches/react-native-webgpu@0.20.0.patch",
     "react-devtools-core@6.1.5": "patches/react-devtools-core@6.1.5.patch",
+    "expo-modules-core@55.0.27": "patches/expo-modules-core@55.0.27.patch",
     "@shopify/react-native-skia@2.14.0": "patches/@shopify+react-native-skia@2.14.0.patch",
     "@react-native-windows/cli@0.83.2": "patches/@react-native-windows+cli+0.83.2.patch",
   },

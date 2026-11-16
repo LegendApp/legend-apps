@@ -468,3 +468,17 @@ test("preparing a shared consumer preserves old installs without leaving a shado
     assert.ok(fs.existsSync(path.join(project, "node_modules")));
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
+
+test("Release config, which ships in the app, names its plugins relative to the workspace", async () => {
+  for (const id of ["slides", "diff"]) {
+    const plugins = sparkConfig(await loadAppManifest(id), "release").expo.plugins!;
+    assert.equal(JSON.stringify(plugins).includes(rootDir), false);
+    assert.ok(plugins.some(plugin => Array.isArray(plugin) && plugin[0].endsWith("macosReleasePaths.cjs")));
+    for (const plugin of plugins) {
+      const [file, options] = Array.isArray(plugin) ? plugin : [plugin, undefined];
+      if (file.startsWith(".")) assert.ok(fs.existsSync(path.resolve(sparkWorkspace(id, "release"), file)), file);
+      const source = (options as { source?: string } | undefined)?.source;
+      if (source) assert.ok(fs.existsSync(path.resolve(sparkWorkspace(id, "release"), source)), source);
+    }
+  }
+});
