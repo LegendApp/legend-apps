@@ -30,6 +30,7 @@ const manifest = {
       "@legend-apps/syntax-parser",
       "@legendapp/spark/windows",
       "@legendapp/spark/system",
+      "@legendapp/spark/updates",
       "@shopify/react-native-skia",
       "react-native-reanimated",
       "react-native-worklets",

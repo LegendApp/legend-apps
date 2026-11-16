@@ -2,6 +2,8 @@ import { createSettingsWindowOptions } from "@legendapp/spark/settings/window";
 import { createWindowsNavigator, setWindowBounds, setWindowFullscreen, type DisplayInfo, type WindowsConfig } from "@legendapp/spark/windows";
 import { createPresenterToolbarItems } from "./presenterToolbar";
 import { openOrShowWindow } from "@legend-apps/runtime-utils";
+import { withSlidesUpdatesPaused } from "./slidesUpdates";
+import { setSlidesState } from "./slidesStore";
 export const slidesSettingsWindowIdentifier = "slides-settings";
 const windows = {
     SlidesPresenterWindow: {
@@ -113,7 +115,10 @@ export function openSlidesPresenterWindow() {
     return openOrShowWindow(windows.SlidesPresenterWindow.id, () => slidesWindows.open("SlidesPresenterWindow"));
 }
 export async function openSlidesAudienceWindow(display: DisplayInfo, fullscreen: boolean) {
-    await openOrShowWindow("slides-audience", () => slidesWindows.open("SlidesAudienceWindow", { options: { size: display.size, position: { displayId: display.id, x: 0, y: 0 }, macos: { titleBar: { titleVisibility: "hidden", transparent: true } } } }));
-    await setWindowBounds("slides-audience", { displayId: display.id, x: 0, y: 0, ...display.size });
-    await setWindowFullscreen("slides-audience", fullscreen);
+    await withSlidesUpdatesPaused(async () => {
+        await openOrShowWindow("slides-audience", () => slidesWindows.open("SlidesAudienceWindow", { options: { size: display.size, position: { displayId: display.id, x: 0, y: 0 }, macos: { titleBar: { titleVisibility: "hidden", transparent: true } } } }));
+        setSlidesState({ audienceOpen: true });
+        await setWindowBounds("slides-audience", { displayId: display.id, x: 0, y: 0, ...display.size });
+        await setWindowFullscreen("slides-audience", fullscreen);
+    });
 }

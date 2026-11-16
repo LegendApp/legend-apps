@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { assertDistributionArchitecture } from "./lib/distributionArchitectures";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -336,6 +337,7 @@ async function main() {
   }
 
   const options = parseOptions(args);
+  assertDistributionArchitecture(appId, "release", options.arch, process.arch);
   const manifest = await loadAppManifest(appId);
   assertSupportedPlatform(manifest, "macos");
   const releaseArchitectures = getReleaseArchitectures(options.arch);

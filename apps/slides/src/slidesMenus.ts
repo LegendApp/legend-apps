@@ -2,14 +2,17 @@ import { useMenu } from "@legendapp/spark/menus";
 import { useValue } from "@legendapp/state/react";
 import { getSlidesState, setSlidesState, slidesState$ } from "./slidesStore";
 import { exportDeckToHTML, webExport$ } from "./webExport";
+import { checkSlidesForUpdates } from "./slidesUpdates";
 export function useSlidesMenus(openDeck: () => unknown, audienceOpen: boolean, blackout: boolean, resetPresenterLayout: () => void, openSettings: () => unknown) {
+ const updatesPaused = useValue(() => slidesState$.deckLocked.get() || slidesState$.audienceOpen.get());
  const canExport = useValue(() => !!slidesState$.deckPath.get() && !["choosing", "exporting"].includes(webExport$.status.get()));
  useMenu({ id: "slides-presenter", items: [
       { type: "submenu",
         id: "app",
         label: "Legend Slides",
         target: { menu: "app" },
-        items: [{ type: "action", id: "settings", target: { role: "settings" }, label: "Settings…", }],
+        items: [{ type: "action", id: "settings", target: { role: "settings" }, label: "Settings…", },
+          { type: "action", id: "checkForUpdates", label: "Check for Updates…", placement: { after: { role: "about" } }, disabled: updatesPaused }],
       },
       { type: "submenu",
         id: "file",
@@ -41,5 +44,6 @@ export function useSlidesMenus(openDeck: () => unknown, audienceOpen: boolean, b
   if (action.itemId === "blackout" && getSlidesState().audienceOpen) setSlidesState(current => ({ blackout: !current.blackout }));
   if (action.itemId === "reset-presenter-layout") resetPresenterLayout();
   if (action.itemId === "settings") void openSettings();
+  if (action.itemId === "checkForUpdates") void checkSlidesForUpdates();
  } });
 }

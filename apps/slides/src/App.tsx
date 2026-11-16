@@ -14,10 +14,12 @@ import { getLastDeckPath, loadDeck } from "./deckLoader";
 import { getSlidesState } from "./slidesStore";
 import { parseEffectAction } from "../../../packages/presentation/src/effectPacks/protocol";
 import { runEffectCommand } from "./effectCommands";
+import { installSlidesUpdates } from "./slidesUpdates";
 
 export type SlidesAppProps = { launchArguments?: string[] };
 
 export function App({ launchArguments }: SlidesAppProps) {
+  useEffect(installSlidesUpdates, []);
   const launchedPath = launchArguments?.find((argument) => argument.toLowerCase().endsWith(".mdx"));
   const handledLaunch = useRef<string | null>(null);
   useEffect(() => {
