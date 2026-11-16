@@ -46,7 +46,7 @@ export async function renderSlides(args: string[]) {
   const temporary = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "slides-render-")));
   const website = path.join(temporary, "player");
   let browser: ReturnType<typeof Bun.spawn> | undefined;
-  let encoder: ReturnType<typeof Bun.spawn> | undefined;
+  let encoder: Bun.Subprocess<"pipe", "ignore", "pipe"> | undefined;
   let protocol: Awaited<ReturnType<typeof connect>> | undefined;
   let interrupted = false;
   const stop = () => { browser?.kill(); encoder?.kill(); };

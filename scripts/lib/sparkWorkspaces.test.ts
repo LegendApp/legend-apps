@@ -146,7 +146,7 @@ test("generated native config loads the current Spark native API", async () => {
 test("Slides Release declares its built-in compiler helper; Debug uses the checkout", async () => {
   const manifest = await loadAppManifest("slides");
   const release = sparkConfig(manifest, "release");
-  assert.deepEqual(release.helpers["slides-compiler"]["macos-arm64"], { directory: ".spark/compiler/helper", executable: "run" });
+  assert.deepEqual(release.helpers?.["slides-compiler"]["macos-arm64"], { directory: ".spark/compiler/helper", executable: "run" });
   assert.equal(sparkConfig(manifest, "dev").helpers, undefined);
 });
 
