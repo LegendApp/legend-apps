@@ -78,18 +78,20 @@ const assetExtensions = new Set([
 ]);
 
 let transformVersion: string | undefined;
+function getTransformVersion() {
+  if (!transformVersion) {
+    const version = createHash("sha256").update(fs.readFileSync(import.meta.filename));
+    if (typeof __SLIDES_COMPILER_BUNDLE__ === "undefined") version.update(fs.readFileSync(path.resolve(import.meta.dirname, "../../../../bun.lock")));
+    transformVersion = version.update(codeHighlightVersion).digest("hex");
+  }
+  return transformVersion;
+}
 function compileReactSource(source: string, filename: string, onTiming?: Timing) {
   const started = performance.now();
   const directory = process.env.LEGEND_SLIDES_TRANSFORM_CACHE ?? path.join(os.tmpdir(), "legend-slides-transforms");
   let file: string | undefined, key: string | undefined;
   if (directory) {
-    // The shipped helper fingerprints its whole bundle; source checkouts also
-    // include the dependency lock. Never reuse transforms from another toolchain.
-    if (!transformVersion) {
-      const version = createHash("sha256").update(fs.readFileSync(import.meta.filename));
-      if (typeof __SLIDES_COMPILER_BUNDLE__ === "undefined") version.update(fs.readFileSync(path.resolve(import.meta.dirname, "../../../../bun.lock")));
-      transformVersion = version.update(codeHighlightVersion).digest("hex");
-    }
+    const transformVersion = getTransformVersion();
     key = createHash("sha256").update(JSON.stringify([transformVersion, process.versions, process.cwd(), filename,
       process.env.NODE_ENV, process.env.BABEL_ENV, Object.entries(process.env).filter(([name]) => name.startsWith("WORKLETS_")).sort()]))
       .update(source).digest("hex");
@@ -447,7 +449,7 @@ export async function compileDeck(deckPath: string, options: { source?: string; 
     const previewIdentity = await createPreviewIdentity(absoluteDeckPath, source,
       [...dependencies.filter(file => file !== effectLockPath(absoluteDeckPath)), cssPath],
       JSON.stringify([
-        transformVersion ?? createHash("sha256").update(fs.readFileSync(import.meta.filename)).digest("hex"), codeHighlightVersion,
+        getTransformVersion(), codeHighlightVersion,
         builtinTransitionSources, Object.entries(pins).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0),
         process.versions, process.cwd(), process.env.NODE_ENV, process.env.BABEL_ENV,
         Object.entries(process.env).filter(([name]) => name.startsWith("WORKLETS_")).sort(),

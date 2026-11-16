@@ -1,5 +1,6 @@
 // @ts-ignore Bun supplies this API at runtime.
 import { expect, test } from "bun:test";
+import type { PresentationRuntime } from "../../presentation/src/types";
 import { advancePlayback, createPlaybackState, transitionPlayback, type PlaybackState } from "../../presentation/src/playbackState";
 import { prepareWorldSample, prepareWorldScene, sampleWorldUniforms, worldHeaderSize, worldLightCountSlot, worldLightOffsetSlot, worldLightSize, worldInstanceSize, primitive, type LightOptions, type PreparedWorldScene } from "../packs/world/scene";
 import { createTrackFrame, retainTrackScene, sampleTrackFrame, trackIds, buildCourse, trackX, type TrackFrame } from "../packs/world/track";
@@ -155,7 +156,7 @@ test("the retained World samples pooled outgoing lights through navigation and f
   const { frames, flushUI } = await import("../../../apps/slides/src/__tests__/uiClockMock");
   const { WorldSlide, PointLight, SpotLight, prepareWorldSlides } = await import("../packs/world/World");
   (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  const runtime = (index: number) => observable({ currentSlide: 0, currentStep: 0, slideIndex: index, stepIndex: 0, slideCount: 2, stepCount: 1,
+  const runtime = (index: number) => observable<PresentationRuntime>({ currentSlide: 0, currentStep: 0, slideIndex: index, stepIndex: 0, slideCount: 2, stepCount: 1,
     startedAt: 0, stepStartedAt: 0, isActive: index === 0, isPreview: false, isPreparing: index !== 0,
     playbackPhase: index === 0 ? "playing" : "preparing", playbackScope: "slide", direction: "forward", goTo() {}, next() {}, previous() {} });
   const runtimes = [runtime(0), runtime(1)];
@@ -166,11 +167,11 @@ test("the retained World samples pooled outgoing lights through navigation and f
   const prepared = prepareWorldSlides(props);
   const Renderer = (props: object) => React.createElement("world-gpu", props);
   const content = (index: number) => React.createElement(GPUShaderProvider, { renderer: Renderer },
-    React.createElement(BackgroundHost, { slideIndex: index, color: "#05060a" }, ...prepared.map((props, i) =>
-      React.createElement(PresentationObservableProvider, { key: i, value: runtimes[i] }, React.createElement(WorldSlide, { ...props, world: "lights" })))));
+    React.createElement(BackgroundHost, { slideIndex: index, color: "#05060a", children: prepared.map((props, i) =>
+      React.createElement(PresentationObservableProvider, { key: i, value: runtimes[i] }, React.createElement(WorldSlide, { ...props, track: props.track!, world: "lights" }))) }));
   let renderer: ReturnType<typeof create> | undefined;
   const tick = async (time: number) => { await act(() => { for (const frame of frames) frame.tick(time); }); };
-  const snapshot = () => Array.from(renderer!.root.findByType("world-gpu").props.frameData.value) as number[];
+  const snapshot = () => Array.from(renderer!.root.findByType("world-gpu" as React.ElementType).props.frameData.value) as number[];
   try {
     await act(() => { renderer = create(content(0)); });
     flushUI(); await tick(1000); await tick(3000);

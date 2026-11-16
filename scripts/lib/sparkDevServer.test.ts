@@ -129,6 +129,8 @@ test("an unrelated HTTP server or missing project identity cannot be reused", as
 test("encoded paths and symlinks identify the same project", async () => {
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "spark server "));
   const alias = path.join(temporary, "alias");
+  const project = path.join(temporary, "project");
+  fs.mkdirSync(project);
   fs.symlinkSync(project, alias, "dir");
   const existing = await metro(alias);
   const { calls, execute } = recorder();

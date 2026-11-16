@@ -20,7 +20,7 @@ for (const quality of ["low", "medium", "high"] as const) {
     expect(draw.code).toContain("fwidth(field)");
     expect(draw.code).toContain("normal=normalize(rotation*(local/radii))");
     expect(draw.code).toContain("(iid+1u)");
-    expect(graph.passes.filter(pass => pass.kind === "render")).toHaveLength(3);
+    expect(graph.passes.filter(pass => pass.kind === "render")).toHaveLength(6);
   });
 }
 

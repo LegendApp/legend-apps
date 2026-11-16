@@ -704,12 +704,17 @@ function focusDepth(value: number | string | undefined, scene: WorldScene | Worl
   const length = Math.max(0.001, Math.hypot(...forward));
   return Math.max(0.05, ((anchor[0] - camera.position[0]) * forward[0] + (anchor[1] - camera.position[1]) * forward[1] + (anchor[2] - camera.position[2]) * forward[2]) / length);
 }
+function focusFrames(frames: Keyframe<number | string>[], scene: WorldScene | WorldSampleScene, clock: ClockSample, camera: CameraPose): Keyframe<number>[] {
+  "worklet";
+  return frames.map(frame => ({ ...frame, value: focusDepth(frame.value, scene, clock, camera),
+    loop: frame.loop ? { every: frame.loop.every, frames: focusFrames(frame.loop.frames, scene, clock, camera) } : undefined }));
+}
 export function sampleFocus(scene: PreparedWorldScene | WorldSampleScene, clock: ClockSample, camera: CameraPose): number {
   "worklet";
   const track = scene.focusTrack;
   if (!track) return focusDepth(cameraFocus(scene.camera ?? {}, clock), scene, clock, camera);
   return sampleTrack({ initial: focusDepth(track.initial, scene, clock, camera),
-    frames: track.frames.map(frame => ({ ...frame, value: focusDepth(frame.value, scene, clock, camera) })) }, clock);
+    frames: focusFrames(track.frames, scene, clock, camera), steps: track.steps }, clock);
 }
 type UniformCache = { values: Float32Array<ArrayBuffer>; keys: Float64Array; labels: Float64Array;
   inputs: Float64Array; trackKeys: Float64Array; changed: Uint8Array };

@@ -104,9 +104,10 @@ test("World decks compile to Hermes-ready modules that require only host package
   }
 }, 60_000);
 
-const hermesPath = path.resolve(import.meta.dirname, "../../../../shell/.legend/spark/slides/macos/Pods/hermes-engine/destroot/bin/hermes");
+const hermesPath = ["debug-host", "slides"].map(host => path.resolve(import.meta.dirname,
+  `../../../../shell/.legend/spark/${host}/macos/Pods/hermes-engine/destroot/bin/hermes`)).find(file => fs.existsSync(file));
 
-test.skipIf(process.platform !== "darwin" || !fs.existsSync(hermesPath))("World decks evaluate in Hermes with strict host modules", async () => {
+test.skipIf(process.platform !== "darwin" || !hermesPath)("World decks evaluate in Hermes with strict host modules", async () => {
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "slides-world-hermes-"));
   try {
     for (const name of worldDecks) {

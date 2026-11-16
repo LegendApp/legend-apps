@@ -24,7 +24,7 @@ test("World effects get typed params after the instances, named bindings and Pas
   expect(graph.uniformsSize).toBe(base + 8);
   const ids = graph.passes.map(pass => pass.id);
   // The default placement (after bloom) stops the tone map fusing bloom; the explicit one follows the tone map.
-  expect(ids.slice(ids.indexOf("bloom-composite"))).toEqual(["bloom-composite", "test-tint-2-blur", "test-tint-2-mix", "tonemap", "test-tint-blur", "test-tint-mix", "screen"]);
+  expect(ids.slice(ids.indexOf("bloom-composite"))).toEqual(["bloom-composite", "test-tint-2-blur", "test-tint-2-mix", "sharp-clear", "sharp-box", "sharp-sphere", "tonemap", "test-tint-blur", "test-tint-mix", "screen"]);
   const mix = graph.passes.find(pass => pass.id === "test-tint-mix")!;
   expect(mix.code).toContain("struct TestTintParams {");
   expect(mix.code).toContain(`fn params()->TestTintParams { return TestTintParams(uniforms[${base}u],vector(${base + 1}u)); }`);
@@ -47,7 +47,7 @@ test("World effects reject unknown params and placements", () => {
 test("World mesh instances write and load the same typed WorldInstance layout", () => {
   const scene = prepareWorldScene({ instances: [primitive("box", { position: [1, 2, 3], color: "#ff0000", size: 2 })] });
   const values = sampleWorldUniforms(scene, clock(0)), base = worldHeaderSize;
-  expect(worldInstanceSize).toBe(32);
+  expect(worldInstanceSize).toBe(33);
   expect([values[base + instanceField.position], values[base + instanceField.position + 2], values[base + instanceField.radius]]).toEqual([1, 3, 2]);
   expect(values[base + instanceField.color]).toBe(1);
   const code = buildWorldGraph(scene).passes.find(pass => pass.id === "scene-box")!.code;

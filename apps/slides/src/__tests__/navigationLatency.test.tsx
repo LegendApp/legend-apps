@@ -95,7 +95,7 @@ test("Right publishes navigation synchronously and World moves on the next UI fr
   }
 });
 
-test.each([false, true])("retained scene changes move the camera on the first presented frame (cold: %s)", async cold => {
+test.each([false, true])("retained scene changes establish time zero then move the camera on the next frame (cold: %s)", async cold => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   const initial = getSlidesState(), router = createHotkeyRouter();
   const registration = await router.register({
@@ -152,7 +152,7 @@ test.each([false, true])("retained scene changes move the camera on the first pr
       tick(5000);
     }
     console.info(JSON.stringify({ cold, navigationMotion: rows }));
-    expect(rows.find(row => row.kind === "slide").firstMotionFrame).toBe(1);
+    expect(rows.find(row => row.kind === "slide").firstMotionFrame).toBe(2);
     expect(rows.find(row => row.kind === "step").firstMotionFrame).toBe(2);
   } finally {
     await act(() => tree?.unmount()); flushUI();

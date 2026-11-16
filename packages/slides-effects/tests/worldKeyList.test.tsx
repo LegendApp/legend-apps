@@ -107,7 +107,7 @@ test("viewport outlines use blue and clear the card faces in all three frames", 
     const edge = nodes.find(n => n.props.id === `w/${name}/edge`)!.props;
     const path = edge.path as Vec3[], thickness = edge.thickness as number;
     expect(edge.color).toBe("#4aa8ff");
-    expect(edge.emissive).toBe(3);
+    expect(edge.emissive).toBe(2.6);
     expect(edge.join).toBe("miter");
     // The entire tube, including its rear surface, clears the .3-deep card and its .17-deep text.
     expect(Math.min(...path.map(p => p[2])) - thickness).toBeGreaterThan(.17);

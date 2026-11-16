@@ -647,7 +647,7 @@ test("focus routes incoming parts sharply and background parts through blur acro
 test("departing parts retain sharpness while incoming focus stays sharp during travel", () => {
   const a = prepareWorldScene({ instances: [labelInstance({ id: "old", text: "Old" })] });
   const b = prepareWorldScene({ instances: [labelInstance({ id: "new", text: "New" })] });
-  const playback = (slideKey: string, time: number) => ({ ...createPlaybackState({ phase: "playing", slideKey, stepKey: "0" }), slideTime: time, stepTime: time });
+  const playback = (slideKey: string, time: number) => ({ ...createPlaybackState({ phase: "playing", slideKey, stepKey: "0", stepIndex: 0 }), slideTime: time, stepTime: time });
   const first = playback("0", 3);
   let frame = sampleTrackFrame(createTrackFrame(), sampleWorldUniforms(a, first) as number[], trackIds(a), first, {});
   expect(part(frame, "label:old")[instanceField.sharp]).toBe(1);

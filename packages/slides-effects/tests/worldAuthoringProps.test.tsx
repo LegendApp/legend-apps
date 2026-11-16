@@ -117,10 +117,10 @@ test("scene colors theme the parts, and color props take theme names", () => {
 test("code panels and bar charts take style props over the theme's panel defaults", async () => {
   const fence = await highlightedFence("const a = 1;");
   const plain = expandScene(<CodePanel id="code">{fence}</CodePanel>);
-  expect(find(plain, Card, "code/card").props).toMatchObject({ fill: .9, edge: 1, line: 1.5, color: defaultColors.panel });
+  expect(find(plain, Card, "code/card").props).toMatchObject({ fill: undefined, edge: undefined, color: defaultColors.panel });
   const diff = await highlightedFence(" A\n-B\n+C", "diff");
   for (const part of [<CodeMorph id="code">{diff}</CodeMorph>, <CodeTrace id="code" source={1} reads={[1]} nodes={["a", "b"]}>{fence}</CodeTrace>])
-    expect(find(expandScene(part), Card, "code/card").props).toMatchObject({ fill: .9, edge: 1, line: 1.5, color: defaultColors.panel });
+    expect(find(expandScene(part), Card, "code/card").props).toMatchObject({ fill: undefined, edge: undefined, color: defaultColors.panel });
   expect(find(expandScene(<CodeMorph id="code" fill={.5} border={1.2}>{diff}</CodeMorph>), Card, "code/card").props).toMatchObject({ fill: .5, edge: 1.2 });
   const styled = expandScene(<CodePanel id="code" fill={.4} padding={.5} panelColor="idle" textColor="hot" marks={[{ text: "a" }]}>{fence}</CodePanel>);
   const card = find(styled, Card, "code/card");
@@ -195,7 +195,7 @@ test("the sample deck uses every scene prop, compiles, validates and plans", asy
   const Document = module.exports.default;
   try {
     await act(() => { renderer = create(<Document components={{ Deck: CaptureDeck, Slide: "slide" }} />); });
-    const scenes = flat(document).filter(node => (node.type as { name?: string }).name === "Scene").map(node => node.props as Record<string, never>);
+    const scenes = flat(document).filter(node => (node.type as { name?: string }).name === "Scene").map(node => node.props as React.ComponentProps<typeof Scene>);
     const used = new Set(scenes.flatMap(scene => [...Object.keys(scene), ...Object.keys(scene.camera ?? {}),
       ...flat(scene.children).flatMap(part => Object.keys(part.props))]));
     for (const prop of ["colors", "ambient", "ease", "duration", "via", "viaTarget", "carry", "steps", "enter", "exit", "fill", "padding", "panelColor", "textColor",

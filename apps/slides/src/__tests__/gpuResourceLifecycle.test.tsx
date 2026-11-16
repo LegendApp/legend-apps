@@ -25,7 +25,7 @@ test.each(["macos", "web"])("persistent backgrounds retain GPU resources across 
     react: React, "react-native": { View: "View", Text: "Text", Platform: { OS: platform }, PixelRatio: { get: () => 2 } },
     "@shopify/react-native-skia": {}, "react-native-webgpu": { Canvas: "Canvas" }, "react-native-reanimated": {},
     "@legend-apps/presentation": { PresentationCanvasScaleContext: scale, useBackgroundSize: () => size,
-      useBackgroundIntensity: () => 1, usePreparationTask: () => {}, usePresentationValue: field => field === "slideIndex" ? index : preview },
+      useSurfaceSuspension: () => null, useBackgroundIntensity: () => 1, usePreparationTask: () => {}, usePresentationValue: field => field === "slideIndex" ? index : preview },
     "./slidesStore": { reportSlideError: (...args) => errors.push(args) },
   };
   const Component = new Function("require", "exports", "setup", "navigator", code + "\nstartShaderCanvas = setup; return TypeGPUShader;")(

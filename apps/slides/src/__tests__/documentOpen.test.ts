@@ -1,4 +1,3 @@
-// @ts-expect-error Bun test types are not part of the React Native app configuration.
 import { expect, test } from "bun:test";
 import { openRequestedDocument, registerDocumentOpenGuard } from "../documentOpen";
 

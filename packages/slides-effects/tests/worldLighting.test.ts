@@ -81,3 +81,17 @@ test("tunnels add one streaking light-rig draw and track floors a start grid, bo
   expect(floorMarkingsCode({})).not.toContain("checker");
   expect(worldGraphTopology(prepareWorldScene({ instances: tunnelInstances({ to: [0, 0, -40] }) })).customs!.length).toBe(1);
 });
+
+
+test("looping focus resolves anchor names to depths in every nested frame", () => {
+  const instances = [primitive("box", { id: "near", position: [0, 0, 8] }), primitive("box", { id: "far", position: [0, 0, -4] })];
+  const focus = (near: string | number, far: string | number) => [{ step: 0, value: near,
+    loop: { every: 4, frames: [{ at: 0, value: near, duration: 0 }, { at: 2, value: far, duration: 1, ease: "linear" as const }] } }];
+  const camera = { shots: [{ position: [0, 0, 20] as [number, number, number], target: [0, 0, 0] as [number, number, number] }] };
+  const anchored = prepareWorldScene({ instances, camera, dof: { focus: focus("near", "far") } });
+  const numeric = prepareWorldScene({ instances, camera, dof: { focus: focus(12, 24) } });
+  for (const time of [0, 1, 2, 2.5, 3, 4, 6.5, 2.5, 0]) {
+    const sample = { ...clock, slideTime: time, stepTime: time };
+    expect(sampleWorldUniforms(anchored, sample)[32]).toBeCloseTo(sampleWorldUniforms(numeric, sample)[32]);
+  }
+});

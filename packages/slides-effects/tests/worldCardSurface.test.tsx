@@ -71,7 +71,7 @@ test("the generated face gradient lifts resting surfaces while flat semantic col
   const values = sampleWorldUniforms(prepared, clock);
   for (const card of prepared.instances.filter(i => i.card)) {
     const at = worldHeaderSize + prepared.instances.indexOf(card) * worldInstanceSize;
-    const accent = values.slice(at + instanceField.color, at + instanceField.color + 3).map(x => x <= .0031308 ? x * 12.92 : 1.055 * x ** (1 / 2.4) - .055);
+    const accent = Array.from(values.slice(at + instanceField.color, at + instanceField.color + 3)).map(x => x <= .0031308 ? x * 12.92 : 1.055 * x ** (1 / 2.4) - .055);
     const h = Math.max(0, Math.min(1, (values[at + instanceField.emissive] - .03) / .06));
     for (const v of [0, .5, 1]) {
       for (const channel of shade(accent, h, v, false)) { expect(channel).toBeGreaterThan(.1); expect(channel).toBeLessThan(.3); }

@@ -3,10 +3,12 @@ import { expect, test } from "bun:test";
 import { getSlidesState, setSlidesState } from "../slidesStore";
 import { slideReferencesVisible, toggleSlideReferences } from "../slideReferences";
 
+const testGlobals = globalThis as typeof globalThis & { __DEV__?: boolean };
+
 test("development defaults follow presentation mode; explicit choices win", () => {
   const initial = getSlidesState();
-  const previousDev = globalThis.__DEV__;
-  globalThis.__DEV__ = true;
+  const previousDev = testGlobals.__DEV__;
+  testGlobals.__DEV__ = true;
   try {
     setSlidesState({ slideReferences: undefined, config: {}, deckLocked: false });
     expect(slideReferencesVisible(true)).toBe(true);
@@ -23,13 +25,13 @@ test("development defaults follow presentation mode; explicit choices win", () =
     expect(slideReferencesVisible(true)).toBe(false);
     setSlidesState({ config: { slideReferences: true }, slideReferences: false });
     expect(slideReferencesVisible(true)).toBe(false);
-  } finally { globalThis.__DEV__ = previousDev; setSlidesState(initial); }
+  } finally { testGlobals.__DEV__ = previousDev; setSlidesState(initial); }
 });
 
 test("release references stay disabled for frontmatter, explicit state and the I-key toggle", () => {
   const initial = getSlidesState();
-  const previousDev = globalThis.__DEV__;
-  globalThis.__DEV__ = false;
+  const previousDev = testGlobals.__DEV__;
+  testGlobals.__DEV__ = false;
   try {
     for (const slideReferences of [undefined, false, true]) {
       setSlidesState({ slideReferences, config: { slideReferences: true }, deckLocked: false });
@@ -38,5 +40,5 @@ test("release references stay disabled for frontmatter, explicit state and the I
       expect(getSlidesState().slideReferences).toBe(slideReferences);
       expect(slideReferencesVisible(false)).toBe(false);
     }
-  } finally { globalThis.__DEV__ = previousDev; setSlidesState(initial); }
+  } finally { testGlobals.__DEV__ = previousDev; setSlidesState(initial); }
 });

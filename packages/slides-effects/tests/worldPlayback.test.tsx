@@ -386,19 +386,22 @@ test("a preparing non-track World samples its retained entry camera", async () =
   } finally { await act(() => renderer?.unmount()); }
 });
 
-test("changing the number of lights retains GPU generations and publishes the active count", async () => {
+test("light storage follows capacity while animated intensities retain the GPU generation", async () => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   playback.value = createPlaybackState({ phase: "playing", slideKey: "lights", stepKey: "0", stepIndex: 0 });
   let renderer;
-  const content = count => <World quality="high"><Sphere />{Array.from({ length: count }, (_, index) => <PointLight key={index} intensity={index + 1} />)}</World>;
+  const content = (count, intensity = 1) => <World quality="high"><Sphere />{Array.from({ length: count }, (_, index) => <PointLight key={index} intensity={(index + 1) * intensity} />)}</World>;
   try {
     await act(() => { renderer = create(content(0)); });
     const graph = () => renderer.root.findByType("render-graph").props;
-    const first = graph();
     for (const count of [1, 4, 0]) {
       await act(() => renderer.update(content(count)));
-      expect(graph().passes).toBe(first.passes);
-      expect(graph().uniforms).toBe(first.uniforms);
+      const generation = graph();
+      expect(generation.uniforms.value[63]).toBe(count);
+      expect(generation.uniformsSize).toBeGreaterThanOrEqual(generation.uniforms.value.length);
+      await act(() => renderer.update(content(count, 2)));
+      expect(graph().passes).toBe(generation.passes);
+      expect(graph().uniforms).toBe(generation.uniforms);
       expect(graph().uniforms.value[63]).toBe(count);
     }
   } finally { await act(() => renderer?.unmount()); }

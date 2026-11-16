@@ -4,7 +4,7 @@ import { expect, test } from "bun:test";
 import React from "react";
 import { CodeMorph, CodePanel, CodeTrace, Layers, Scene, expandScene, readScenes } from "../packs/world/Authoring";
 import { Card, Text3D } from "../packs/world/World";
-import { colorVector, compileTrack, sampleTrack, type Animated } from "../packs/world/scene";
+import { cardInstances, colorVector, compileTrack, sampleTrack, type Animated } from "../packs/world/scene";
 import { text3dInstances } from "../packs/world/text3d";
 import type { CodeToken } from "../../presentation/src/codeHighlight";
 import { highlightedFence } from "./highlightedFence";
@@ -71,8 +71,9 @@ test("trace layout centers the code first, then centers the extracted tree", asy
     expect(extracted[axis] + (Math.min(...nodes.map(p => p[axis])) + Math.max(...nodes.map(p => p[axis]))) / 2).toBeCloseTo(center);
   expect(extracted[0]).toBeLessThan(initial[0]);
   expect(value<[number, number, number]>(stage.props.position, 0)).toEqual(initial);
-  expect(panel.props.fill).toBeGreaterThanOrEqual(.9);
-  expect(panel.props.edge).toBeGreaterThan(0);
+  const card = cardInstances(panel.props as never)[0].card!;
+  expect(card.fill).toBe(1);
+  expect(card.edge).toBeGreaterThan(0);
 });
 
 test("actual scene expansion rejects unhighlighted code, including later morph fences", async () => {

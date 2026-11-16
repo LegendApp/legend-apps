@@ -34,9 +34,9 @@ test("crossfade keeps identical backgrounds fully opaque throughout forward and 
       const visible = renderer.root.findAllByType("animated-view")
         .filter((layer) => layer.props.accessibilityElementsHidden === false);
       expect(visible).toHaveLength(2);
-      const outgoing = visible[0].props.style[1];
-      const incoming = visible[1].props.style[1];
-      expect(visible[1].findByType("deck").props.targetIndex).toBe(index);
+      const incomingLayer = visible.find(layer => layer.findByType("deck").props.targetIndex === index);
+      const outgoing = visible.find(layer => layer !== incomingLayer).props.style[1];
+      const incoming = incomingLayer.props.style[1];
       for (const progress of [0, 0.25, 0.5, 0.75, 1]) {
         transitionProgresses.at(-1).value = progress;
         const incomingAlpha = incoming.value.opacity;
@@ -272,7 +272,7 @@ test("user transitions receive progress and options, finish visibly, and recover
     await act(() => setCurrentSlide(2));
     expect(getSlidesState().runtimeErrors.some((error) => error.includes("broken transition"))).toBe(true);
     await act(() => transitions.splice(0).forEach((done) => done({ finished: true })));
-    const active = renderer.root.findAllByType("deck").filter((deck) => !deck.props.isPreview && !deck.props.isOutgoing);
+    const active = renderer.root.findAllByType("deck").filter((deck) => !deck.props.isPreview && !deck.props.isOutgoing && !deck.props.isPreparing);
     expect(active).toHaveLength(1);
     expect(active[0].props.targetIndex).toBe(2);
   } finally {
@@ -281,7 +281,7 @@ test("user transitions receive progress and options, finish visibly, and recover
   }
 });
 
-test("retained outgoing media keeps its live surface and final step after the crossfade completes", async () => {
+test("retained outgoing media stays live through the crossfade and retires at completion", async () => {
   const initial = getSlidesState();
   const log = spyOn(console, "error").mockImplementation(() => {});
   let tree;
@@ -299,9 +299,9 @@ test("retained outgoing media keeps its live surface and final step after the cr
       expect(outgoing.props.isPreparing).toBe(false);
       await act(() => transitions.splice(0).forEach(done => done({ finished: true })));
       const prepared = tree.root.findAllByType("deck").find(deck => deck.props.targetIndex === source);
-      expect(prepared.props.isOutgoing).toBe(true);
+      expect(prepared.props.isOutgoing).toBe(false);
       expect(prepared.props.isPreview).toBe(false);
-      expect(prepared.props.isPreparing).toBe(false);
+      expect(prepared.props.isPreparing).toBe(true);
       expect(prepared.props.targetStep).toBe(step);
     }
   } finally {

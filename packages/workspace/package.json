@@ -11,5 +11,9 @@
   "peerDependencies": {
     "react": "catalog:",
     "react-native": "catalog:"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./menu-items": "./src/menuItems.ts"
   }
 }

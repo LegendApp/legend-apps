@@ -123,10 +123,11 @@ test("the patched digit hook reverses an in-flight roll from the displayed digit
     useAnimatedReaction() {}, runOnJS: fn => fn,
     withTiming() { throw new Error("NumberFlow bypassed the shared presentation clock"); },
   };
-  const core = new URL("../../../apps/slides/node_modules/number-flow-react-native/src/core/", import.meta.url);
-  const utils = load(new URL("utils.ts", core), { "./constants": { DIGIT_COUNT: 10 } });
-  const opacity = load(new URL("useSlotOpacity.ts", core), { react, "react-native-reanimated": reanimated });
-  const { useDigitAnimation } = load(new URL("useDigitAnimation.ts", core), {
+  const resolve = createRequire(new URL("../../../apps/slides/package.json", import.meta.url));
+  const core = file => resolve.resolve(`number-flow-react-native/internal/core/${file}.ts`);
+  const utils = load(core("utils"), { "./constants": { DIGIT_COUNT: 10 } });
+  const opacity = load(core("useSlotOpacity"), { react, "react-native-reanimated": reanimated });
+  const { useDigitAnimation } = load(core("useDigitAnimation"), {
     react, "react-native-reanimated": reanimated, "./constants": { DIGIT_COUNT: 10 },
     "./utils": utils, "./useSlotOpacity": opacity,
   });

@@ -4,7 +4,7 @@ function fixture(restartHoldMs = 0) {
   const players = [1320, 2770, 11380].map(duration => ({
     duration: () => duration, prepared: false, ended: false, prepares: [] as number[], starts: [] as number[][],
     prepareSync(time: number) { this.prepared = false; this.ended = false; this.prepares.push(time); },
-    syncStatus() { return this.prepared ? (this.ended ? 2 : 1) : 0; },
+    syncStatus(): number { return this.prepared ? (this.ended ? 2 : 1) : 0; },
     playSync(time: number, host: number) { this.starts.push([time, host]); },
   }));
   let state = createVideoGroupState();

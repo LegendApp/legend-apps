@@ -40,6 +40,6 @@ test("resize flashes pulse every cell together, including new rows, and rest whe
       expect(sample("g/35", "opacity", offset + 1.15)).toBe(1);
       expect(sample("g/35", "opacity", offset + 3.3)).toBe(0);
     }
-    if (!repeat) expect(sample("g/0", "emissive", 1000)).toBeCloseTo(sample("g/0", "emissive", .3));
+    if (!repeat) expect(sample("g/0", "emissive", 1000)).toBeCloseTo(sample("g/0", "emissive", .3) as number);
   }
 });

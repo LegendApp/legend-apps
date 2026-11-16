@@ -39,7 +39,7 @@ test("flight words stay put while the next stops wait dimmed and passed ones fad
   const nodes = flat(expandScene(<Flight id="f" words={words} ahead={1} />));
   expect(nodes.find(n => n.type === Stage && n.props.id === "f/1")!.props.position).toEqual(flightStops({ words })[1]);
   const text = (id: string) => nodes.find(n => n.type === Text3D && n.props.id === id)!.props;
-  const at = (track: unknown, step: number) => (track as { step: number; value: unknown }[]).findLast(f => f.step <= step)!.value;
+  const at = (track: unknown, step: number) => [...(track as { step: number; value: unknown }[])].reverse().find(f => f.step <= step)!.value;
   const [two, three] = [text("f/1/two"), text("f/1/three")];
   expect((two.position as number[])[0]).toBeLessThan((three.position as number[])[0]);
   expect([0, 1, 2, 3, 4].map(s => at(text("f/0/one").opacity, s))).toEqual([1, 1, 0, 0, 1]);
@@ -72,7 +72,7 @@ test("Flight and Cloud sharpen only their current step selection, with a whole-p
 test("on gather every stop glides into one centered, evenly spaced row, lit and sharp, as the camera pulls back onto it", async () => {
   const hooks = ["useState", "useContext", "useReducer"], row: [number, number, number] = [0, 1, -20];
   const nodes = flat(expandScene(<Flight id="g" step={0} words={hooks} gather={2} row={row} />));
-  const at = (track: unknown, step: number) => (track as { step: number; value: unknown }[]).findLast(f => f.step <= step)!.value;
+  const at = (track: unknown, step: number) => [...(track as { step: number; value: unknown }[])].reverse().find(f => f.step <= step)!.value;
   const stage = (k: number) => nodes.find(n => n.type === Stage && n.props.id === `g/${k}`)!.props;
   const text = (k: number) => nodes.find(n => n.type === Text3D && n.props.id === `g/${k}/${hooks[k]}`)!.props;
   expect(at(stage(0).position, 1)).toEqual(flightStops({ words: hooks })[0]);

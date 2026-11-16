@@ -254,7 +254,7 @@ function startShaderCanvas({ readable, canvas, surfaceContext, code, particles, 
     return () => { cancelled = true; errorHandlers.dispose(); if (release) release(); else if (!transferred) device?.destroy(); };
 }
 
-function UIFrames({ resources: r, suspended = false, suspendedOnUI, still, renderScale, effectActive = true, maxTime, frameTimeIndex, displayScale = 1, width, height, aspect, brightness, particleCount, particleVertexCount = 6, clockMode = "step", frameData, previewTime, onError, onReady }: { resources: Resources; suspended?: boolean; suspendedOnUI?: SharedValue<boolean>; still: SurfaceStillRequest | null; renderScale?: SharedValue<number>; effectActive?: boolean; maxTime?:number; frameTimeIndex?:number; displayScale?:number; width: number; height: number; aspect: number; brightness: number; particleCount: number; particleVertexCount?: number; clockMode?: "slide" | "step"; frameData?: SharedValue<number[] | Float32Array<ArrayBuffer>>; previewTime: number; onError(message: string): void; onReady(): void }) {
+function UIFrames({ resources: r, suspended = false, suspendedOnUI, still, renderScale, effectActive = true, maxTime, frameTimeIndex, displayScale = 1, width, height, aspect, brightness, particleCount, particleVertexCount = 6, clockMode = "step", frameData, previewTime, onError, onReady }: { resources: Resources; suspended?: boolean; suspendedOnUI?: SharedValue<boolean>; still: SurfaceStillRequest | null; renderScale?: SharedValue<number>; effectActive?: boolean; maxTime?:number; frameTimeIndex?:number; displayScale?:number; width: number; height: number; aspect: number; brightness: number; particleCount: number; particleVertexCount?: number; clockMode?: "slide" | "step"; frameData?: GPUShaderProps["frameData"]; previewTime: number; onError(message: string): void; onReady(): void }) {
   const active = usePresentationValue("isActive");
   const preview = usePresentationValue("isPreview");
   const preparing = usePresentationValue("isPreparing");
@@ -415,7 +415,7 @@ async function loadImageTexture(device: GPUDevice, uri: string) {
   } finally { data.dispose(); }
 }
 
-function submitGPUFrame(r: Resources, frame: number, particleCount: number, particleVertexCount: number, frameData?: SharedValue<number[] | Float32Array<ArrayBuffer>>, renderScale = 1, still?: StillTarget) {
+function submitGPUFrame(r: Resources, frame: number, particleCount: number, particleVertexCount: number, frameData?: GPUShaderProps["frameData"], renderScale = 1, still?: StillTarget) {
   "worklet";
   const { device, context, clock, groups, compute, render, particles } = r;
   // Configure on UI after retirement of the previous owner, never during async setup.

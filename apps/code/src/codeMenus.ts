@@ -1,5 +1,5 @@
 import { type MenuRootItem } from "@legendapp/spark/menus";
-import { workspaceFileMenuItems } from "@legend-apps/workspace";
+import { workspaceFileMenuItems } from "@legend-apps/workspace/menu-items";
 
 export const codeMenuConfig: MenuRootItem[] = [
   { type: "submenu",

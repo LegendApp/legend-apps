@@ -60,8 +60,8 @@ test("trace collapse uses token identities, continuous row spacing and panel dim
     expect(start).not.toEqual(end);
     for (let axis = 0; axis < 3; axis++) expect(mid[axis]).toBeCloseTo((start[axis] + end[axis]) / 2);
     expect(value(token.props.position, 1, 4)).toEqual(start);
-    expect(value(token.props.position, 2, .250001)[1]).toBeCloseTo(start[1]);
-    expect(value(token.props.position, 2, .749999)[1]).toBeCloseTo(end[1]);
+    expect(value<[number, number, number]>(token.props.position, 2, .250001)[1]).toBeCloseTo(start[1]);
+    expect(value<[number, number, number]>(token.props.position, 2, .749999)[1]).toBeCloseTo(end[1]);
   }
   const panel = tree.find(node => node.props.id === "trace/card")!;
   const start = value<[number, number, number]>(panel.props.scale, 2, .25), end = value<[number, number, number]>(panel.props.scale, 2, .75);

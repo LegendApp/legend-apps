@@ -250,9 +250,10 @@ test("Spark uses native policy without replacing its application delegate", asyn
   assert.equal("plugins" in hello.expo, false);
 });
 
-test("standard desktop capabilities are owned by Spark in every app", async () => {
-  const moved = new Set(Object.keys(sparkCapabilities));
+test("standard desktop capabilities use Spark while Diff retains its richer directory watcher", async () => {
   for (const appId of appIds) {
+    // Diff consumes batched events and change metadata absent from Spark's path-only watcher.
+    const moved = new Set(Object.keys(sparkCapabilities).filter(name => appId !== "diff" || name !== "@legend-apps/file-system-watcher"));
     const manifest = await loadAppManifest(appId);
     if (manifest.nativeModules.macos.includes("@legendapp/spark-file-dialog")) {
       assert.ok(manifest.nativeModules.macos.includes("@legendapp/spark-message-dialog"), "The public dialogs entry includes both file and message dialogs");

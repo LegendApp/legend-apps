@@ -29,7 +29,7 @@ test.each([false, true])("outgoing appearance keeps its route and live clock (po
     const clock = sampleWorldClock(state, 4, "slide", undefined, false);
     const raw = sampleWorldUniforms(source, clock, null, 1, 1, true);
     const values = pooled ? sampleWorldPlan(raw, worldPlanCopies(declared, plan), new Float32Array(plan.size), plan.lightOffset) : raw;
-    frame = sampleTrackFrame(frame, values as number[], pooled ? worldPlanIds(scene, plan) : trackIds(scene), state, options, trackIds(declared), { scene: source, clock, ids: trackIds(source) });
+    frame = sampleTrackFrame(frame, values as number[], pooled ? worldPlanIds(scene, plan) : trackIds(scene), state, options, trackIds(declared), { scene: source, clock, ids: trackIds(pooled ? declared : scene) });
   }
   function navigate(index: number) {
     scene = retainTrackScene(scenes[index], scene, declared, pooled, frame.visible, true);

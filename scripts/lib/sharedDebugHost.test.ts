@@ -3,10 +3,10 @@ import { test } from "node:test";
 import { appIds, loadAppManifest } from "./apps";
 import { debugLaunchProfile } from "./sharedDebugHost";
 
-test("all nine profiles preserve separate native identities, storage names and restoration policy", async () => {
+test("all app profiles preserve separate native identities, storage names and restoration policy", async () => {
   const profiles = await Promise.all(appIds.map(async id => debugLaunchProfile(await loadAppManifest(id))));
   for (const key of ["CFBundleIdentifier", "CFBundleDisplayName", "SparkProjectIdentifier"]) {
-    assert.equal(new Set(profiles.map(profile => profile.infoPlist[key])).size, 9, key);
+    assert.equal(new Set(profiles.map(profile => profile.infoPlist[key])).size, appIds.length, key);
   }
   for (const [index, profile] of profiles.entries()) {
     const app = appIds[index];

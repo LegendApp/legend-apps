@@ -122,7 +122,7 @@ test("a cold slide's background registration retains the World; a slide without 
   } finally { await act(() => renderer?.unmount()); flushUI(); }
 });
 
-test("omitted geometry is flown past, released on the next slide, and restored on reverse", async () => {
+test("omitted geometry fades through departure, retires at focus, and is restored on reverse", async () => {
   const runtime = index => observable({ currentSlide: index, currentStep: 0, slideIndex: index, stepIndex: 0,
     slideCount: 3, stepCount: 1, startedAt: 0, stepStartedAt: 0, isActive: true,
     isPreview: false, isPreparing: false, playbackPhase: "playing", playbackScope: "slide",
@@ -155,7 +155,9 @@ test("omitted geometry is flown past, released on the next slide, and restored o
     const initial = values().slice(worldHeaderSize);
     await go(1, 1000);
     tick(1500);
-    expect(values().slice(worldHeaderSize)).toEqual(initial);
+    expect(values().slice(worldHeaderSize, worldHeaderSize + 23)).toEqual(initial.slice(0, 23));
+    expect(values()[worldHeaderSize + 23]).toBeGreaterThan(0);
+    expect(values()[worldHeaderSize + 23]).toBeLessThan(1);
     tick(3000);
     expect(values()[worldHeaderSize + 23]).toBe(0);
     await go(2, 3000); tick(5000);
@@ -197,7 +199,7 @@ test("an incoming declaration rendered twice retains the outgoing slide until th
   } finally { await act(() => renderer?.unmount()); flushUI(); }
 });
 
-test.each([true, false])("rapid navigation retains long geometry (first slide rendered: %s)", async firstFrame => {
+test.each([true, false])("rapid navigation retains long geometry until focus (first slide rendered: %s)", async firstFrame => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   const runtime$ = observable({ currentSlide: 0, currentStep: 0, slideIndex: 0, stepIndex: 0, slideCount: 6, stepCount: 1,
     startedAt: 0, stepStartedAt: 0, isActive: true, isPreview: false, isPreparing: false, playbackPhase: "playing", playbackScope: "slide" });
@@ -222,7 +224,7 @@ test.each([true, false])("rapid navigation retains long geometry (first slide re
     expect(hasTube()).toBe(true);
     tick(8000);
     await go(3, 8000); tick(11000);
-    expect(hasTube()).toBe(true);
+    expect(hasTube()).toBe(false);
     await go(4, 11000); tick(14000);
     await go(5, 14000); tick(17000);
     expect(hasTube()).toBe(false);
@@ -252,6 +254,12 @@ test("pooled rapid navigation rebakes overflow without losing live declarations"
     const xs = [];
     for (let at = worldHeaderSize; at < values.length; at += worldInstanceSize) xs.push(values[at]);
     expect(xs.sort()).toEqual([1, 2, 3]);
-    expect(values[worldHeaderSize + 2 * worldInstanceSize + 23]).toBe(1);
+    expect(values[worldHeaderSize + 2 * worldInstanceSize + 23]).toBeGreaterThan(0);
+    expect(values[worldHeaderSize + 2 * worldInstanceSize + 23]).toBeLessThan(1);
+    tick(6000);
+    const settled = renderer.root.findByType("gpu").props.frameData.value;
+    const opacities = [];
+    for (let at = worldHeaderSize; at < settled.length; at += worldInstanceSize) if (settled[at] === 3) opacities.push(settled[at + 23]);
+    expect(opacities).toEqual([1]);
   } finally { await act(() => renderer?.unmount()); flushUI(); }
 });

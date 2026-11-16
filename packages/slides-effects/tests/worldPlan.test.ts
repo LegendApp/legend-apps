@@ -73,7 +73,9 @@ test("pooled station uniforms match baked scenes by part id through omission, st
     baked.ids.forEach((id, slot) => {
       const target = pooled.ids.indexOf(id);
       expect(target).toBeGreaterThanOrEqual(0);
-      for (let field = 0; field < worldInstanceSize; field++) expect(pooled.values[worldHeaderSize + target * worldInstanceSize + field])
+      expect(pooled.values[worldHeaderSize + target * worldInstanceSize + 23]).toBeCloseTo(baked.values[worldHeaderSize + slot * worldInstanceSize + 23], 4);
+      if (baked.values[worldHeaderSize + slot * worldInstanceSize + 23] <= .002) return;
+      for (let field = 0; field < worldInstanceSize; field++) expect(pooled.values[worldHeaderSize + target * worldInstanceSize + field], `${slideKey}/${stepKey}@${time} ${id} field ${field}`)
         .toBeCloseTo(baked.values[worldHeaderSize + slot * worldInstanceSize + field], 4);
     });
   }

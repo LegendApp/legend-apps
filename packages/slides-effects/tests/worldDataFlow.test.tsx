@@ -37,6 +37,7 @@ beforeAll(async () => {
   Function("require", "module", "exports", compiled.code)(name => {
     if (name === "@legend-apps/presentation") return {
       defineTransition: definition => definition,
+      RetainedSurface: ({ children }) => children, useSurfaceSuspension: () => null, useBackgroundReady: () => true, registerAdvanceGuard: () => () => {},
       Background: "background", GPURenderGraph: props => React.createElement("world-gpu", props), PresentationCanvasScaleContext: React.createContext(1),
       usePresentationValue: key => key === "playbackScope" ? "slide" : "playing",
       useBackgroundSize: () => ({ width: 1920, height: 1080 }),

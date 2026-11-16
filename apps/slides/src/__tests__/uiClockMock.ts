@@ -1,7 +1,7 @@
 // @ts-nocheck Controlled UI-thread transactions; no JS animation scheduler.
 import { mock } from "bun:test";
 import React, { useLayoutEffect, useMemo, useRef } from "react";
-export const frames = [];
+export const frames: { active: boolean; setActive(value: boolean): void; tick(timestamp: number): void }[] = [];
 export const transactions = [];
 const reactions = [];
 export const reactUI = () => reactions.forEach(reaction => reaction.current());

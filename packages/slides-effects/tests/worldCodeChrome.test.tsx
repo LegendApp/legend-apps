@@ -74,7 +74,7 @@ for (const anchor of [undefined, "top"] as const) test(`height resize keeps its 
     for (let i = 4; i < 4 + grow * 2; i++) {
       expect((find(tree, `g/${i}`).props.position as number[])[1]).toBeLessThan(-.44);
       for (const id of [`g/${i}`, `g/${i}/label`]) {
-        const opacity = compileTrack(find(tree, id).props.opacity as never);
+        const opacity = compileTrack<number>(find(tree, id).props.opacity as never);
         expect([0, 1.5, 3, 4.9].map(t => sampleTrack(opacity, { slideTime: 1 + t, stepTime: t, stepIndex: 1, stepOrigins: { 0: 0, 1: 1 } }))).toEqual([0, 1, 0, 1]);
       }
     }

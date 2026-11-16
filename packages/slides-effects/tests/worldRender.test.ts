@@ -108,7 +108,7 @@ test("custom draw groups keep marker-local instance ids and SDF ranges outside p
   expect(topology.customs?.map(draw => [draw.offset, draw.count])).toEqual([[1, 3], [4, 2]]);
   expect(topology.sdfs?.map(draw => [draw.offset, draw.count])).toEqual([[6, 1]]);
   const graph = buildWorldGraph(topology);
-  expect(graph.passes.filter(pass => pass.kind === "render" && pass.id.startsWith("scene-")).map(pass => pass.instanceCount)).toEqual([1, 3, 2, 1]);
+  expect(graph.passes.filter(pass => pass.kind === "render").filter(pass => pass.id.startsWith("scene-")).map(pass => pass.instanceCount)).toEqual([1, 3, 2, 1]);
   expect(graph.uniformsSize).toBe(worldHeaderSize + 7 * worldInstanceSize);
 });
 
@@ -118,7 +118,7 @@ test("custom draw order compares WGSL by code unit rather than locale", () => {
     ...customInstances({ wgsl: upper, vertexCount: 3, count: 3 })] }));
   expect(topology.customs?.map(draw => [draw.wgsl, draw.offset, draw.count])).toEqual([[upper, 1, 3], [lower, 4, 2]]);
   const graph = buildWorldGraph(topology);
-  expect(graph.passes.filter(pass => pass.kind === "render" && pass.id.startsWith("scene-")).map(pass => [pass.vertexCount, pass.instanceCount])).toEqual([[expect.any(Number), 1], [3, 3], [6, 2]]);
+  expect(graph.passes.filter(pass => pass.kind === "render").filter(pass => pass.id.startsWith("scene-")).map(pass => [pass.vertexCount, pass.instanceCount])).toEqual([[expect.any(Number), 1], [3, 3], [6, 2]]);
   expect(graph.uniformsSize).toBe(worldHeaderSize + 6 * worldInstanceSize);
 });
 
@@ -127,7 +127,7 @@ test("postOrder rewires HDR stages and custom hooks retain the declared color-sp
     { id: "before-focus", wgsl: scanlines, before: "dof" }, { id: "ldr", wgsl: scanlines, after: "tonemap" },
   ] }));
   const pass = (id: string) => graph.passes.find(pass => pass.id === id)!;
-  const output = (id: string) => { const item = pass(id); return item.kind === "fullscreen" ? item.output : undefined; };
+  const output = (id: string) => { const item = pass(id); if (item.kind !== "fullscreen") throw new Error("Expected fullscreen pass"); return item.output; };
   expect(pass("bloom-threshold").reads).toEqual(["hdr"]);
   expect(pass("before-focus").reads?.[0]).toBe(output("bloom-composite"));
   expect(pass("dof-gather").reads?.[0]).toBe(output("before-focus"));

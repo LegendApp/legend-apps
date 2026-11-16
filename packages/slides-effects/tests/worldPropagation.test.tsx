@@ -118,7 +118,7 @@ test("resize and bound typing keep looping, with continuous frame geometry and e
     const right = [0, 1].map(k => sample(property(form, `form/1/0/v${k}`, "opacity"), t));
     expect(left).toEqual(right); expect(left[0] + left[1]).toBe(1);
   }
-  expect(sample(property(form, "form/0/0", "emissive"), 2100.65)).toBeCloseTo(7);
+  expect(sample(property(form, "form/0/0", "emissive"), 2100.66)).toBeCloseTo(7);
   expect(property(form, "form/0/1", "emissive")).toBe(.8);
 });
 

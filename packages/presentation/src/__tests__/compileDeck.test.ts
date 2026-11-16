@@ -13,7 +13,8 @@ import { getDeckSourceStructure, updateSlideSpeakerNotes } from "../speakerNotes
 const temporaryDirectories: string[] = [];
 // RN 0.83 supplies this interpreter through the app's Hermes pod; prepare it
 // with `bun run spark slides build` to include the Hermes execution test.
-const hermesPath = path.resolve(import.meta.dirname, "../../../../shell/.legend/spark/slides/macos/Pods/hermes-engine/destroot/bin/hermes");
+const hermesPath = ["debug-host", "slides"].map(host => path.resolve(import.meta.dirname,
+  `../../../../shell/.legend/spark/${host}/macos/Pods/hermes-engine/destroot/bin/hermes`)).find(file => fs.existsSync(file));
 
 function createDeck(files: Record<string, string>) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "legend-slides-"));
@@ -436,7 +437,7 @@ describe("compileDeck", () => {
     expect(result.code).toContain('template":false');
   });
 
-  test.skipIf(process.platform !== "darwin" || !fs.existsSync(hermesPath))("preserves classes, template exports and captured loop bindings in Hermes", async () => {
+  test.skipIf(process.platform !== "darwin" || !hermesPath)("preserves classes, template exports and captured loop bindings in Hermes", async () => {
     const deckPath = createDeck({
       "deck.mdx": [
         "---",

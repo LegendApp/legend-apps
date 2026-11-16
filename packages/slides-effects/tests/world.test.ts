@@ -151,12 +151,12 @@ test("HDR scene and five-level half-resolution bloom describe independent attach
   expect(graph.targets.find(target => target.id === "hdr")?.format).toBe("rgba16float");
   expect(graph.targets.find(target => target.id === "depth")?.format).toBe("depth32float");
   expect(graph.targets.find(target => target.id === "bloom")).toMatchObject({ scale: 0.5, mips: 5 });
-  const render = graph.passes.filter(pass => pass.kind === "render");
+  const render = graph.passes.filter(pass => pass.kind === "render").filter(pass => pass.id.startsWith("scene-"));
   expect(render.map(pass => pass.instanceCount)).toEqual([1, 1, 3, 1]);
   expect(render[0].clear).toBeArray();
   expect(render.slice(1).every(pass => pass.clear === false)).toBe(true);
   expect(graph.passes.at(-1)).toMatchObject({ id: "screen", fragment: "fxaa", output: "screen" });
-  expect(graph.targets.filter(target => target.samples === 4).map(target => target.id)).toEqual(["hdr", "depth"]);
+  expect(graph.targets.filter(target => target.samples === 4).map(target => target.id)).toEqual(["hdr", "depth", "sharp"]);
   expect(render.every(pass => pass.vertexCount > 0)).toBe(true);
   expect(graph.uniformsSize).toBe(sampleWorldUniforms(scene, clock(0)).length);
   expect(orbInstances({ count: 3, seed: 7 })).toEqual(orbInstances({ count: 3, seed: 7 }));
@@ -358,7 +358,7 @@ test("reused uniforms keep one buffer and match fresh sampling while static, col
     // A hidden live instance keeps its last values; shaders discard it by opacity alone.
     scene.instances.forEach((_, i) => {
       const at = worldHeaderSize + i * worldInstanceSize;
-      if (fresh[at + instanceField.opacity] === 0) { expect(reused[at + instanceField.opacity]).toBe(0); fresh.set(reused.subarray(at, at + worldInstanceSize), at); }
+      if (fresh[at + instanceField.opacity] === 0) { expect(reused[at + instanceField.opacity]).toBe(0); fresh.set(reused.slice(at, at + worldInstanceSize), at); }
     });
     expect(reused).toEqual(fresh);
   }
