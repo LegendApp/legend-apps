@@ -5,7 +5,8 @@ import type { GitStatusEntry } from "@legend-apps/git-core";
 import { Button } from "@legendapp/spark/ui";
 import { conflictedEntries, createGitChanges, emptyChanges, stagedEntries, unstagedEntries } from "./gitChanges";
 import { DiffPane } from "./DiffPane";
-import { HistoryView, type HistoryActions } from "./HistoryView";
+import { CommitDetails, HistoryList, type HistoryActions } from "./HistoryView";
+import { commandEnabled, commandLabel, commandMenuItem, runCommand, type CommandContext, type CommandId, type Section } from "./commands";
 import { commitGitHubUrl, createGitHistory, emptyHistory } from "./gitHistory";
 import { setStringAsync } from "@legendapp/spark/clipboard";
 import { showContextMenu } from "@legendapp/spark/context-menu";
@@ -19,18 +20,22 @@ import { Sidebar, SidebarItem } from "@legendapp/spark/ui/sidebar";
 import { SFSymbol } from "@legendapp/spark/ui/symbol";
 import { SidebarSplitView } from "@legendapp/spark/ui/split-view";
 import { addWindowListener, setWindowOptions } from "@legendapp/spark/windows";
-import { addMacOSWindowListener } from "@legendapp/spark/windows/macos";
+import { addMacOSWindowListener, type MacOSToolbarItem } from "@legendapp/spark/windows/macos";
+
+const contentInset = 52;
 
 export function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [changes, setChanges] = useState(emptyChanges);
   const controller = useRef<ReturnType<typeof createGitChanges> | null>(null);
-  const [view, setView] = useState<"changes" | "history">("changes");
+  const [section, setSection] = useState<Section>("changes");
+  const [filter, setFilter] = useState("");
   const [history, setHistory] = useState(emptyHistory);
   const historyController = useRef<ReturnType<typeof createGitHistory> | null>(null);
   const historyRef = useRef(history);
   historyRef.current = history;
-  const selectedCommit = view === "history" ? history.selectedOid : null;
+  const root = changes.root;
+  const selectedCommit = root && section === "history" ? history.selectedOid : null;
   const unstaged = unstagedEntries(changes.status);
   const staged = stagedEntries(changes.status);
   const selected = changes.selection;
@@ -44,62 +49,10 @@ export function App() {
   const selectedEntry = selected?.section === "unstaged" ? unstaged.find(entry => entry.path === selected.path) : undefined;
   const canDiscardFile = !busy && !!selectedEntry && selectedEntry.kind !== "unmerged";
   const lastDiscard = changes.lastDiscard;
-  const linesLabel = `${selected?.section === "staged" ? "Unstage" : "Stage"} Selected Lines`;
-  const sidebarLabel = sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar";
-
-  useMenu({
-    id: "legend-git",
-    items: [
-      { type: "submenu", id: "app", label: "Legend Git", target: { menu: "app" }, items: [] },
-      {
-        type: "submenu", id: "file", label: "File", target: { menu: "file" },
-        items: [{ type: "action", id: "open-repository", label: "Open Repository…", shortcut: "Cmd+o" }],
-      },
-      {
-        type: "submenu", id: "view", label: "View", target: { menu: "view" },
-        items: [
-          { type: "action", id: "toggle-sidebar", label: sidebarLabel, shortcut: "Cmd+Ctrl+s" },
-          { type: "separator" },
-          { type: "action", id: "show-changes", label: "Changes", shortcut: "Cmd+1", disabled: !changes.root },
-          { type: "action", id: "show-history", label: "History", shortcut: "Cmd+2", disabled: !changes.root },
-        ],
-      },
-      {
-        type: "submenu", id: "edit", label: "Edit", target: { menu: "edit" },
-        items: [
-          { type: "action", id: "copy-sha", label: "Copy SHA", shortcut: "Cmd+Shift+c", disabled: !selectedCommit },
-          { type: "action", id: "open-github", label: "Open Commit on GitHub", disabled: !selectedCommit || !commitGitHubUrl(history, selectedCommit) },
-        ],
-      },
-      {
-        type: "submenu", id: "changes", label: "Changes",
-        items: [
-          { type: "action", id: "apply-lines", label: linesLabel, shortcut: "Cmd+Shift+l", disabled: !changes.patch?.file?.hunks.length },
-          { type: "separator" },
-          { type: "action", id: "discard-file", label: "Discard Changes to File…", shortcut: "Cmd+Shift+Backspace", disabled: !canDiscardFile },
-          { type: "action", id: "discard-lines", label: "Discard Selected Lines…", disabled: busy || changes.patch?.section !== "unstaged" || !changes.patch.file?.hunks.length },
-          { type: "action", id: "restore-discard", label: "Restore Last Discard…", disabled: busy || !lastDiscard },
-          { type: "separator" },
-          { type: "action", id: "generate-message", label: generating ? "Cancel Generating Commit Message" : "Generate Commit Message", shortcut: "Cmd+Alt+g", disabled: !generating && (busy || !staged.length || !!conflicts) },
-          { type: "action", id: "commit", label: "Commit", shortcut: "Cmd+Enter", disabled: busy },
-        ],
-      },
-    ],
-    onAction: (action) => {
-      if (action.itemId === "open-repository") void chooseRepository();
-      if (action.itemId === "toggle-sidebar") setSidebarCollapsed(value => !value);
-      if (action.itemId === "show-changes" && changes.root) setView("changes");
-      if (action.itemId === "show-history" && changes.root) setView("history");
-      if (action.itemId === "copy-sha" && selectedCommit) historyActions.copySha(selectedCommit);
-      if (action.itemId === "open-github" && selectedCommit) historyActions.openOnGitHub(selectedCommit);
-      if (action.itemId === "apply-lines") applyLines.current?.();
-      if (action.itemId === "discard-file") void discardFile();
-      if (action.itemId === "discard-lines") discardLines.current?.();
-      if (action.itemId === "restore-discard") void restoreDiscard();
-      if (action.itemId === "generate-message") generator.current?.toggle();
-      if (action.itemId === "commit") commit.current?.();
-    },
-  });
+  // The selected file stays listed while filtering, so Stage/Unstage/Discard never act on a hidden row.
+  const matches = (section: "unstaged" | "staged") => (entry: GitStatusEntry) => !filter
+    || (selected?.section === section && selected.path === entry.path)
+    || entry.path.split("/").pop()!.toLowerCase().includes(filter.toLowerCase());
 
   async function chooseRepository() {
     const owner = controller.current;
@@ -127,61 +80,136 @@ export function App() {
     if (await confirmDestructive(`Restore ${files}?`, "Restore", message)) await controller.current?.restoreLastDiscard();
   }
 
+  const context: CommandContext = {
+    hasRepository: !!root,
+    section,
+    sidebarCollapsed,
+    busy,
+    selectedCommit,
+    gitHubUrl: oid => commitGitHubUrl(historyRef.current, oid),
+    canApplyLines: !!root && section === "changes" && !!changes.patch?.file?.hunks.length,
+    linesLabel: `${selected?.section === "staged" ? "Unstage" : "Stage"} Selected Lines`,
+    canDiscardFile: section === "changes" && canDiscardFile,
+    canDiscardLines: section === "changes" && !busy && changes.patch?.section === "unstaged" && !!changes.patch.file?.hunks.length,
+    canRestoreDiscard: !busy && !!lastDiscard,
+    generating,
+    canGenerate: !!root && section === "changes" && !busy && !!staged.length && !conflicts,
+    canCommit: !!root && section === "changes" && !busy,
+    run: {
+      openRepository: () => void chooseRepository(),
+      toggleSidebar: () => setSidebarCollapsed(value => !value),
+      showSection: setSection,
+      refresh: () => { void controller.current?.refresh(); void historyController.current?.refresh(); },
+      copySha: oid => { setStringAsync(oid).catch(console.error); },
+      openOnGitHub: oid => {
+        const url = commitGitHubUrl(historyRef.current, oid);
+        if (url) openURL(url).catch(console.error);
+      },
+      applyLines: () => applyLines.current?.(),
+      discardFile: () => void discardFile(),
+      discardLines: () => discardLines.current?.(),
+      restoreDiscard: () => void restoreDiscard(),
+      toggleGenerate: () => generator.current?.toggle(),
+      commit: () => commit.current?.(),
+    },
+  };
+  const contextRef = useRef(context);
+  contextRef.current = context;
+  const item = (id: CommandId) => commandMenuItem(id, context);
+
+  useMenu({
+    id: "legend-git",
+    items: [
+      { type: "submenu", id: "app", label: "Legend Git", target: { menu: "app" }, items: [] },
+      { type: "submenu", id: "file", label: "File", target: { menu: "file" }, items: [item("open-repository")] },
+      { type: "submenu", id: "edit", label: "Edit", target: { menu: "edit" }, items: [item("copy-sha")] },
+      // AppKit's own View ▸ Show/Hide Sidebar drives the split view, so the menu has no second one.
+      { type: "submenu", id: "view", label: "View", target: { menu: "view" }, items: [item("show-changes"), item("show-history")] },
+      { type: "submenu", id: "repository", label: "Repository", placement: { before: { menu: "window" } }, items: [item("refresh"), { type: "separator" }, item("open-github")] },
+      {
+        type: "submenu", id: "changes", label: "Changes", placement: { before: { menu: "window" } },
+        items: [
+          item("apply-lines"), { type: "separator" },
+          item("discard-file"), item("discard-lines"), item("restore-discard"), { type: "separator" },
+          item("generate-message"), item("commit"),
+        ],
+      },
+    ],
+    onAction: action => { runCommand(action.itemId, contextRef.current); },
+  });
+
   useEffect(() => {
-    historyController.current?.setRoot(changes.root);
-    if (!changes.root) setView("changes");
-  }, [changes.root]);
+    historyController.current?.setRoot(root);
+    if (!root) setSection("changes");
+  }, [root]);
   useEffect(() => {
-    if (view === "history") void historyController.current?.activate();
-  }, [view, changes.root]);
+    if (section === "history") void historyController.current?.activate();
+  }, [section, root]);
 
   const [historyActions] = useState<HistoryActions>(() => ({
     select: oid => void historyController.current?.select(oid),
     loadMore: () => void historyController.current?.loadMore(),
     selectFile: path => historyController.current?.selectFile(path),
-    copySha: oid => { setStringAsync(oid).catch(console.error); },
-    openOnGitHub: oid => {
-      const url = commitGitHubUrl(historyRef.current, oid);
-      if (url) openURL(url).catch(console.error);
-    },
+    copySha: oid => { runCommand("copy-sha", contextRef.current, oid); },
+    openOnGitHub: oid => { runCommand("open-github", contextRef.current, oid); },
     contextMenu: (oid, position) => {
       void historyController.current?.select(oid);
-      const url = commitGitHubUrl(historyRef.current, oid);
-      showContextMenu({ windowId: "main", position, items: [
-        { type: "action", id: "copy-sha", label: "Copy SHA" },
-        { type: "action", id: "open-github", label: "Open on GitHub", disabled: !url },
-      ] }).then(result => {
-        if (result.canceled) return;
-        if (result.itemId === "copy-sha") historyActions.copySha(oid);
-        if (result.itemId === "open-github") historyActions.openOnGitHub(oid);
-      }, console.error);
+      const menuContext = contextRef.current;
+      showContextMenu({ windowId: "main", position, items: (["copy-sha", "open-github"] as const).map(id => commandMenuItem(id, menuContext, { target: oid, shortcut: false })) })
+        .then(result => { if (!result.canceled) runCommand(result.itemId, contextRef.current, oid); }, console.error);
     },
   }));
 
+  const branch = changes.status?.branch;
+  const branchLabel = !branch?.head ? null : branch.head === "(detached)" ? `${branch.oid?.slice(0, 7) ?? "HEAD"} (detached)` : branch.head;
+  const button = (id: CommandId, symbol: string) => {
+    const label = commandLabel(id, context);
+    return { type: "button" as const, id, label, symbol, tooltip: label, disabled: !commandEnabled(id, context) };
+  };
+  const toolbarItems: MacOSToolbarItem[] = [
+    { ...button("toggle-sidebar", "sidebar.left"), placement: "leading" },
+    ...root ? [
+      { type: "menu", id: "branch", label: branchLabel ?? "Branch", symbol: "arrow.triangle.branch", placement: "leading", tooltip: "Current branch", items: [
+        { type: "action", id: "switch-branch", label: "Switch Branch…", disabled: true },
+        { type: "action", id: "new-branch", label: "New Branch…", disabled: true },
+      ] },
+      { type: "segmented", id: "section", label: "View", value: section, segments: [
+        { value: "changes", label: "Changes", symbol: "square.and.pencil" },
+        { value: "history", label: "History", symbol: "clock" },
+      ] },
+      // Fetch, Pull and Push arrive with M3: a `disabled` toolbar button still shows and acts enabled (Spark ask), so they are left out until then.
+      button("refresh", "arrow.clockwise"),
+      // AppKit's NSSearchToolbarItem (it collapses itself when the toolbar is narrow); Spark's `collapses` button ignores real clicks (Spark ask).
+      { type: "search", id: "search", label: "Search", placeholder: section === "changes" ? "Filter Files" : "Search", width: 200, disabled: section !== "changes" },
+    ] satisfies MacOSToolbarItem[] : [],
+  ];
+  // The search field keeps its own text; it is passed only when the toolbar is rebuilt for another reason.
+  const toolbar = { visible: true, style: "unified" as const, items: toolbarItems.map(entry => entry.type === "search" && filter ? { ...entry, value: filter } : entry) };
+  const toolbarRef = useRef(toolbar);
+  toolbarRef.current = toolbar;
+  // Title bar options go once: re-sending them grows the window by 20 pt each time (Spark ask).
+  useEffect(() => {
+    void setWindowOptions("main", { appearance: "system", macos: { titleBar: { contentLayout: "fullSize", transparent: true, titleVisibility: "visible" } } }).catch(console.error);
+  }, []);
   useEffect(() => {
     void setWindowOptions("main", {
-      title: changes.root ? `${changes.root.split("/").pop()} — Legend Git` : "Legend Git",
-      appearance: "system",
+      title: root ? `${root.split("/").pop()} — Legend Git` : "Legend Git",
       macos: {
         // Omitted, not null, without a repository: a null URI also clears the window title.
-        ...(changes.root ? { representedUri: `file://${changes.root.split("/").map(encodeURIComponent).join("/")}` } : {}),
-        titleBar: { contentLayout: "fullSize", transparent: true, titleVisibility: "visible" },
-        toolbar: {
-          visible: true,
-          style: "unified",
-          items: [
-            { type: "button", id: "toggle-sidebar", label: sidebarLabel, symbol: "sidebar.left", placement: "leading", tooltip: sidebarLabel },
-            { type: "button", id: "open-repository", label: "Open Repository…", symbol: "folder", tooltip: "Open Repository…" },
-            { type: "button", id: "refresh", label: "Refresh", symbol: "arrow.clockwise", tooltip: "Refresh" },
-            { type: "button", id: "restore-discard", label: "Restore Last Discard…", symbol: "arrow.uturn.backward", tooltip: "Restore Last Discard…", disabled: !lastDiscard },
-          ],
-        },
+        ...(root ? { representedUri: `file://${root.split("/").map(encodeURIComponent).join("/")}` } : {}),
+        toolbar: toolbarRef.current,
       },
     }).catch(console.error);
-  }, [sidebarLabel, changes.root, !lastDiscard]); // eslint-disable-line react-hooks/exhaustive-deps -- only availability changes the toolbar
+  }, [root]);
+  // Item changes (section, labels, availability) update only the toolbar.
+  const toolbarKey = JSON.stringify(toolbarItems);
+  const toolbarShown = useRef(toolbarKey);
+  useEffect(() => {
+    if (toolbarShown.current === toolbarKey) return;
+    toolbarShown.current = toolbarKey;
+    void setWindowOptions("main", { macos: { toolbar: toolbarRef.current } }).catch(console.error);
+  }, [toolbarKey]);
 
-  const restoreRef = useRef(restoreDiscard);
-  restoreRef.current = restoreDiscard;
   useEffect(() => {
     let disposed = false;
     const owner = createGitChanges(setChanges, watchDirectories);
@@ -189,14 +217,11 @@ export function App() {
     const historyOwner = createGitHistory(setHistory, watchDirectories);
     historyController.current = historyOwner;
     const registration = addMacOSWindowListener("main", event => {
-      if (!disposed && event.type === "toolbarAction") {
-        if (event.itemId === "refresh") { void owner.refresh(); void historyOwner.refresh(); }
-        if (event.itemId === "restore-discard") void restoreRef.current();
-        if (event.itemId === "toggle-sidebar") setSidebarCollapsed(value => !value);
-        if (event.itemId === "open-repository") {
-          void chooseRepository();
-        }
-      }
+      if (disposed) return;
+      if (event.type === "toolbarAction") runCommand(event.itemId, contextRef.current);
+      else if (event.type === "toolbarMenuAction") runCommand(event.action.itemId, contextRef.current);
+      else if (event.type === "toolbarSelectionChanged" && event.itemId === "section") runCommand(event.value === "history" ? "show-history" : "show-changes", contextRef.current);
+      else if ((event.type === "toolbarSearchChanged" || event.type === "toolbarSearchSubmitted") && contextRef.current.section === "changes") setFilter(event.value);
     });
     const closeRegistration = addWindowListener("main", "closed", () => {
       disposed = true;
@@ -222,57 +247,62 @@ export function App() {
     };
   }, []);
 
+  // Stays mounted (hidden) in History so the commit message draft and a running generation survive a section switch.
+  const changesList = <View style={[styles.listPane, section !== "changes" && styles.hidden]}>
+    <ChangesList title="Unstaged" entries={unstaged.filter(matches("unstaged"))} filtered={!!filter} selectedPath={selected?.section === "unstaged" ? selected.path : null}
+      onSelect={path => void controller.current?.select(path === null ? null : { section: "unstaged", path })}
+      action="Stage" disabled={busy} onAction={path => void controller.current?.changeFile(path, true)}
+      secondaryAction="Discard…" secondaryDisabled={!canDiscardFile} onSecondaryAction={() => void discardFile()} />
+    <ChangesList title="Staged" entries={staged.filter(matches("staged"))} filtered={!!filter} selectedPath={selected?.section === "staged" ? selected.path : null}
+      onSelect={path => void controller.current?.select(path === null ? null : { section: "staged", path })}
+      action="Unstage" disabled={busy} onAction={path => void controller.current?.changeFile(path, false)} />
+    <CommitComposer disabled={busy} stagedCount={staged.length} conflictCount={conflicts} merging={changes.merging} unborn={changes.status?.branch.oid === "(initial)"} root={root!}
+      commitRef={commit} onCommit={input => controller.current?.commit(input) ?? Promise.resolve(false)} headMessage={() => controller.current?.headMessage() ?? Promise.resolve(null)}
+      readStaged={signal => controller.current?.stagedDiff(signal) ?? Promise.reject(new Error("Open a repository first."))}
+      confirmReplace={() => confirmDestructive("Replace the commit message?", "Replace", "The generated message replaces the summary and description you wrote.")}
+      generatorRef={generator} onGeneratingChange={setGenerating} />
+  </View>;
+
+  const changesDetail = changes.patch ? <DiffPane patch={changes.patch} disabled={busy} applyRef={applyLines} discardRef={discardLines}
+    onApply={(keys, text) => void controller.current?.changeLines(keys, text)}
+    onDiscard={async (keys, text, what) => { if (await confirmDestructive(`Discard ${what}?`, "Discard")) await controller.current?.discardLines(keys, text); }} />
+    : selected ? <EmptyState title="Loading Diff…" />
+    : unstaged.length || staged.length ? <EmptyState title="No Selection" message="Select a file to view its changes." />
+    : <EmptyState symbol="checkmark.circle" title="Working Tree Clean" message="There are no changes to commit." />;
+
   return (
     <SidebarSplitView
       appearance="system"
       style={styles.root}
-      sidebarWidth={240}
-      sidebarMinWidth={200}
-      contentMinWidth={760}
+      sidebarWidth={220}
+      sidebarMinWidth={180}
+      listWidth={320}
+      listMinWidth={260}
+      contentMinWidth={480}
       sidebarCollapsed={sidebarCollapsed}
       onSidebarCollapsedChange={setSidebarCollapsed}
-      titleBar={{ content: { height: 52, material: "titlebar" } }}
+      titleBar={{ content: { height: contentInset, material: "titlebar" } }}
       sidebar={
-        <Sidebar style={styles.root} selectedId={changes.root ? view : null} onSelectionChange={event => { if (event.id === "changes" || event.id === "history") setView(event.id); }} contentInsetTop={58}>
+        <Sidebar style={styles.root} selectedId={root ? section : null} onSelectionChange={event => { if (event.id === "changes" || event.id === "history") setSection(event.id); }} contentInsetTop={58}>
           <SidebarItem id="repositories" selectable={false}>
-            <Text style={styles.section}>{changes.root?.split("/").pop() ?? "Repositories"}</Text>
+            <Text style={styles.section}>{root?.split("/").pop() ?? "Repositories"}</Text>
           </SidebarItem>
-          {changes.root ? [
+          {root ? [
             <SidebarItem key="changes" id="changes"><SidebarRow symbol="square.and.pencil" label="Changes" count={changes.status?.entries.length} /></SidebarItem>,
             <SidebarItem key="history" id="history"><SidebarRow symbol="clock" label="History" /></SidebarItem>,
           ] :
             <SidebarItem id="empty" selectable={false}><Text style={styles.sidebarNote}>No repository open</Text></SidebarItem>}
         </Sidebar>
       }
+      list={root ? <>
+        {changesList}
+        {section === "history" ? <View style={styles.listPane}><HistoryList history={history} actions={historyActions} /></View> : null}
+      </> : undefined}
       content={
         <View style={styles.content}>
-          {changes.error && <Text accessibilityRole="alert" selectable style={styles.error}>{changes.error}</Text>}
-          {changes.root && view === "history" ? <View style={styles.history}>
-            <HistoryView history={history} actions={historyActions} />
-          </View> : changes.root ? <>
-            <View style={styles.split}>
-              <View style={styles.lists}>
-                <ChangesList title="Unstaged" entries={unstaged} selectedPath={selected?.section === "unstaged" ? selected.path : null}
-                  onSelect={path => void controller.current?.select(path === null ? null : { section: "unstaged", path })}
-                  action="Stage" disabled={busy} onAction={path => void controller.current?.changeFile(path, true)}
-                  secondaryAction="Discard…" secondaryDisabled={!canDiscardFile} onSecondaryAction={() => void discardFile()} />
-                <ChangesList title="Staged" entries={staged} selectedPath={selected?.section === "staged" ? selected.path : null}
-                  onSelect={path => void controller.current?.select(path === null ? null : { section: "staged", path })}
-                  action="Unstage" disabled={busy} onAction={path => void controller.current?.changeFile(path, false)} />
-                <CommitComposer disabled={busy} stagedCount={staged.length} conflictCount={conflicts} merging={changes.merging} unborn={changes.status?.branch.oid === "(initial)"} root={changes.root}
-                  commitRef={commit} onCommit={input => controller.current?.commit(input) ?? Promise.resolve(false)} headMessage={() => controller.current?.headMessage() ?? Promise.resolve(null)}
-                  readStaged={signal => controller.current?.stagedDiff(signal) ?? Promise.reject(new Error("Open a repository first."))}
-                  confirmReplace={() => confirmDestructive("Replace the commit message?", "Replace", "The generated message replaces the summary and description you wrote.")}
-                  generatorRef={generator} onGeneratingChange={setGenerating} />
-              </View>
-              {changes.patch ? <DiffPane patch={changes.patch} disabled={busy} applyRef={applyLines} discardRef={discardLines}
-                onApply={(keys, text) => void controller.current?.changeLines(keys, text)}
-                onDiscard={async (keys, text, what) => { if (await confirmDestructive(`Discard ${what}?`, "Discard")) await controller.current?.discardLines(keys, text); }} />
-                : <View style={styles.placeholder}>{selected ? <EmptyState title="Loading Diff…" />
-                  : unstaged.length || staged.length ? <EmptyState title="No Selection" message="Select a file to view its changes." />
-                  : <EmptyState symbol="checkmark.circle" title="Working Tree Clean" message="There are no changes to commit." />}</View>}
-            </View>
-          </> : changes.loading ? <EmptyState title="Opening Repository…" />
+          {changes.error ? <Text accessibilityRole="alert" selectable style={styles.error}>{changes.error}</Text> : null}
+          {root ? <View style={styles.detail}>{section === "history" ? <CommitDetails history={history} actions={historyActions} /> : changesDetail}</View>
+            : changes.loading ? <EmptyState title="Opening Repository…" />
             : <EmptyState symbol="folder" title="No Repository Open" message="Open a Git repository to see its changes and commit them.">
               <Button style={styles.open} onPress={() => void chooseRepository()}>Open Repository…</Button>
             </EmptyState>}
@@ -299,8 +329,8 @@ async function confirmDestructive(title: string, action: string, message = "Lege
   } catch (error) { console.error(error); return false; }
 }
 
-function ChangesList({ title, entries, selectedPath, onSelect, action, disabled, onAction, secondaryAction, secondaryDisabled, onSecondaryAction }: {
-  title: string; entries: GitStatusEntry[]; selectedPath: string | null; onSelect: (path: string | null) => void;
+function ChangesList({ title, entries, filtered, selectedPath, onSelect, action, disabled, onAction, secondaryAction, secondaryDisabled, onSecondaryAction }: {
+  title: string; entries: GitStatusEntry[]; filtered: boolean; selectedPath: string | null; onSelect: (path: string | null) => void;
   action: string; disabled: boolean; onAction: (path: string) => void;
   secondaryAction?: string; secondaryDisabled?: boolean; onSecondaryAction?: () => void;
 }) {
@@ -312,17 +342,16 @@ function ChangesList({ title, entries, selectedPath, onSelect, action, disabled,
     </View>
     {entries.length ? <Sidebar style={styles.root} selectedId={selectedPath} onSelectionChange={event => onSelect(event.id)} defaultRowHeight={24}>
       {entries.map(entry => <SidebarItem key={entry.path} id={entry.path}><FileRow entry={entry} staged={title === "Staged"} /></SidebarItem>)}
-    </Sidebar> : <View style={styles.emptyList}><Text style={styles.emptyListText}>No {title.toLowerCase()} changes</Text></View>}
+    </Sidebar> : <View style={styles.emptyList}><Text style={styles.emptyListText}>{filtered ? "No matching files" : `No ${title.toLowerCase()} changes`}</Text></View>}
   </View>;
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  content: { flex: 1, paddingTop: 52, backgroundColor: PlatformColor("windowBackgroundColor") },
-  history: { flex: 1, borderTopWidth: StyleSheet.hairlineWidth, borderColor: PlatformColor("separatorColor") },
-  split: { flex: 1, flexDirection: "row", borderTopWidth: StyleSheet.hairlineWidth, borderColor: PlatformColor("separatorColor") },
-  lists: { width: 340, backgroundColor: PlatformColor("controlBackgroundColor") },
-  placeholder: { flex: 1, borderLeftWidth: StyleSheet.hairlineWidth, borderColor: PlatformColor("separatorColor"), backgroundColor: PlatformColor("textBackgroundColor") },
+  content: { flex: 1, paddingTop: contentInset, backgroundColor: PlatformColor("windowBackgroundColor") },
+  detail: { flex: 1, borderTopWidth: StyleSheet.hairlineWidth, borderColor: PlatformColor("separatorColor"), backgroundColor: PlatformColor("textBackgroundColor") },
+  listPane: { flex: 1, paddingTop: contentInset, backgroundColor: PlatformColor("controlBackgroundColor") },
+  hidden: { display: "none" },
   open: { width: 150, height: 28 },
   listSection: { flex: 1 },
   separated: { borderTopWidth: StyleSheet.hairlineWidth, borderColor: PlatformColor("separatorColor") },

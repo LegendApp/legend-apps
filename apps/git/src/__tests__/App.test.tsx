@@ -35,30 +35,33 @@ jest.mock("@legendapp/spark/menus", () => ({ useMenu: jest.fn() }));
 jest.mock("@legendapp/spark/ai", () => ({ ...jest.requireActual("@legendapp/spark/ai"), getAICommandAvailability: jest.fn(async () => ({ claude: true, codex: false, preferredTool: "claude" })) }));
 jest.mock("@legendapp/spark/ui/sidebar", () => ({ Sidebar: "Sidebar", SidebarItem: "SidebarItem" }));
 jest.mock("@legendapp/spark/ui/split-view", () => ({
-  SidebarSplitView: ({ sidebar, content }: any) => <>{sidebar}{content}</>,
+  SidebarSplitView: ({ sidebar, list, content }: any) => <>{sidebar}{list}{content}</>,
 }));
 jest.mock("@legendapp/spark/windows", () => ({ setWindowOptions: jest.fn(async () => {}), addWindowListener: jest.fn(async () => ({ remove: jest.fn(async () => {}) })) }));
 jest.mock("@legendapp/spark/windows/macos", () => ({
   addMacOSWindowListener: jest.fn(async () => ({ remove: jest.fn(async () => {}) })),
 }));
 
+const lastMenu = () => jest.mocked(useMenu).mock.calls.at(-1)![0] as unknown as { items: any[]; onAction: (action: { itemId: string }) => void };
+const openMenu = () => lastMenu().items.flatMap(entry => entry.items ?? []).find(entry => entry.id === "open-repository");
+/** File ▸ Open Repository…, the way the menu bar runs it. */
+const openRepository = () => lastMenu().onAction({ itemId: "open-repository" });
+
 it("renders the empty window, toggles its sidebar, opens the folder panel and cleans up", async () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   let renderer!: ReactTestRenderer;
   await act(async () => { renderer = create(<App />); });
   expect(JSON.stringify(renderer.toJSON())).toContain("No repository open");
-  expect(setWindowOptions).toHaveBeenCalledWith("main", expect.objectContaining({
-    title: "Legend Git",
-    macos: expect.objectContaining({ toolbar: expect.objectContaining({ items: expect.arrayContaining([
-      expect.objectContaining({ id: "open-repository", type: "button" }),
-    ]) }) }),
-  }));
+  // Without a repository the toolbar has only the sidebar toggle and there is no list column; Open Repository lives in the File menu.
+  expect(jest.mocked(setWindowOptions).mock.calls.at(-1)![1]).toMatchObject({ title: "Legend Git", macos: { toolbar: { items: [{ id: "toggle-sidebar", type: "button" }] } } });
+  expect(renderer.root.findByType(SidebarSplitView).props.list).toBeUndefined();
+  expect(openMenu()).toMatchObject({ label: "Open Repository…", shortcut: "Cmd+o", disabled: false });
   const listener = jest.mocked(addMacOSWindowListener).mock.calls[0][1];
   await act(async () => { listener({ type: "toolbarAction", windowId: "main", itemId: "toggle-sidebar" }); });
   expect(renderer.root.findByType(SidebarSplitView).props.sidebarCollapsed).toBe(true);
   await act(async () => { renderer.root.findByType(SidebarSplitView).props.onSidebarCollapsedChange(false); });
   expect(renderer.root.findByType(SidebarSplitView).props.sidebarCollapsed).toBe(false);
-  await act(async () => { listener({ type: "toolbarAction", windowId: "main", itemId: "open-repository" }); });
+  await act(async () => { openRepository(); });
   expect(openFileDialog).toHaveBeenCalledWith({ windowId: "main", selection: "directories", multiple: false, title: "Open Repository" });
   const registration = await jest.mocked(addMacOSWindowListener).mock.results[0].value;
   await act(async () => { renderer.unmount(); });
@@ -82,7 +85,7 @@ it("opens a repository, selects a native file row, stages and unstages it, and r
   let renderer!: ReactTestRenderer;
   await act(async () => { renderer = create(<App />); });
   const toolbar = jest.mocked(addMacOSWindowListener).mock.calls[0][1];
-  await act(async () => { toolbar({ type: "toolbarAction", windowId: "main", itemId: "open-repository" }); });
+  await act(async () => { openRepository(); });
   const text = () => renderer.root.findAllByType(Text).map(node => [node.props.children].flat().join("")).join("\n");
   expect(text()).toContain("Unstaged (1)");
   expect(text()).toContain("Staged (1)");
@@ -145,7 +148,7 @@ it("generates a commit message from the staged diff, shows progress, cancels on 
   jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
   let renderer!: ReactTestRenderer;
   await act(async () => { renderer = create(<App />); });
-  await act(async () => { jest.mocked(addMacOSWindowListener).mock.calls[0][1]({ type: "toolbarAction", windowId: "main", itemId: "open-repository" }); });
+  await act(async () => { openRepository(); });
   const button = (label: string) => renderer.root.findAllByType(Button).find(node => node.props.children === label);
   const menuItem = () => jest.mocked(useMenu).mock.calls.at(-1)![0].items.flatMap((item: any) => item.items ?? []).find((item: any) => item.id === "generate-message");
   const inputs = () => renderer.root.findAllByType(TextInput);
@@ -182,7 +185,7 @@ it("generates a commit message from the staged diff, shows progress, cancels on 
   git.status.mockResolvedValue({ branch, entries: [{ kind: "unmerged", path: "app.ts", indexStatus: "U", worktreeStatus: "U" }, { ...entry, path: "b.ts" }] } as never);
   jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
   await act(async () => { renderer = create(<App />); });
-  await act(async () => { jest.mocked(addMacOSWindowListener).mock.calls.at(-1)![1]({ type: "toolbarAction", windowId: "main", itemId: "open-repository" }); });
+  await act(async () => { openRepository(); });
   expect(button("Generate")!.props.disabled).toBe(true);
   expect(menuItem().disabled).toBe(true);
   await act(async () => { renderer.unmount(); });
@@ -211,7 +214,7 @@ it("shows History from the sidebar and View menu, selects commits, and copies or
   let renderer!: ReactTestRenderer;
   await act(async () => { renderer = create(<App />); });
   const toolbar = jest.mocked(addMacOSWindowListener).mock.calls[0][1];
-  await act(async () => { toolbar({ type: "toolbarAction", windowId: "main", itemId: "open-repository" }); });
+  await act(async () => { openRepository(); });
   const menu = () => jest.mocked(useMenu).mock.calls.at(-1)![0] as unknown as { items: any[]; onAction: (action: { itemId: string }) => void };
   const item = (id: string) => menu().items.flatMap(entry => entry.items ?? []).find(entry => entry.id === id);
   expect(item("show-history")).toMatchObject({ label: "History", shortcut: "Cmd+2", disabled: false });
@@ -228,7 +231,13 @@ it("shows History from the sidebar and View menu, selects commits, and copies or
   let row!: ReactTestRenderer;
   await act(async () => { row = create(list.props.renderItem({ item: commits[0] })); });
   const text = (node: ReactTestRenderer) => node.root.findAllByType(Text).map(entry => [entry.props.children].flat().join("")).join("\n");
-  expect(text(row)).toContain("main\nv1.0\nSecond\naaaaaaa\nAda");
+  // Ref names follow the subject as plain text, not pills; the current branch is in label color, semibold.
+  expect(text(row)).toContain("Second\n");
+  expect(text(row)).toContain("main\n, v1.0\naaaaaaa\nAda");
+  const refText = (name: string) => row.root.findAllByType(Text).find(entry => [entry.props.children].flat().join("") === name)!;
+  expect([refText("main").props.style].flat()).toContainEqual({ fontWeight: "600", color: "labelColor" });
+  expect(refText(", v1.0").props.style).toBeUndefined();
+  expect(JSON.stringify(row.toJSON())).not.toMatch(/borderWidth/);
   await act(async () => { row.root.findByProps({ accessibilityRole: "button" }).props.onPress({ nativeEvent: {} }); });
   expect(git.commitDetails).toHaveBeenCalledWith(head, expect.anything());
   expect(text(renderer)).toContain("Body");
@@ -260,4 +269,129 @@ it("shows History from the sidebar and View menu, selects commits, and copies or
   expect(renderer.root.findAllByType("LegendList" as any)).toHaveLength(0);
   await act(async () => { renderer.unmount(); });
   expect(reader.close).toHaveBeenCalled();
+});
+
+it("switches sections from the sidebar, the toolbar segment and the View menu, keeping each section's selection", async () => {
+  jest.clearAllMocks();
+  jest.mocked(watchDirectories).mockReturnValue({ remove: jest.fn() });
+  const head = "c".repeat(40);
+  const commits = [{ oid: head, parents: [], authorName: "Ada", authorEmail: "ada@example.test", time: 1_700_000_000, summary: "Only" }];
+  jest.mocked(openGitHistory).mockResolvedValue({ head: { handle: 1, headOid: head, unborn: false, detached: false }, page: jest.fn(async (offset: number) => ({ offset, commits: offset ? [] : commits, done: true })), close: jest.fn() });
+  jest.mocked(loadUnifiedDiff).mockReturnValue(new Promise(() => {}));
+  const branch = { oid: head, head: "main", upstream: null, ahead: 0, behind: 0 };
+  const entries = [
+    { kind: "ordinary" as const, path: "src/app.ts", indexStatus: ".", worktreeStatus: "M" },
+    { kind: "ordinary" as const, path: "README.md", indexStatus: ".", worktreeStatus: "M" },
+    { kind: "untracked" as const, path: "notes.txt", indexStatus: "?", worktreeStatus: "?" },
+  ];
+  const git = { repoRoot: "/repo", resolveRoot: jest.fn(async () => "/repo"), watchLocations: jest.fn(async () => ({ root: "/repo", gitDir: "/repo/.git", commonDir: "/repo/.git", ignoredPaths: [] })),
+    status: jest.fn(async () => ({ branch, entries })), fileDiff: jest.fn(async () => ""), lastDiscard: jest.fn(async () => null), repoState: jest.fn(async () => ({ merging: false })),
+    revParse: jest.fn(async () => head), refDecorations: jest.fn(async () => new Map()), remoteUrl: jest.fn(async () => null), currentBranch: jest.fn(async () => "main"),
+    commitDetails: jest.fn(async (oid: string) => ({ oid, parents: [], author: { name: "Ada", email: "ada@example.test", time: 1 }, committer: { name: "Ada", email: "ada@example.test", time: 1 }, message: "Only" })),
+    commitPatch: jest.fn(async () => "") };
+  jest.mocked(getGitService).mockReturnValue(git as unknown as GitService);
+  jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
+  let renderer!: ReactTestRenderer;
+  await act(async () => { renderer = create(<App />); });
+  await act(async () => { openRepository(); });
+  const listener = jest.mocked(addMacOSWindowListener).mock.calls[0][1];
+  const toolbar = () => jest.mocked(setWindowOptions).mock.calls.at(-1)![1].macos!.toolbar!.items!;
+  const toolbarItem = (id: string) => toolbar().find(entry => entry.id === id) as any;
+  const menuItem = (id: string) => lastMenu().items.flatMap(entry => entry.items ?? []).find(entry => entry.id === id);
+  const navigation = () => renderer.root.findAllByType(Sidebar)[0]!;
+  const split = () => renderer.root.findByType(SidebarSplitView);
+  const unstagedRows = () => renderer.root.findAllByType(Sidebar)[1]!;
+
+  // Toolbar: sidebar toggle and branch menu leading, segmented sections, Refresh, search; no Open or Restore.
+  expect(toolbar().map(entry => entry.id)).toEqual(["toggle-sidebar", "branch", "section", "refresh", "search"]);
+  expect(toolbarItem("branch")).toMatchObject({ type: "menu", label: "main", items: [{ id: "switch-branch", disabled: true }, { id: "new-branch", disabled: true }] });
+  expect(toolbarItem("section")).toMatchObject({ type: "segmented", value: "changes" });
+  expect(split().props.list).toBeDefined();
+
+  await act(async () => { unstagedRows().props.onSelectionChange({ id: "src/app.ts" }); });
+  expect(unstagedRows().props.selectedId).toBe("src/app.ts");
+  await act(async () => { renderer.root.findAllByType(TextInput)[0]!.props.onChangeText("Draft summary"); });
+
+  // Toolbar segment → History; select a commit.
+  await act(async () => { listener({ type: "toolbarSelectionChanged", windowId: "main", itemId: "section", value: "history" }); });
+  expect(navigation().props.selectedId).toBe("history");
+  expect(toolbarItem("section").value).toBe("history");
+  expect(toolbarItem("search").disabled).toBe(true);
+  // A section switch updates only the toolbar; the title bar options went once, at mount.
+  expect(jest.mocked(setWindowOptions).mock.calls.at(-1)![1]).toEqual({ macos: { toolbar: expect.anything() } });
+  expect(jest.mocked(setWindowOptions).mock.calls.filter(call => call[1].macos?.titleBar)).toHaveLength(1);
+  const list = renderer.root.findByType("LegendList" as any);
+  let row!: ReactTestRenderer;
+  await act(async () => { row = create(list.props.renderItem({ item: commits[0] })); });
+  await act(async () => { row.root.findByProps({ accessibilityRole: "button" }).props.onPress({ nativeEvent: {} }); });
+  expect(renderer.root.findAllByProps({ children: "Copy SHA" }).length).toBeGreaterThan(0);
+  // Search is History's later; its events don't filter the hidden Changes lists.
+  await act(async () => { listener({ type: "toolbarSearchChanged", windowId: "main", itemId: "search", value: "zzz", shiftKey: false }); });
+  // A Changes error still shows while History is in front.
+  git.status.mockRejectedValueOnce(new Error("status failed"));
+  await act(async () => { listener({ type: "toolbarAction", windowId: "main", itemId: "refresh" }); });
+  const visible = (node: any): boolean => !node || (![node.props?.style].flat(Infinity).some((style: any) => style?.display === "none") && visible(node.parent));
+  expect(renderer.root.findAllByProps({ accessibilityRole: "alert" }).filter(visible).map(node => node.props.children)).toContain("status failed");
+
+  // ⌘1 → Changes keeps the file; sidebar → History keeps the commit.
+  await act(async () => { lastMenu().onAction({ itemId: "show-changes" }); });
+  expect(navigation().props.selectedId).toBe("changes");
+  expect(toolbarItem("section").value).toBe("changes");
+  expect(unstagedRows().props.selectedId).toBe("src/app.ts");
+  expect(renderer.root.findAllByType(TextInput)[0]!.props.value).toBe("Draft summary");
+  await act(async () => { navigation().props.onSelectionChange({ id: "history" }); });
+  expect(renderer.root.findByType("LegendList" as any).props.extraData.selectedOid).toBe(head);
+  expect(menuItem("copy-sha")).toMatchObject({ disabled: false });
+  // The hidden composer can't commit from History.
+  expect(menuItem("commit")).toMatchObject({ disabled: true });
+  await act(async () => { lastMenu().onAction({ itemId: "show-changes" }); });
+  expect(menuItem("commit")).toMatchObject({ disabled: false });
+
+  // The toolbar search filters the file lists by name; the selected file stays listed.
+  const ids = () => unstagedRows().findAllByType("SidebarItem" as any).map(node => node.props.id);
+  expect(ids()).toEqual(["src/app.ts", "README.md", "notes.txt"]);
+  await act(async () => { listener({ type: "toolbarSearchChanged", windowId: "main", itemId: "search", value: "READ", shiftKey: false }); });
+  expect(ids()).toEqual(["src/app.ts", "README.md"]);
+  await act(async () => { listener({ type: "toolbarSearchChanged", windowId: "main", itemId: "search", value: "", shiftKey: false }); });
+  expect(ids()).toHaveLength(3);
+  await act(async () => { renderer.unmount(); });
+});
+
+it("computes each command's enabled state once for the menu bar, toolbar and context menus", async () => {
+  jest.clearAllMocks();
+  jest.mocked(watchDirectories).mockReturnValue({ remove: jest.fn() });
+  let renderer!: ReactTestRenderer;
+  await act(async () => { renderer = create(<App />); });
+  const listener = jest.mocked(addMacOSWindowListener).mock.calls[0][1];
+  const menuItem = (id: string) => lastMenu().items.flatMap(entry => entry.items ?? []).find(entry => entry.id === id);
+  const toolbarItem = (id: string) => (jest.mocked(setWindowOptions).mock.calls.at(-1)![1].macos!.toolbar!.items! as any[]).find(entry => entry.id === id);
+
+  // Without a repository, commands that need one are disabled everywhere and do nothing when sent anyway.
+  for (const id of ["show-changes", "show-history", "refresh", "copy-sha", "open-github", "commit", "restore-discard"]) expect(menuItem(id)).toMatchObject({ disabled: true });
+  expect(menuItem("toggle-sidebar")).toBeUndefined();
+  expect(toolbarItem("toggle-sidebar")).toMatchObject({ label: "Hide Sidebar", disabled: false });
+  await act(async () => { lastMenu().onAction({ itemId: "show-history" }); listener({ type: "toolbarAction", windowId: "main", itemId: "refresh" }); });
+  expect(renderer.root.findAllByType(Sidebar)[0]!.props.selectedId).toBeNull();
+  await act(async () => { listener({ type: "toolbarAction", windowId: "main", itemId: "toggle-sidebar" }); });
+  expect(toolbarItem("toggle-sidebar")).toMatchObject({ label: "Show Sidebar" });
+
+  // With a repository, the toolbar Refresh and the menu's Refresh agree and run the same command.
+  const git = { resolveRoot: jest.fn(async () => "/repo"), watchLocations: jest.fn(async () => ({ root: "/repo", gitDir: "/repo/.git", commonDir: "/repo/.git", ignoredPaths: [] })),
+    status: jest.fn(async () => ({ branch: { oid: "abc", head: "(detached)", upstream: null, ahead: 0, behind: 0 }, entries: [] })), lastDiscard: jest.fn(async () => null), repoState: jest.fn(async () => ({ merging: false })) };
+  jest.mocked(getGitService).mockReturnValue(git as unknown as GitService);
+  jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
+  await act(async () => { openRepository(); });
+  expect(toolbarItem("branch").label).toBe("abc (detached)");
+  expect(menuItem("refresh")).toMatchObject({ shortcut: "Cmd+r", disabled: false });
+  expect(toolbarItem("refresh").disabled).toBe(false);
+  const reads = git.status.mock.calls.length;
+  await act(async () => { listener({ type: "toolbarAction", windowId: "main", itemId: "refresh" }); });
+  await act(async () => { lastMenu().onAction({ itemId: "refresh" }); });
+  expect(git.status.mock.calls.length).toBe(reads + 2);
+  // The branch menu's placeholders do nothing yet.
+  await act(async () => { listener({ type: "toolbarMenuAction", windowId: "main", itemId: "branch", action: { type: "action", itemId: "switch-branch" } as any }); });
+  // Commit-only commands stay disabled in Changes, whatever the menu, toolbar or context menu.
+  expect(menuItem("copy-sha")).toMatchObject({ disabled: true });
+  expect(menuItem("open-github")).toMatchObject({ disabled: true });
+  await act(async () => { renderer.unmount(); });
 });
