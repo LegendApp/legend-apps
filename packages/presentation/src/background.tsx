@@ -1,5 +1,5 @@
 import { useSharedValue, withTiming, type SharedValue } from "react-native-reanimated";
-import { Fragment, createContext, useCallback, useContext, useId, useLayoutEffect, useState, type ReactNode, type ComponentType } from "react";
+import { Children, Fragment, createContext, isValidElement, useCallback, useContext, useEffect, useId, useLayoutEffect, useState, type ReactNode, type ComponentType } from "react";
 import { StyleSheet, View } from "react-native";
 import { useValue } from "@legendapp/state/react";
 import type { Observable } from "@legendapp/state";
@@ -31,7 +31,21 @@ export function Background({ children, priority = 0, intensityMultiplier = 1, ma
     register?.(id, { children, runtime$, priority, intensityMultiplier, maxIntensity });
     return () => register?.(id, undefined);
   }, [register, id, children, runtime$, priority, intensityMultiplier, maxIntensity]);
+  useEffect(() => {
+    if (!register || !runtime$.isPreparing.peek()) return;
+    const idle = requestIdleCallback(() => prepareBackground(children));
+    return () => cancelIdleCallback(idle);
+  }, [register, children, runtime$]);
   return null;
+}
+
+/** Element types may define `prepareBackground(props)` to warm caches while their slide is prepared offscreen. */
+function prepareBackground(children: ReactNode) {
+  Children.forEach(children, child => {
+    if (!isValidElement<{ children?: ReactNode }>(child)) return;
+    if (child.type === Fragment) prepareBackground(child.props.children);
+    else (child.type as { prepareBackground?: (props: unknown) => void }).prepareBackground?.(child.props);
+  });
 }
 
 export function useBackgroundIntensity() { return useContext(IntensityContext); }

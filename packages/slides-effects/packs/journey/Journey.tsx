@@ -99,11 +99,16 @@ export function Environment(_: EnvironmentOptions) { return null; }
 export type { EnvironmentOptions, FloorSurface, KeyLightOptions } from "./lighting";
 
 const poses = new Map<string, SharedValue<CameraPose | null>>();
+// Sampled scenes are read-only on UI, so every surface of one prepared scene shares a single UI copy.
 const scenes = new WeakMap<PreparedJourneyScene, SharedValue<JourneySampleScene>>();
 function sharedScene(prepared: PreparedJourneyScene) {
   let scene = scenes.get(prepared);
   if (!scene) { scene = makeMutable(prepareJourneySample(prepared)); scenes.set(prepared, scene); }
   return scene;
+}
+function unpackScene(scene: SharedValue<JourneySampleScene>) {
+  "worklet";
+  void scene.value;
 }
 function retainedPose(id: string) {
   let pose = poses.get(id);
@@ -169,6 +174,13 @@ export function Journey(props: JourneyProps) {
   const surface = <JourneySurface key={props.id ?? "journey"} {...props} />;
   return background && props.clock !== "global" ? <JourneySlideClock>{surface}</JourneySlideClock> : surface;
 }
+/** Bakes a prepared slide's scene in idle time, so activation reuses its content and UI scene. */
+Journey.prepareBackground = (props: JourneyProps) => {
+  if (props.scenePlan) return;
+  const { prepared } = declaredContent(props);
+  // Track surfaces sample a retained scene that depends on the previous slide.
+  if (!props.track) runOnUI(unpackScene)(sharedScene(prepared));
+};
 function JourneySlideClock({ children }: { children: ReactNode }) {
   const sourceRuntime$ = usePresentation$();
   const ready = useBackgroundReady();
@@ -180,14 +192,31 @@ function JourneySlideClock({ children }: { children: ReactNode }) {
   return <PresentationObservableProvider value={runtime$}>{children}</PresentationObservableProvider>;
 }
 type JourneyContent = { prepared: PreparedJourneyScene; overlay: ReactNode[] };
-const journeyContents = new WeakMap<object, { options: unknown[]; content: JourneyContent }>();
+type CachedContent = { children: ReactNode; options: unknown[]; content: JourneyContent };
+const journeyContents = new WeakMap<object, CachedContent>();
+// Slides re-create their declaration elements when they activate; equal declarations reuse the prepared scene.
+const recentContents: CachedContent[] = [];
+const recentContentLimit = 16;
+function sameDeclaration(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true;
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
+  if (Array.isArray(a)) return Array.isArray(b) && a.length === b.length && a.every((value, i) => sameDeclaration(value, b[i]));
+  if (isValidElement(a)) return isValidElement(b) && a.type === b.type && a.key === b.key && sameDeclaration(a.props, b.props);
+  if (Object.getPrototypeOf(a) !== Object.prototype || Object.getPrototypeOf(b) !== Object.prototype) return false;
+  const keys = Object.keys(a);
+  return keys.length === Object.keys(b).length && keys.every(key => Object.prototype.hasOwnProperty.call(b, key) && sameDeclaration((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]));
+}
 function journeyContent(children: ReactNode, quality: JourneyScene["quality"], msaaSamples: JourneyScene["msaaSamples"], exposure: Animated<number>, backgroundColor: string, scrim: boolean | number, postOrder: JourneyScene["postOrder"], toneMapping: JourneyScene["toneMapping"], outputColorSpace: JourneyScene["outputColorSpace"], emissiveScale: Animated<number>,
   look?: JourneyProps["look"], keyframeDuration?: number): JourneyContent {
   // Prepared scene declarations are shared by presenter, audience and neighbor surfaces.
   const key = children !== null && typeof children === "object" ? children : undefined;
   const options = [quality, msaaSamples, exposure, backgroundColor, scrim, postOrder, toneMapping, outputColorSpace, emissiveScale, look, keyframeDuration];
-  const cached = key && journeyContents.get(key);
-  if (cached && options.every((value, i) => Object.is(value, cached.options[i]))) return cached.content;
+  let cached = key && journeyContents.get(key);
+  if (key && !(cached && sameDeclaration(options, cached.options))) {
+    cached = recentContents.find(entry => sameDeclaration(options, entry.options) && sameDeclaration(children, entry.children));
+    if (cached) journeyContents.set(key, cached);
+  }
+  if (cached) return cached.content;
   const scene: JourneyScene = { instances: [], stages: [], materials: {}, lights: [], passes: [], effects: [], quality, msaaSamples, exposure, backgroundColor, postOrder, toneMapping: toneMapping ?? (look === "cartoon" ? "neutral" : undefined), outputColorSpace, emissiveScale,
     look, keyframeDuration, scrim: typeof scrim === "number" ? scrim : scrim ? 0.4 : 0 };
   const overlay: ReactNode[] = [];
@@ -254,16 +283,23 @@ function journeyContent(children: ReactNode, quality: JourneyScene["quality"], m
   }
   collect(children);
   const content = { prepared: prepareJourneyScene(scene), overlay };
-  if (key) journeyContents.set(key, { options, content });
+  if (key) {
+    const entry = { children, options, content };
+    journeyContents.set(key, entry);
+    if (recentContents.unshift(entry) > recentContentLimit) recentContents.pop();
+  }
   return content;
+}
+function declaredContent(props: JourneyProps) {
+  return journeyContent(props.children, props.quality ?? "auto", props.msaaSamples, props.exposure ?? 1,
+    props.backgroundColor ?? "#05060a", props.scrim ?? false, props.postOrder, props.toneMapping, props.outputColorSpace, props.emissiveScale ?? 1, props.look, keyframeSeconds(props));
 }
 function keyframeSeconds({ keyframeDuration, track }: JourneyProps) {
   return keyframeDuration === "flight" ? track?.duration ?? 1.7 : keyframeDuration;
 }
 /** Bake declarations and one compatible GPU layout before navigation starts. */
 export function prepareJourneyStops(slides: JourneyProps[]): JourneyProps[] {
-  const contents = slides.map(props => journeyContent(props.children, props.quality ?? "auto", props.msaaSamples, props.exposure ?? 1,
-    props.backgroundColor ?? "#05060a", props.scrim ?? false, props.postOrder, props.toneMapping, props.outputColorSpace, props.emissiveScale ?? 1, props.look, keyframeSeconds(props)));
+  const contents = slides.map(declaredContent);
   const pools = prepareJourneyPlans(contents.map(content => content.prepared));
   return slides.map((props, i) => ({ ...props, scenePlan: { content: contents[i], pool: props.track?.frame === "world" ? undefined : pools.get(contents[i].prepared) } }));
 }
@@ -337,9 +373,9 @@ function JourneySceneRuntime({ width, height, background = false, quality = "aut
   if (track?.advance && [track, ...track.course ?? []].some(leg => leg?.turn)) throw new Error("Journey track turns need the default advance direction");
   // Each pipeline generation retains its own uniform SharedValue until UI retirement.
   const graph = useMemo(() => buildJourneyGraph(JSON.parse(topology)), [topology]);
-  // Planned station scenes are immutable; each surface keeps its own sampled output and track state.
-  const shareScene = !!pool && !!track;
-  const scene = useMemo(() => shareScene ? sharedScene(prepared) : makeMutable({ ...prepareJourneySample(prepared) }), [prepared, shareScene]);
+  // Prepared scenes are immutable; each surface keeps its own sampled output and track state.
+  const scene = useMemo(() => sharedScene(prepared), [prepared]);
+  const uniformCache = useSharedValue(0);
   const ids = useMemo(() => pool ? journeyPlanIds(retained, pool) : trackIds(prepared), [prepared, retained, pool]);
   const sampleIds = useMemo(() => trackIds(prepared), [prepared]);
   const copies = useMemo(() => pool ? journeyPlanCopies(prepared, pool) : [], [prepared, pool]);
@@ -408,7 +444,7 @@ function JourneySceneRuntime({ width, height, background = false, quality = "aut
     if (suspendedOnUI?.get() || !track || !input || input.state.phase !== "playing") return;
     const { state, scene, scale } = input;
     const clock = sampleClock(state, previewTime, clockMode, buildDuration, settledBack, catchUp.value, advanceDuration, stepOffset);
-    const sampled = sampleUniforms(scene, clock, null, 1, 1, true);
+    const sampled = sampleUniforms(scene, clock, null, 1, 1, uniformCache);
     const values = (pooled ? planSampler(sampled, copies, pooledOutput.value, lightOffset) : sampled) as number[];
     values[35] = scale;
     const previous = trackFrame.value;
@@ -436,7 +472,7 @@ function JourneySceneRuntime({ width, height, background = false, quality = "aut
     let values: number[] | Float32Array<ArrayBuffer>;
     if (track) {
       if (state.phase === "preview" || state.phase === "preparing" || trackFrame.value.values.length === 0) {
-        const sampled = sampleUniforms(scene.value, clock, null, 1, 1, true);
+        const sampled = sampleUniforms(scene.value, clock, null, 1, 1, uniformCache);
         const planned = pooled ? planSampler(sampled, copies, pooledOutput.value, lightOffset) : sampled;
         const previous = preparing ? { ...trackFrame.value, output: undefined, retired: { ...trackFrame.value.retired } } : createTrackFrame();
         values = trackSampler(previous, (preparing ? Float32Array.from(planned) : planned) as number[], ids, sampleState, track, declared, { scene: scene.value, clock, ids: sampleIds }).values;
@@ -444,7 +480,7 @@ function JourneySceneRuntime({ width, height, background = false, quality = "aut
     } else {
       const previous = state.phase === "preview" ? null
         : origin.value.key === state.slideKey ? origin.value.pose : state.phase === "playing" || preparing ? entryPose?.value : null;
-      values = sampleUniforms(scene.value, clock, previous, enterDuration, effectiveScale.value, true);
+      values = sampleUniforms(scene.value, clock, previous, enterDuration, effectiveScale.value, uniformCache);
     }
     return pooled && !track ? planSampler(values, copies, pooledOutput.value, lightOffset) : values;
   });

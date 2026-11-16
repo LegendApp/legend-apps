@@ -3,7 +3,7 @@ import { expect, spyOn, test } from "bun:test";
 import { observable } from "@legendapp/state";
 import React, { useEffect } from "react";
 import { act, create } from "react-test-renderer";
-import "./nativeMock";
+import { flushIdleCallbacks } from "./nativeMock";
 import { Background, BackgroundHost, useBackgroundSize } from "../../../../packages/presentation/src/background";
 import { PresentationObservableProvider, PresentationProvider, usePresentation } from "../../../../packages/presentation/src/runtime";
 
@@ -108,4 +108,27 @@ test("background GPU readiness propagates to a containing surface boundary", asy
     await act(()=>tree.update(content(false)));
     expect(ready).toBe(1);
   } finally { await act(()=>tree?.unmount()); }
+});
+
+test("prepared slides warm their background content in idle time", async () => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  const warmed = [];
+  function Scene() { return <scene />; }
+  Scene.prepareBackground = props => warmed.push(props.slide);
+  const runtimes = [observable(runtime(0)), observable(runtime(1, true))];
+  let tree;
+  try {
+    await act(() => {
+      tree = create(<BackgroundHost slideIndex={0} color="#123">
+        {runtimes.map((value, slide) => <PresentationProvider key={slide} value={value}>
+          <Background><><Scene slide={slide} /></></Background>
+        </PresentationProvider>)}
+      </BackgroundHost>);
+    });
+    expect(warmed).toEqual([]);
+    await act(flushIdleCallbacks);
+    expect(warmed).toEqual([1]);
+  } finally {
+    if (tree) await act(() => tree.unmount());
+  }
 });
