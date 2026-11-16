@@ -4,7 +4,7 @@ import { PixelRatio, Platform, View } from "react-native";
 import { Canvas, type CanvasRef, type RNCanvasContext } from "react-native-webgpu";
 import { makeMutable, runOnJS, runOnUI, useAnimatedReaction, useFrameCallback, useSharedValue, type SharedValue } from "react-native-reanimated";
 import { PresentationCanvasScaleContext, useBackgroundIntensity, useBackgroundSize, usePresentationValue, usePlayback, samplePlayback, usePreparationTask, useSurfaceSuspension, type GPURenderGraphDefinition, type GPUShaderProps } from "@legend-apps/presentation";
-import { prepareRenderGraph, encodeRenderGraph, type RenderGraphResources } from "./gpuRenderGraph";
+import { prepareRenderGraph, encodeRenderGraph, type RenderGraphCache, type RenderGraphResources } from "./gpuRenderGraph";
 import { reportSlideError } from "./slidesStore";
 import { SurfaceStillContext, type SurfaceStillRequest } from "./SlideCaptureContext";
 
@@ -18,6 +18,8 @@ type Resources = {
   disposed: SharedValue<boolean>;
   configured: SharedValue<boolean>;
   device: GPUDevice;
+  // Buffers and textures this surface created; the shared device outlives it.
+  owned: { destroy(): void }[];
   context: RNCanvasContext;
   format: GPUTextureFormat;
   clock: GPUBuffer;
@@ -62,6 +64,8 @@ export function TypeGPUShader({ code, width: configuredWidth = 1696, height: con
   const [resources, setResources] = useState<Resources>();
   const [preparedResources, setPreparedResources] = useState<Resources>();
   const [error, setError] = useState<string>();
+  const [deviceEpoch, setDeviceEpoch] = useState(0);
+  const deviceLosses = useRef(0);
   usePreparationTask(supported && !error && (!resources || preparedResources !== resources));
   const slideIndex = usePresentationValue("slideIndex");
   const isPreview = usePresentationValue("isPreview");
@@ -77,8 +81,13 @@ export function TypeGPUShader({ code, width: configuredWidth = 1696, height: con
     if (!supported) return;
     return startShaderCanvas({ readable, canvas, surfaceContext, code, particles, particleCount, particleBlend, image, composite, width, height, displayScale, frameDataSize, renderGraph,
       reportError: caught => reportSlideError(caught, errorContext.current.slideIndex, errorContext.current.isPreview),
+      deviceLost: message => {
+        // The shared device is replaced on loss; a device that keeps failing surfaces the error.
+        if (++deviceLosses.current > 2) setError("WebGPU device lost: " + message);
+        else setDeviceEpoch(epoch => epoch + 1);
+      },
       setResources, setError });
-  }, [supported, code, particles, particleCount, particleBlend, image, composite, frameDataSize, renderGraph, readable]);
+  }, [supported, code, particles, particleCount, particleBlend, image, composite, frameDataSize, renderGraph, readable, deviceEpoch]);
   if (!supported) throw new Error("WebGPU is required to render this effect");
   if (error) throw new Error(error);
   return <>
@@ -108,8 +117,41 @@ function requestShaderDevice(adapter: GPUAdapter): Promise<GPUDevice> {
   });
 }
 
+type ErrorHandlers = ReturnType<typeof shaderErrorHandlers>;
+type SharedGPU = { device: GPUDevice; cache: RenderGraphCache; owners: Set<ErrorHandlers>; setup: Promise<void> };
+let sharedGPU: Promise<SharedGPU> | undefined;
+
+// Every surface shares one device, so a slide change neither waits for a new
+// device nor recompiles the pipelines an earlier slide already built. The device
+// lives for the app; surfaces destroy only what they created.
+function acquireSharedGPU() {
+  const acquiring: Promise<SharedGPU> = sharedGPU ??= (async () => {
+    const adapter = await navigator.gpu.requestAdapter();
+    if (!adapter) throw new Error("No WebGPU adapter");
+    const device = await requestShaderDevice(adapter);
+    const shared: SharedGPU = { device, cache: { modules: new Map(), pipelines: new Map() }, owners: new Set(), setup: Promise.resolve() };
+    // An uncaptured error cannot be traced to its surface, so every live owner hears it.
+    device.addEventListener("uncapturederror", event => { for (const owner of [...shared.owners]) owner.uncaptured(event); });
+    void device.lost.then(info => {
+      if (sharedGPU === acquiring) sharedGPU = undefined;
+      for (const owner of [...shared.owners]) owner.lost(info);
+    });
+    return shared;
+  })();
+  acquiring.catch(() => { if (sharedGPU === acquiring) sharedGPU = undefined; });
+  return acquiring;
+}
+
+// Error scopes are a per-device stack, so setups that validate with one take turns.
+function enterSetup(shared: SharedGPU) {
+  const previous = shared.setup;
+  let leave!: () => void;
+  shared.setup = new Promise<void>(resolve => { leave = resolve; });
+  return previous.then(() => leave);
+}
+
 // Native listeners are GC roots. Keep their scope separate from GPU resources and release their React owner on retirement.
-function shaderErrorHandlers(reporters: { setError(error: string | undefined): void; reportError(error: unknown): void } | undefined) {
+function shaderErrorHandlers(reporters: { setError(error: string | undefined): void; reportError(error: unknown): void; deviceLost?(message: string): void } | undefined) {
   return {
     uncaptured(event: GPUUncapturedErrorEvent) {
       event.preventDefault();
@@ -117,38 +159,43 @@ function shaderErrorHandlers(reporters: { setError(error: string | undefined): v
       if (current) { current.setError(event.error.message); current.reportError(event.error); }
     },
     lost(info: GPUDeviceLostInfo) {
-      if (reporters && info.reason !== "destroyed") reporters.setError("WebGPU device lost: " + info.message);
+      if (!reporters || info.reason === "destroyed") return;
+      if (reporters.deviceLost) reporters.deviceLost(info.message);
+      else reporters.setError("WebGPU device lost: " + info.message);
     },
     dispose() { reporters = undefined; },
   };
 }
 
 // Setup stays outside React compilation; the UI renderer owns transferred handles.
-function startShaderCanvas({ readable, canvas, surfaceContext, code, particles, particleCount, particleBlend = "additive", image, composite = false, width = 1696, height = 650, displayScale = 1, frameDataSize = 0, renderGraph, reportError, setResources, setError }: {
+function startShaderCanvas({ readable, canvas, surfaceContext, code, particles, particleCount, particleBlend = "additive", image, composite = false, width = 1696, height = 650, displayScale = 1, frameDataSize = 0, renderGraph, reportError, deviceLost, setResources, setError }: {
   readable: boolean; canvas: RefObject<CanvasRef | null>; surfaceContext(): RNCanvasContext | null; code: string; renderGraph?: GPURenderGraphDefinition;
   particles: boolean; particleCount: number; particleBlend?: "additive" | "over"; image?: string; composite?: boolean;
-  width?: number; height?: number; displayScale?: number; frameDataSize?: number; reportError(error: unknown): void;
+  width?: number; height?: number; displayScale?: number; frameDataSize?: number; reportError(error: unknown): void; deviceLost?(message: string): void;
   setResources(resources: Resources | undefined): void; setError(error: string | undefined): void;
 }) {
     setResources(undefined);
     setError(undefined);
-    const errorHandlers = shaderErrorHandlers({ setError, reportError });
+    const errorHandlers = shaderErrorHandlers({ setError, reportError, deviceLost });
     let cancelled = false;
+    let shared: SharedGPU | undefined;
     let device: GPUDevice | undefined;
-    // Once transferred, the UI renderer owns teardown after its last frame.
-    let transferred = false;
+    // Released here until transfer; afterwards the UI renderer owns teardown after its last frame.
+    const owned: { destroy(): void }[] = [];
+    const own = <T extends { destroy(): void }>(resource: T) => { owned.push(resource); return resource; };
     let release: (() => void) | undefined;
     let validationScope = false;
     async function setup() {
+      let leave: (() => void) | undefined;
       try {
-        const adapter = await navigator.gpu.requestAdapter();
-        if (!adapter) throw new Error("No WebGPU adapter");
-        device = await requestShaderDevice(adapter);
-        if (cancelled || !canvas.current) { device.destroy(); return; }
-        device.addEventListener("uncapturederror", errorHandlers.uncaptured);
+        shared = await acquireSharedGPU();
+        if (cancelled || !canvas.current) return;
+        shared.owners.add(errorHandlers);
+        device = shared.device;
+        leave = await enterSetup(shared);
+        if (cancelled) return;
         device.pushErrorScope("validation");
         validationScope = true;
-        void device.lost.then(errorHandlers.lost);
         const context = surfaceContext();
         if (!context) throw new Error("WebGPU surface unavailable");
         // The library sizes from view bounds in points (zero during preparation on web).
@@ -156,10 +203,13 @@ function startShaderCanvas({ readable, canvas, surfaceContext, code, particles, 
         resizeSurface(context.canvas, width, height, displayScale);
         const format = navigator.gpu.getPreferredCanvasFormat();
         if (renderGraph) {
-          const clock = device.createBuffer({ size: 32, usage: 64 | 8 });
-          const frameData = device.createBuffer({ size: Math.max(16, frameDataSize * 4), usage: 128 | 8 });
+          const clock = own(device.createBuffer({ size: 32, usage: 64 | 8 }));
+          const frameData = own(device.createBuffer({ size: Math.max(16, frameDataSize * 4), usage: 128 | 8 }));
           const gpu = device;
-          const graph = await prepareRenderGraph(gpu, renderGraph, format, clock, frameData, source => loadImageTexture(gpu, source));
+          const graph = await prepareRenderGraph(gpu, renderGraph, format, clock, frameData, source => loadImageTexture(gpu, source), shared.cache);
+          // Until the UI allocates targets, the graph's textures are its images; release them on a failed setup.
+          for (const id in graph.buffers) own(graph.buffers[id]);
+          for (const id in graph.textures) own(graph.textures[id]);
           await transfer({ device, context, format, clock, frameData, graph, states: [], groups: [] });
           return;
         }
@@ -171,11 +221,11 @@ function startShaderCanvas({ readable, canvas, surfaceContext, code, particles, 
         if (cancelled) throw new Error("GPU setup cancelled");
         let imageTexture: GPUTexture | undefined;
         if (image) {
-          imageTexture = await loadImageTexture(device, image);
+          imageTexture = own(await loadImageTexture(device, image));
           if (cancelled) throw new Error("GPU setup cancelled");
         }
         const sampler = imageTexture || composite ? device.createSampler({ minFilter: "linear", magFilter: "linear" }) : undefined;
-        const frameData = frameDataSize ? device.createBuffer({ size: frameDataSize * 4, usage: 128 | 8 }) : undefined;
+        const frameData = frameDataSize ? own(device.createBuffer({ size: frameDataSize * 4, usage: 128 | 8 })) : undefined;
         const simulates = /@compute\b/.test(code);
         const layout = device.createBindGroupLayout({ entries: [
           { binding: 0, visibility: 7, buffer: { type: "uniform" } },
@@ -190,8 +240,8 @@ function startShaderCanvas({ readable, canvas, surfaceContext, code, particles, 
           { binding: 0, visibility: 2, sampler: {} }, { binding: 1, visibility: 2, texture: {} },
         ] }) : undefined;
         const pipelineLayout = device.createPipelineLayout({ bindGroupLayouts: [layout] });
-        const clock = device.createBuffer({ size: 32, usage: 64 | 8 });
-        const states = simulates ? [0, 1].map(() => device!.createBuffer({ size: particleCount * 16, usage: 128 | 8 })) : [];
+        const clock = own(device.createBuffer({ size: 32, usage: 64 | 8 }));
+        const states = simulates ? [0, 1].map(() => own(device!.createBuffer({ size: particleCount * 16, usage: 128 | 8 }))) : [];
         const groups = (simulates ? [0, 1] : [0]).map(index => device!.createBindGroup({ layout, entries: [
           { binding: 0, resource: { buffer: clock } },
           ...(simulates ? [
@@ -214,7 +264,7 @@ function startShaderCanvas({ readable, canvas, surfaceContext, code, particles, 
         if (compositeLayout) {
           // Render at logical slide resolution; resizing the presentation camera
           // changes only the output surface, never this field's simulation.
-          const texture = device.createTexture({ size: [width, height], format: fieldFormat, usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING });
+          const texture = own(device.createTexture({ size: [width, height], format: fieldFormat, usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING }));
           const group = device.createBindGroup({ layout: compositeLayout, entries: [
             { binding: 0, resource: sampler! }, { binding: 1, resource: texture.createView() },
           ] });
@@ -230,15 +280,17 @@ function startShaderCanvas({ readable, canvas, surfaceContext, code, particles, 
           validationScope = false;
           await device?.popErrorScope().catch(() => {});
         }
-        device?.destroy();
+        for (const resource of owned.splice(0)) resource.destroy();
         if (!cancelled) { setError(caught instanceof Error ? caught.message : String(caught)); reportError(caught); }
+      } finally {
+        leave?.();
       }
     }
-    async function transfer(program: Omit<Resources, "alive" | "disposed" | "configured" | "id" | "graph"> & { graph?: RenderGraphResources }) {
+    async function transfer(program: Omit<Resources, "alive" | "disposed" | "configured" | "id" | "graph" | "owned"> & { graph?: RenderGraphResources }) {
       validationScope = false;
       const validationError = await program.device.popErrorScope();
       if (validationError) throw new Error(validationError.message);
-      if (cancelled) { program.device.destroy(); return; }
+      if (cancelled) { for (const resource of owned.splice(0)) resource.destroy(); return; }
       const alive = makeMutable(true), disposed = makeMutable(false), configured = makeMutable(false);
       // The guest decorator retains the initializer even after UI value changes.
       const graph = program.graph ? makeMutable<RenderGraphResources | undefined>(undefined) : undefined;
@@ -246,13 +298,14 @@ function startShaderCanvas({ readable, canvas, surfaceContext, code, particles, 
         "worklet";
         value.value = prepared;
       })(graph, program.graph!);
-      const device = program.device;
-      release = () => runOnUI(destroyGPU)(device, alive, disposed, graph);
-      transferred = true;
-      setResources({ ...program, readable, graph, alive, disposed, configured, id: ++nextGPUResourceId });
+      // The UI's copy of the graph releases its textures, images included.
+      const graphTextures = new Set<unknown>(Object.values(program.graph?.textures ?? {}));
+      const transferred = owned.splice(0).filter(resource => !graphTextures.has(resource));
+      release = () => runOnUI(destroyGPU)(transferred, alive, disposed, graph);
+      setResources({ ...program, owned: transferred, readable, graph, alive, disposed, configured, id: ++nextGPUResourceId });
     }
     void setup();
-    return () => { cancelled = true; errorHandlers.dispose(); if (release) release(); else if (!transferred) device?.destroy(); };
+    return () => { cancelled = true; errorHandlers.dispose(); shared?.owners.delete(errorHandlers); release?.(); };
 }
 
 function UIFrames({ resources: r, suspended = false, suspendedOnUI, still, renderScale, effectActive = true, maxTime, frameTimeIndex, displayScale = 1, width, height, aspect, brightness, particleCount, particleVertexCount = 6, clockMode = "step", frameData, previewTime, onError, onReady }: { resources: Resources; suspended?: boolean; suspendedOnUI?: SharedValue<boolean>; still: SurfaceStillRequest | null; renderScale?: SharedValue<number>; effectActive?: boolean; maxTime?:number; frameTimeIndex?:number; displayScale?:number; width: number; height: number; aspect: number; brightness: number; particleCount: number; particleVertexCount?: number; clockMode?: "slide" | "step"; frameData?: GPUShaderProps["frameData"]; previewTime: number; onError(message: string): void; onReady(): void }) {
@@ -349,10 +402,11 @@ function UIFrames({ resources: r, suspended = false, suspendedOnUI, still, rende
     }, STILL_SETTLE_MS);
     return () => { cancelled = true; clearTimeout(timer); };
   }, [still, stillId, suspended]);
+  const { owned } = r;
   useEffect(() => () => {
     // Queue destruction behind the final UI frame, never race a submitted callback.
-    runOnUI(destroyGPU)(device, alive, disposed, graph);
-  }, [alive, disposed, device, graph]);
+    runOnUI(destroyGPU)(owned, alive, disposed, graph);
+  }, [alive, disposed, owned, graph]);
   return null;
 }
 
@@ -378,13 +432,16 @@ function scratch(length: number) {
   return arrays[length] ??= new Float32Array(length);
 }
 
-function destroyGPU(device: GPUDevice, alive: SharedValue<boolean>, disposed: SharedValue<boolean>, graph?: SharedValue<RenderGraphResources | undefined>) {
+function destroyGPU(owned: { destroy(): void }[], alive: SharedValue<boolean>, disposed: SharedValue<boolean>, graph?: SharedValue<RenderGraphResources | undefined>) {
   "worklet";
   alive.value = false;
   if (!disposed.value) {
     disposed.value = true;
+    // Render targets are allocated on the UI runtime, so only its copy of the graph holds them.
+    const textures = graph?.value?.textures;
     if (graph) graph.value = undefined;
-    device.destroy();
+    if (textures) for (const id in textures) textures[id].destroy();
+    for (const resource of owned) resource.destroy();
   }
 }
 

@@ -20,9 +20,9 @@ async function setup(validationError, cancelDuringValidation = false) {
     addEventListener: () => calls.push("listener"), pushErrorScope: () => calls.push("scope"),
     popErrorScope: () => { calls.push("pop"); return new Promise(resolve => { resolveScope = resolve; }); },
     createShaderModule: () => ({ getCompilationInfo: async () => ({ messages: [] }) }),
-    createBindGroupLayout: () => ({}), createPipelineLayout: () => ({}), createBuffer: () => ({}), createBindGroup: () => ({}),
+    createBindGroupLayout: () => ({}), createPipelineLayout: () => ({}), createBuffer: () => ({ destroy: () => { calls.push("destroy"); done(); } }), createBindGroup: () => ({}),
     createComputePipeline: () => { calls.push("pipeline"); return {}; }, createRenderPipeline: () => { calls.push("pipeline"); return {}; },
-    destroy: () => { calls.push("destroy"); done(); },
+    destroy: () => calls.push("destroy-device"),
   };
   const mocks = { react: {}, "react-native": { Platform: { OS: "macos" }, PixelRatio: { get: () => 2 } }, "@shopify/react-native-skia": {}, "react-native-webgpu": {}, "@legend-apps/presentation": {}, "./slidesStore": {},
     "react-native-reanimated": { makeMutable: value => ({ value }), runOnUI: fn => fn } };
@@ -35,9 +35,9 @@ async function setup(validationError, cancelDuringValidation = false) {
     setResources: value => { resources.push(value); if (value) done(); }, setError: value => { if (value) errors.push(value); }, reportError: error => reports.push(error.message),
   });
   while (!resolveScope) await Promise.resolve();
+  expect(calls).toContain("listener");
   // The rendering context's drawable is sized in device pixels, not the view's points.
   expect(context.canvas).toEqual({ width: 200, height: 200 });
-  expect(calls.indexOf("listener")).toBeLessThan(calls.indexOf("pipeline"));
   expect(calls.indexOf("scope")).toBeLessThan(calls.indexOf("pipeline"));
   expect(resources).toEqual([undefined]);
   if (cancelDuringValidation) stop();
@@ -45,6 +45,8 @@ async function setup(validationError, cancelDuringValidation = false) {
   await finished;
   // Let the setup continuation finish even if cancellation destroyed the device first.
   await Promise.resolve(); await Promise.resolve();
+  // The device is shared by every surface; a surface releases only what it created.
+  expect(calls).not.toContain("destroy-device");
   return { calls, resources, errors, reports, stop };
 }
 
@@ -66,52 +68,60 @@ test("valid resources transfer only after validation and cancelled setup never t
 
 test.each(["web", "macos"])("canvas device handoff waits for deferred frame retirement on %s", async platform => {
   const deferred = () => { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; };
-  const ui = [], pendingDevices = [], events = [], errors = [];
-  let effects = [], callback, owner;
+  const ui = [], scopes = [], events = [], errors = [];
+  let effects = [], callback, configured = 0, creating, ownedGraph;
   const context = {
     canvas: { width: 100, height: 100 },
-    configure: ({ device }) => { owner = device; events.push(["configure", device.id]); },
+    configure: () => { events.push(["configure", ++configured]); },
     getCurrentTexture: () => {
-      if (!owner) throw new Error("Texture requested before configuration");
-      return { width: 100, height: 100, createView: () => ({ device: owner }) };
+      if (!configured) throw new Error("Texture requested before configuration");
+      return { width: 100, height: 100, createView: () => ({}) };
     },
     present() {},
+  };
+  // One device serves every surface; buffers and pipelines record the surface that created them.
+  let devices = 0;
+  const device = { lost: new Promise(() => {}), addEventListener() {}, pushErrorScope() {},
+    popErrorScope: () => { const scope = scopes.shift(); scope.ready.resolve(); return scope.validation.promise; },
+    destroy: () => events.push(["destroy-device"]),
+    createBuffer: () => { const owner = creating; return { destroy: () => { if (ownedGraph[owner]) expect(ownedGraph[owner].value).toBeUndefined(); events.push(["destroy", owner]); } }; },
+    // Graph images are per-surface: released once with their surface, never with the device.
+    createTexture: () => { const owner = creating; return { width: 1, height: 1, createView: () => ({}), destroy: () => events.push(["destroy-image", owner]) }; },
+    createSampler: () => ({}), createBindGroupLayout: () => ({}), createPipelineLayout: () => ({}), createBindGroup: () => ({}),
+    createShaderModule: () => ({ getCompilationInfo: async () => ({ messages: [] }) }), createRenderPipelineAsync: async () => ({ owner: creating }),
+    queue: { writeBuffer() {}, writeTexture() {}, submit() {} },
+    createCommandEncoder: () => ({ finish() {}, beginRenderPass: () => {
+      let pipeline;
+      return { setPipeline: value => { pipeline = value; }, setBindGroup() {}, draw: () => events.push(["draw", pipeline.owner]), end() {} };
+    } }),
   };
   const mutable = value => ({ value, set(next) { this.value = next; } });
   const playback = { value: { phase: "playing", slideKey: "slide", stepKey: "step", stepIndex: 0 } };
   const mocks = {
     react: { useEffect: effect => effects.push(effect) },
     "react-native": { Platform: { OS: platform }, PixelRatio: { get: () => 1 } },
-    "@shopify/react-native-skia": {}, "react-native-webgpu": {}, "./slidesStore": {},
+    "@shopify/react-native-skia": { ColorType: {}, AlphaType: {}, Skia: { Data: { fromURI: async () => ({ dispose() {} }) },
+      Image: { MakeImageFromEncoded: () => ({ width: () => 1, height: () => 1, readPixels: () => new Uint8Array(4), dispose() {} }) } } },
+    "react-native-webgpu": {}, "./slidesStore": {},
     "@legend-apps/presentation": { usePresentationValue: field => field === "isActive", usePlayback: () => playback, samplePlayback: () => 0 },
     "./gpuRenderGraph": { prepareRenderGraph, encodeRenderGraph },
     "react-native-reanimated": { makeMutable: mutable, useSharedValue: mutable, useAnimatedReaction() {},
       useFrameCallback: fn => { callback = fn; return { setActive() {} }; }, runOnJS: fn => fn,
       runOnUI: fn => (...args) => ui.push(() => fn(...args)) },
   };
-  const { startShaderCanvas, UIFrames } = new Function("require", "exports", "navigator", code + "\nreturn { startShaderCanvas, UIFrames };")(
-    name => mocks[name] ?? require(name), {}, { gpu: { requestAdapter: async () => ({ requestDevice: async () => pendingDevices.shift() }), getPreferredCanvasFormat: () => "bgra8unorm" } },
+  const { startShaderCanvas, UIFrames } = new Function("require", "exports", "navigator", "GPUTextureUsage", code + "\nreturn { startShaderCanvas, UIFrames };")(
+    name => mocks[name] ?? require(name), {}, { gpu: { requestAdapter: async () => ({ requestDevice: async () => { devices++; return device; } }), getPreferredCanvasFormat: () => "bgra8unorm" } },
+    { TEXTURE_BINDING: 4, COPY_DST: 2 },
   );
+  ownedGraph = {};
   const flushUI = () => { while (ui.length) ui.shift()(); };
   const begin = async id => {
     const ready = deferred(), validation = deferred(), transferred = deferred(), resources = [];
-    let ownedGraph;
-    const device = { id, lost: new Promise(() => {}), addEventListener() {}, pushErrorScope() {},
-      popErrorScope: () => { ready.resolve(); return validation.promise; }, destroy: () => { if (ownedGraph) expect(ownedGraph.value).toBeUndefined(); events.push(["destroy", id]); },
-      createBuffer: () => ({}), createSampler: () => ({}), createBindGroupLayout: () => ({}), createPipelineLayout: () => ({}), createBindGroup: () => ({}),
-      createShaderModule: () => ({ getCompilationInfo: async () => ({ messages: [] }) }), createRenderPipelineAsync: async () => ({}),
-      queue: { writeBuffer() {}, submit() {} },
-      createCommandEncoder: () => ({ finish() {}, beginRenderPass: descriptor => {
-        const view = descriptor.colorAttachments[0].view;
-        if (view.device !== device) throw new Error(`Device ${id} received a texture from device ${view.device.id}`);
-        events.push(["draw", id]);
-        return { setPipeline() {}, setBindGroup() {}, draw() {}, end() {} };
-      } }),
-    };
-    pendingDevices.push(device);
+    scopes.push({ ready, validation });
+    creating = id;
     const stop = startShaderCanvas({ canvas: { current: {} }, surfaceContext: () => context, code: "", particles: false, particleCount: 1,
-      renderGraph: { targets: [], passes: [{ kind: "fullscreen", id: `screen-${id}`, code: "", fragment: "main", output: "screen" }] },
-      setResources: value => { resources.push(value); if (value) { ownedGraph = value.graph; transferred.resolve(value); } }, setError: error => { if (error) errors.push(error); }, reportError: error => errors.push(String(error)) });
+      renderGraph: { targets: [], ...(platform === "macos" ? { images: [{ id: "map", source: "file:///map.png" }] } : {}), passes: [{ kind: "fullscreen", id: `screen-${id}`, code: `// surface ${id}`, fragment: "main", output: "screen" }] },
+      setResources: value => { resources.push(value); if (value) { ownedGraph[id] = value.graph; transferred.resolve(value); } }, setError: error => { if (error) errors.push(error); }, reportError: error => errors.push(String(error)) });
     await ready.promise;
     return { stop, validation, transferred, resources };
   };
@@ -159,8 +169,13 @@ test.each(["web", "macos"])("canvas device handoff waits for deferred frame reti
   newFrames.tick();
   expect(errors).toEqual([]);
   replacement.stop(); newFrames.stop(); flushUI();
-  expect(events.filter(event => event[0] === "destroy" && event[1] === 1)).toHaveLength(1);
-  expect(events.filter(event => event[0] === "destroy" && event[1] === 2)).toHaveLength(1);
+  // Each surface frees its clock and frame-data buffers exactly once; the shared device is requested once and never destroyed.
+  expect(events.filter(event => event[0] === "destroy" && event[1] === 1)).toHaveLength(2);
+  expect(events.filter(event => event[0] === "destroy" && event[1] === 2)).toHaveLength(2);
+  expect(events.filter(event => event[0] === "destroy" && event[1] === 3)).toHaveLength(2);
+  expect(events).not.toContainEqual(["destroy-device"]);
+  for (const owner of [1, 2, 3]) expect(events.filter(event => event[0] === "destroy-image" && event[1] === owner)).toHaveLength(platform === "macos" ? 1 : 0);
+  expect(devices).toBe(1);
 });
 
 
@@ -181,7 +196,7 @@ test("retired native error listeners do not retain their canvas program", async 
       pushErrorScope() {}, popErrorScope: async () => null,
       createShaderModule: () => ({ getCompilationInfo: async () => ({ messages: [] }) }),
       createBindGroupLayout: () => ({}), createPipelineLayout: () => ({}), createBindGroup: () => ({}),
-      createBuffer: () => { const value = {}; clock = new WeakRef(value); return value; },
+      createBuffer: () => { const value = { destroy() {} }; clock = new WeakRef(value); return value; },
       createRenderPipeline: () => ({}), destroy() {},
     };
     let stop = start({ canvas: { current: {} }, surfaceContext: () => ({ canvas: { width: 100, height: 100 } }),
@@ -222,4 +237,39 @@ test("GPU errors reach only the current canvas owner", () => {
   const retiring = create({ setError: () => retiring.dispose(), reportError: value => reports.push(value) });
   retiring.uncaptured(event);
   expect(reports).toEqual([error, error]);
+});
+
+test("a lost shared device notifies live surfaces and the next setup requests a replacement", async () => {
+  const devices = [], lost = [];
+  const makeDevice = () => {
+    let lose;
+    const device = { lost: new Promise(resolve => { lose = resolve; }), addEventListener() {}, pushErrorScope() {}, popErrorScope: async () => null,
+      createShaderModule: () => ({ getCompilationInfo: async () => ({ messages: [] }) }),
+      createBindGroupLayout: () => ({}), createPipelineLayout: () => ({}), createBindGroup: () => ({}), createBuffer: () => ({ destroy() {} }),
+      createRenderPipeline: () => ({}), destroy() {} };
+    devices.push({ device, lose });
+    return device;
+  };
+  const mocks = { react: {}, "react-native": { Platform: { OS: "macos" }, PixelRatio: { get: () => 1 } }, "@shopify/react-native-skia": {}, "react-native-webgpu": {}, "@legend-apps/presentation": {}, "./slidesStore": {},
+    "react-native-reanimated": { makeMutable: value => ({ value }), runOnUI: fn => fn } };
+  const start = new Function("require", "exports", "navigator", code + "\nreturn startShaderCanvas;")(
+    name => mocks[name] ?? require(name), {}, { gpu: { requestAdapter: async () => ({ requestDevice: async () => makeDevice() }), getPreferredCanvasFormat: () => "bgra8unorm" } },
+  );
+  const mount = () => new Promise((resolve, reject) => {
+    const stop = start({ canvas: { current: {} }, surfaceContext: () => ({ canvas: { width: 10, height: 10 } }), code: "shader", particles: false, particleCount: 0,
+      setResources: value => { if (value) resolve({ stop, resources: value }); }, setError: error => { if (error) reject(new Error(error)); }, reportError: reject,
+      deviceLost: message => lost.push(message) });
+  });
+  const first = await mount(), second = await mount();
+  expect(devices).toHaveLength(1);
+  expect(second.resources.device).toBe(first.resources.device);
+  second.stop();
+  devices[0].lose({ reason: "unknown", message: "driver reset" });
+  await Promise.resolve(); await Promise.resolve();
+  // Only the live surface hears the loss; it remounts on a new device.
+  expect(lost).toEqual(["driver reset"]);
+  const replacement = await mount();
+  expect(devices).toHaveLength(2);
+  expect(replacement.resources.device).toBe(devices[1].device);
+  first.stop(); replacement.stop();
 });
