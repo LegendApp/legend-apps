@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import { floorMarkingsCode, tunnelInstances } from "../packs/world/lighting";
 import { buildWorldGraph, worldGraphTopology } from "../packs/world/render";
 import { orbInstances, prepareWorldScene, primitive, sampleWorldUniforms, type WorldScene } from "../packs/world/scene";
 
@@ -40,24 +39,7 @@ test("key light and environment animate through uniforms without changing topolo
   expect(buildWorldGraph(a).passes.find(pass => pass.id === "scene-box")!.code).toContain("environmentLight(normal");
 });
 
-test("floor markings compile into the floor pass", () => {
-  const graph = buildWorldGraph(scene({ floor: { grid: { spacing: 2 }, lines: [{ x: 9, width: 0.1 }, { x: 3, dash: 1.5 }], kerbs: [{ x: 9.2 }] } }));
-  const floor = graph.passes.find(pass => pass.id === "floor")!.code;
-  expect(floor).toContain("abs(abs(world.x)-9.)");
-  expect(floor).toContain("fract(world.z/period)");
-  expect(floor).toContain("var color=illuminate(world");
-  const unlit = buildWorldGraph(scene({ floor: { lit: false } })).passes.find(pass => pass.id === "floor")!.code;
-  expect(unlit).toContain("var color=material.emissive;");
-});
 
-test("tunnels place portal frames with strips between them along axis-aligned paths", () => {
-  const straight = tunnelInstances({ from: [0, 0, 0], to: [0, 0, -12], spacing: 6, edges: false });
-  const frames = straight.filter(instance => instance.id!.includes(":beam:"));
-  expect(frames.map(instance => instance.position.initial[2])).toEqual([0, -6, -12]);
-  expect(straight.filter(instance => instance.id!.includes(":strip:"))).toHaveLength(4);
-  const turn = tunnelInstances({ path: [[0, 0, 0], [0, 0, -8], [10, 0, -8]], spacing: 5, strips: false, edges: false });
-  expect(turn.filter(instance => instance.id!.includes(":beam:")).map(instance => instance.position.initial)).toEqual([[0, 10, 0], [0, 10, -5], [2, 10, -8], [7, 10, -8]]);
-});
 
 test("Text3D glyphs cast key-light shadows and receive the key light and environment", async () => {
   const { text3dInstances } = await import("../packs/world/text3d");
@@ -70,17 +52,6 @@ test("Text3D glyphs cast key-light shadows and receive the key light and environ
   expect(scene.code).toContain("environmentLight(normal");
 });
 
-test("tunnels add one streaking light-rig draw and track floors a start grid, both optional", () => {
-  const rigs = tunnelInstances({ from: [0, 0, 0], to: [0, 0, -40], spacing: 8 }).filter(part => part.id === "tunnel:lights");
-  expect(rigs.length).toBe(1);
-  expect(rigs[0].custom!.vertexCount).toBe(3 * 8 * 36);
-  expect(rigs[0].custom!.wgsl).toContain("travelSpeed()");
-  expect(tunnelInstances({ lights: false }).some(part => part.id === "tunnel:lights")).toBe(false);
-  expect(floorMarkingsCode({ kerbs: [{ x: 9 }] })).toContain("checker");
-  expect(floorMarkingsCode({ kerbs: [{ x: 9 }], start: false })).not.toContain("checker");
-  expect(floorMarkingsCode({})).not.toContain("checker");
-  expect(worldGraphTopology(prepareWorldScene({ instances: tunnelInstances({ to: [0, 0, -40] }) })).customs!.length).toBe(1);
-});
 
 
 test("looping focus resolves anchor names to depths in every nested frame", () => {

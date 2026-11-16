@@ -1,5 +1,5 @@
-import { contentClearance, type Vec3 } from "./camera";
-import { colorVector, primitive, type Animated, type Instance, type MaterialOptions } from "./scene";
+import type { Vec3 } from "./camera";
+import { colorVector, type Animated } from "./scene";
 
 /** A directional key light. `position` and `target` set its direction; the shadow box is centred on `target`. */
 export type KeyLightOptions = {
@@ -18,113 +18,8 @@ export type KeyLightOptions = {
 /** A small analytic studio environment, prefiltered by roughness, for glossy and metal reflections. */
 export type EnvironmentOptions = { intensity?: Animated<number> };
 
-/** Painted lines run along the floor's z axis at `x` (mirrored to -x unless `symmetric` is false). `dash` is the dash length; 0 draws a solid line. */
-export type FloorLine = { x: number; width?: number; color?: string; intensity?: number; dash?: number; gap?: number; symmetric?: boolean };
-/** Alternating kerb stripes between `x` and `x + width`, `stripe` long. */
-export type FloorKerb = { x: number; width?: number; stripe?: number; colors?: [string, string]; intensity?: number; symmetric?: boolean };
-export type FloorMarkings = {
-  /** `false` leaves the floor unlit: its color and markings ignore scene lights; key shadows still apply. */
-  lit?: boolean;
-  grid?: { spacing?: number; color?: string; intensity?: number; width?: number };
-  lines?: FloorLine[]; kerbs?: FloorKerb[];
-  /** A checkered start line across the track at `z`, with `rows` staggered grid slots behind it (toward +z), `spacing` apart.
-   * `width` is the track's half-width (default the outermost line or kerb). On by default when the floor has lines or kerbs. */
-  start?: { z?: number; width?: number; rows?: number; spacing?: number; checker?: number; color?: string; intensity?: number } | false;
-  /** World units that dashes, kerbs and the start line smear along z at peak travel speed (default 2.5; 0 keeps them sharp). */
-  motionBlur?: number;
-};
-
-export type TunnelOptions = {
-  id?: string;
-  /** Axis-aligned polyline the tunnel follows; the floor of each frame sits at the point's y. Defaults to `from` → `to`. */
-  path?: Vec3[]; from?: Vec3; to?: Vec3;
-  spacing?: number; width?: number; height?: number; thickness?: number;
-  color?: string; material?: string | MaterialOptions;
-  /** Emissive strips under the top beam, running between frames. */
-  strips?: { color?: string; intensity?: number; material?: MaterialOptions; count?: number; length?: number; width?: number } | false;
-  /** Low emissive edge lights along both walls. */
-  edges?: { color?: string; intensity?: number; material?: MaterialOptions; height?: number; length?: number } | false;
-  /** Light rigs on the inner face of every `every`th pair of posts (default 2): `count` lamps per post that chase down the tunnel
-   * (`chase` is its speed, 0 holds them steady) and streak `streak` world units along the path at peak travel speed. */
-  lights?: { color?: string; intensity?: number; every?: number; count?: number; chase?: number; streak?: number } | false;
-};
-
-const tunnelMaterial: MaterialOptions = { albedo: "#0d0e11", roughness: 0.4, metal: 0.8 };
-
-/** Repeated portal frames (two posts and a beam) with light strips, built from boxes. */
-export function tunnelInstances({ id = "tunnel", path, from = [0, 0, 20], to = [0, 0, -120], spacing = 6, width = 22, height = 10, thickness = 0.4,
-  color = "#0d0e11", material = tunnelMaterial, strips = {}, edges = {}, lights = {} }: TunnelOptions = {}): Instance[] {
-  const points = path ?? [from, to];
-  if (points.length < 2 || !(spacing > 0)) throw new Error("Tunnel needs a path of two or more points and a positive spacing");
-  const instances: Instance[] = [];
-  const box = (name: string, position: Vec3, scale: Vec3, glow?: { color: string; intensity: number; material?: MaterialOptions }) => instances.push(primitive("box", {
-    id: `${id}:${name}:${instances.length}`, position, scale, size: 0.5, color: glow?.color ?? color, emissive: glow?.intensity ?? 0,
-    material: glow ? glow.material : material }));
-  const rigs: string[] = [];
-  let carry = 0, frame = 0;
-  for (let segment = 0; segment + 1 < points.length; segment++) {
-    const a = points[segment], b = points[segment + 1];
-    const delta: Vec3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
-    const length = Math.hypot(delta[0], delta[2]);
-    if (length === 0) continue;
-    const alongX = Math.abs(delta[0]) > Math.abs(delta[2]);
-    const direction: Vec3 = [delta[0] / length, delta[1] / length, delta[2] / length];
-    // Local axes: `across` is horizontal and perpendicular to the path; sizes swap x/z when the path runs along x.
-    const across = (x: number, y: number, z: number): Vec3 => alongX ? [z, y, x] : [x, y, z];
-    for (let distance = carry; distance <= length + 1e-6; distance += spacing) {
-      const p: Vec3 = [a[0] + direction[0] * distance, a[1] + direction[1] * distance, a[2] + direction[2] * distance];
-      const at = (x: number, y: number, z: number): Vec3 => { const o = across(x, y, z); return [p[0] + o[0], p[1] + o[1], p[2] + o[2]]; };
-      for (const side of [-1, 1]) box("post", at(side * width / 2, height / 2, 0), across(thickness, height, thickness));
-      box("beam", at(0, height, 0), across(width + thickness, thickness, thickness));
-      if (lights && frame++ % (lights.every ?? 2) === 0) rigs.push(`vec4f(${p.map(f).join(",")},${alongX ? "1." : "0."})`);
-      const next = distance + spacing <= length + 1e-6 || segment + 2 < points.length;
-      if (!next) continue;
-      // Strips and edges sit halfway to the next frame, along the path.
-      const half = (x: number, y: number, z: number): Vec3 => {
-        const o = across(x, y, z);
-        return [p[0] + o[0] + direction[0] * spacing / 2, p[1] + o[1] + direction[1] * spacing / 2, p[2] + o[2] + direction[2] * spacing / 2];
-      };
-      if (strips) {
-        const count = strips.count ?? 2;
-        for (let i = 0; i < count; i++) {
-          const x = count === 1 ? 0 : (i / (count - 1) - 0.5) * width / 2;
-          box("strip", half(x, height - 0.25, 0), across(strips.width ?? 0.18, 0.06, spacing * (strips.length ?? 0.55)),
-            { color: strips.color ?? "#cfe0ff", intensity: strips.intensity ?? 2.2, material: strips.material });
-        }
-      }
-      if (edges) for (const side of [-1, 1]) box("edge", half(side * (width / 2 - 0.3), edges.height ?? 0.3, 0), across(0.06, 0.06, spacing * (edges.length ?? 0.7)),
-        { color: edges.color ?? "#ff3b30", intensity: edges.intensity ?? 1.8, material: edges.material });
-    }
-    if (carry <= length + 1e-6) carry += Math.floor((length - carry) / spacing + 1e-6) * spacing + spacing;
-    carry -= length;
-  }
-  if (lights && rigs.length) instances.push(tunnelLights(id, rigs, lights, width / 2 - thickness / 2 - 0.04, height));
-  return instances;
-}
-
-/** Every rig's lamps in one custom draw; travel speed stretches them along the path. */
-function tunnelLights(id: string, rigs: string[], { color = "#9fd8ff", intensity = 7, count = 4, chase = 1, streak = 3 }: Exclude<TunnelOptions["lights"], false | undefined>, inner: number, height: number): Instance {
-  const lamps = count * 2;
-  return { ...primitive("box", { id: `${id}:lights`, size: 1, color, emissive: intensity, material: { albedo: "#000000", rim: 0 } }), custom: { vertexCount: rigs.length * lamps * 36, wgsl: `
-const RIGS=array<vec4f,${rigs.length}>(${rigs.join(",")});
-fn shape(iid:u32,vid:u32,ctx:ShapeContext)->ShapeVertex {
- let lamp=vid/36u; let rig=RIGS[lamp/${lamps}u]; let side=select(-1.,1.,lamp%2u==0u); let row=f32((lamp%${lamps}u)/2u);
- let face=(vid%36u)/6u; let q=array<vec2f,6>(vec2f(-1.,-1.),vec2f(1.,-1.),vec2f(-1.,1.),vec2f(-1.,1.),vec2f(1.,-1.),vec2f(1.,1.))[vid%6u];
- let sgn=select(-1.,1.,face%2u==0u); let axis=face/2u; var p=vec3f(q.x,q.y,sgn); var n=vec3f(0.,0.,sgn);
- if(axis==0u) { p=vec3f(sgn,q.x,q.y); n=vec3f(sgn,0.,0.); }
- if(axis==1u) { p=vec3f(q.x,sgn,q.y); n=vec3f(0.,sgn,0.); }
- let mount=rig.xyz+select(vec3f(side*${f(inner)},0.,0.),vec3f(0.,0.,side*${f(inner)}),rig.w>.5);
- let view=vector(4u)-vector(0u); let keep=smoothstep(uniforms[32]+${f(contentClearance.near)},uniforms[32]+${f(contentClearance.far)},dot(mount-vector(0u),view)/length(view));
- let local=vec3f(side*${f(inner)},${f(height)}*(.22+.56*row/${f(Math.max(1, count - 1))}),0.)+p*vec3f(.04,.13,.13+travelSpeed()*${f(streak)})*keep;
- let world=select(local,local.zyx,rig.w>.5); let normal=select(n,n.zyx,rig.w>.5);
- return ShapeVertex(rig.xyz+world,normal);
-}
-fn shade(iid:u32,world:vec3f,normal:vec3f,ctx:ShapeContext)->Material {
- let base=slot(iid); let along=world.x+world.z;
- let pulse=${chase > 0 ? `.35+.65*pow(.5+.5*sin(along*.12+continuousTime()*${f(chase * 6)}),3.)` : "1."};
- return Material(vec3f(0.),vector(base+4u)*uniforms[base+7u]*pulse/(1.+travelSpeed()*${f(streak * 0.5)}),1.,0.);
-}` } };
-}
+/** Floor shading additions run after lighting with mutable `color` and `mask`, and read-only `world` and `fade`. */
+export type FloorSurface = { lit?: boolean; grid?: { spacing?: number; color?: string; intensity?: number; width?: number }; shader?: string };
 
 const f = (n: number) => Number.isInteger(n) ? n + "." : String(n);
 const v3 = (color: string, scale = 1) => `vec3f(${colorVector(color).map(c => f(c * scale)).join(",")})`;
@@ -220,46 +115,6 @@ fn environmentLight(normal:vec3f,view:vec3f,albedo:vec3f,roughness:f32,metal:f32
 }
 `;
 
-/** Floor markings, static in the shader; returns WGSL statements that read `world` and update `color` and `mask`. */
-export function floorMarkingsCode(markings: FloorMarkings) {
-  const lines: string[] = [`let blur=travelSpeed()*${f(markings.motionBlur ?? 2.5)};`];
-  if (markings.grid) {
-    const g = markings.grid, spacing = f(g.spacing ?? 2);
-    lines.push(`{ let cell=world.xz/${spacing}; let g=abs(fract(cell)-.5)/max(fwidth(cell),vec2f(.00001)); let grid=(1.-min(min(g.x,g.y)/${f(g.width ?? 1)},1.))*fade;
-  color+=${v3(g.color ?? "#ffffff", g.intensity ?? 0.022)}*grid; }`);
-  }
-  for (const line of markings.lines ?? []) {
-    const width = f(line.width ?? 0.08), dash = line.dash ?? 0, gap = line.gap ?? dash;
-    const distance = line.symmetric === false ? `abs(world.x-${f(line.x)})` : `abs(abs(world.x)-${f(Math.abs(line.x))})`;
-    lines.push(`{ let d=${distance}; let aa=max(fwidth(world.x),.0001); var paint=1.-smoothstep(${width}*.5-aa*.5,${width}*.5+aa*.5,d);
-  ${dash > 0 ? `let period=${f(dash + gap)}; let z=fract(world.z/period)*period; let dz=max(fwidth(world.z),blur+.0001); paint*=smoothstep(0.,dz,z)*(1.-smoothstep(${f(dash)}-dz,${f(dash)},z));` : ""}
-  paint*=fade; color=mix(color,${v3(line.color ?? "#ffffff", line.intensity ?? 0.55)},paint); mask=max(mask,paint); }`);
-  }
-  for (const kerb of markings.kerbs ?? []) {
-    const width = kerb.width ?? 0.8, stripe = f(kerb.stripe ?? 1.6), [a, b] = kerb.colors ?? ["#808080", "#ff3b30"];
-    const x = kerb.symmetric === false ? "world.x" : "abs(world.x)", from = kerb.symmetric === false ? kerb.x : Math.abs(kerb.x);
-    lines.push(`{ let aa=max(fwidth(world.x),.0001); let k=smoothstep(${f(from)}-aa,${f(from)}+aa,${x})*(1.-smoothstep(${f(from + width)}-aa,${f(from + width)}+aa,${x}));
-  let sw=max(fwidth(world.z/${stripe}),blur/${stripe}); let s=smoothstep(.5-sw*.5,.5+sw*.5,abs(fract(world.z/${stripe})-.5)*2.);
-  let paint=k*fade; color=mix(color,mix(${v3(a, kerb.intensity ?? 0.45)},${v3(b, kerb.intensity ?? 0.45)},s),paint); mask=max(mask,paint); }`);
-  }
-  const start = markings.start ?? (markings.lines?.length || markings.kerbs?.length ? {} : false);
-  if (start) {
-    const edges = [...(markings.lines ?? []), ...(markings.kerbs ?? [])].map(mark => Math.abs(mark.x));
-    const width = start.width ?? (edges.length ? Math.max(...edges) : 9), z = start.z ?? 0, c = start.checker ?? 0.75;
-    const rows = start.rows ?? 4, spacing = start.spacing ?? 3.2, paint = v3(start.color ?? "#ffffff", start.intensity ?? 0.6);
-    // Box-filtered checkers (the filter widens along z with travel speed), two squares deep, ending at the line.
-    lines.push(`{ let q=world.xz/${f(c)}+vec2f(${f(width / c)},0.); let w=fwidth(q)+vec2f(.001,blur/${f(c)});
-  let i=2.*(abs(fract((q-.5*w)*.5)-.5)-abs(fract((q+.5*w)*.5)-.5))/w; let checker=.5-.5*i.x*i.y;
-  let aa=max(fwidth(world.z),.0001)+blur*.5; let band=(1.-smoothstep(${f(width)}-aa,${f(width)}+aa,abs(world.x)))*smoothstep(${f(z - 2 * c)}-aa,${f(z - 2 * c)}+aa,world.z)*(1.-smoothstep(${f(z)}-aa,${f(z)}+aa,world.z));
-  let paint=band*fade; color=mix(color,${paint}*checker+${v3("#0c0d10", 1)}*(1.-checker),paint); mask=max(mask,paint); }`);
-    if (rows > 0) lines.push(`for(var side=-1.;side<2.;side+=2.) {
-  let lz=world.z-${f(z + 1.2)}-select(0.,${f(spacing / 2)},side>0.); let row=clamp(floor((lz+.3)/${f(spacing)}),0.,${f(rows - 1)}); let local=vec2f(world.x-side*${f(width / 2)},lz-row*${f(spacing)});
-  let aa=max(length(fwidth(world.xz)),.0001); let bar=max(abs(local.x)-1.3,abs(local.y))-.06; let leg=max(abs(abs(local.x)-1.3)-.06,abs(local.y-.7)-.7);
-  let paint=(1.-smoothstep(-aa,aa,min(bar,leg)))*fade; color=mix(color,${paint},paint); mask=max(mask,paint); }`);
-  }
-  return lines.join("\n ");
-}
-
 /** Screen-space contact shadow toward the key light: a short depth-buffer march, darkening the lit scene where it is blocked. */
 export function contactShadowCode(bindings: string, depthCode: string) {
   return `${bindings}
@@ -291,4 +146,10 @@ fn screenOf(world:vec3f)->vec3f {
  }
  return vec4f(color.rgb*(1.-occlusion*clamp(uniforms[125],0.,1.)*.75),color.a);
 }`;
+}
+
+export function floorSurfaceCode(surface: FloorSurface) {
+  const grid = surface.grid;
+  return (grid ? `{ let cell=world.xz/${f(grid.spacing ?? 2)}; let g=abs(fract(cell)-.5)/max(fwidth(cell),vec2f(.00001)); let grid=(1.-min(min(g.x,g.y)/${f(grid.width ?? 1)},1.))*fade;
+  color+=${v3(grid.color ?? "#ffffff", grid.intensity ?? .022)}*grid; }` : "") + "\n" + (surface.shader ?? "");
 }

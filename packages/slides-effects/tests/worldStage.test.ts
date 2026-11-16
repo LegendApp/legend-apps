@@ -3,7 +3,7 @@ import { cameraPathPoint, easeProgress, evaluateCamera, type ClockSample } from 
 import { tree } from "../packs/world/graph";
 import { renderTreeInstances } from "../packs/world/renderTree";
 import { compileTrack, prepareWorldScene, sampleWorldUniforms, instancePosition, instanceOpacity, sampleTrack, worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
-import { roundedBoxInstances, routedTubeInstances, pillarInstances, stoplightInstances } from "../packs/world/stage";
+import { roundedBoxInstances, routedTubeInstances, pillarInstances } from "../packs/world/stage";
 import { routePoint } from "../packs/world/stageMotion";
 import { worldGraphTopology } from "../packs/world/render";
 import { trackIds } from "../packs/world/track";
@@ -148,19 +148,6 @@ test("out ease decelerates into the target", () => {
   expect(easeProgress(.5, "out")).toBeCloseTo(.875);
 });
 
-test("a stoplight lights each lamp from its own color and glow, red on the left and green on the right by default", () => {
-  const lamps = (instances: ReturnType<typeof stoplightInstances>) => instances.filter(part => part.kind === "sphere");
-  const defaults = lamps(stoplightInstances({ position: [0, 2, 0] }));
-  expect(defaults.length).toBe(5);
-  expect(sampleTrack(defaults[0].position, clock(0))[0]).toBeLessThan(sampleTrack(defaults[4].position, clock(0))[0]);
-  expect(sampleTrack(defaults[0].color, clock(0))[0]).toBeGreaterThan(sampleTrack(defaults[0].color, clock(0))[1]);
-  expect(sampleTrack(defaults[4].color, clock(0))[1]).toBeGreaterThan(sampleTrack(defaults[4].color, clock(0))[0]);
-  const custom = lamps(stoplightInstances({ lights: ["#ff0000", { color: "#00ff00", glow: { 0: 0, 1: 8 } }] }));
-  expect(custom.map(part => part.id)).toEqual(["stoplight:lamp:0", "stoplight:lamp:1"]);
-  expect(sampleTrack(custom[1].emissive, clock(0, 0))).toBe(0);
-  expect(sampleTrack(custom[1].emissive, clock(9, 1))).toBe(8);
-  expect(() => stoplightInstances({ lights: [] })).toThrow();
-});
 
 test("mitered closed routed tubes join every corner, including the closing endpoint, without changing default routes", () => {
   const path: [number, number, number][] = [[-2, 1, 0], [2, 1, 0], [2, -1, 0], [-2, -1, 0], [-2, 1, 0]];

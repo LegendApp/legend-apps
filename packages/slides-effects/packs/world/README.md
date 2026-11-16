@@ -221,16 +221,20 @@ The rail holds still at each station and always travels forward along one contin
 | `turn` | Peak heading in degrees the track swings through, −60 to 60: positive curves right, negative left |
 | `rise` | World units the camera lifts at mid-travel; negative dips (it stays above the floor) |
 | `spacing` | Leg length in world units |
-| `bank` | Peak lean into the curve, 0–45 degrees (default 12% of `turn`) |
+| `bank` | Peak lean into the curve, 0–45 degrees (default 0) |
 | `duration`, `ease` | Flight time and easing |
 
-Unset fields use equal shares of gentle left curves, right curves and straights: two curves to one side, a straight, then two to the other side and a straight. Turns are 6–10°, spacing starts at 48 units and rises are at most 0.3 units (`frame: "world"` keeps a straight, level track). The bend happens between one station's content and the next station's camera, so settled slides stay square to the camera; the floor markings, tunnel and other fixed scenery follow it. The centreline and camera use quintic curves with continuous velocity and acceleration at joins; bank eases in and out over the whole leg. A jump across more than one slide flies the whole way in at most 1.5 s, with reduced heading lead, rise and bank to keep its gaze steady.
+Unset fields use a straight, level path, 48-unit spacing and a 1.7-second flight.
+Set `turn`, `rise`, `bank`, `duration` and `spacing` explicitly to shape a path.
+The path bends between stops, keeping settled content rigid. Camera and geometry
+share quintic curves with continuous velocity and acceleration at joins. Jumps
+across multiple slides complete in at most 1.5 seconds.
 
-```mdx
-<Scene id="hooks" layout="cloud" camera={{ turn: -8, rise: .15, spacing: 50, duration: 2.3, bank: 1 }} durations={[2.4]}>
+```tsx
+<WorldSlide world="gallery" track={{ turn: -8, rise: .15, spacing: 50, duration: 2.3, bank: 1 }}>
+  <Sphere id="exhibit" position={[0, 2, 0]} size={2} />
+</WorldSlide>
 ```
-
-Layouts supply the resting framing. Their legacy via controls are used by lanes and prepared scenes; a per-slide track uses only explicitly authored `camera.via` / `camera.viaTarget`.
 
 Held step orbits unwind over the whole flight and return along the same eased motion on the reverse trip.
 
@@ -324,18 +328,7 @@ Static `scale` overrides are available on DOF and
 Shafts; DOF and Shafts also accept `samples`. These change pipeline topology.
 Animated focus, aperture, blur radius, lighting and effect strengths update uniforms.
 
-## Key light, environment, floor markings and tunnels
-
-```tsx
-import { KeyLight, Environment, Floor, Tunnel } from "slides:world/World";
-
-<KeyLight position={[-10, 14, -8]} target={[0, 0, 0]} intensity={2.4} shadowSize={12} softness={2} />
-<Environment intensity={0.9} />
-<Floor y={0} color="#0a0a0c" size={200} grid={{ spacing: 2 }}
-  lines={[{ x: 9, width: 0.12 }, { x: 3, dash: 1.5, gap: 1.5, intensity: 0.2 }]}
-  kerbs={[{ x: 9.4, width: 0.8, stripe: 1.6, colors: ["#808080", "#ff3b30"] }]} />
-<Tunnel from={[0, 0, 18]} to={[0, 0, -110]} spacing={8} width={24} height={11} />
-```
+## Key light and environment
 
 `KeyLight` is a directional light from `position` toward `target`, using the same
 GGX response as point lights. By default it renders a shadow map: boxes, rings,
@@ -356,52 +349,22 @@ over a dark gradient, widened by roughness with conserved energy in place of a
 prefiltered map, and an analytic split-sum response. Metal and glossy sides pick
 up highlights without extra lights. Its intensity animates.
 
-Floor markings are static and run along z: `lines` at `x` (mirrored to `-x` unless
-`symmetric={false}`), solid or dashed (`dash`, `gap`); `kerbs` alternate two
-colors in `stripe`-long blocks from `x` to `x + width`; `grid` draws faint
-antialiased cell lines. `intensity` scales each marking color. `lit={false}` keeps
-scene lights off the floor; key shadows still apply.
+## Custom scene declarations
 
-`Tunnel` places a portal frame (two posts and a beam in dark metal, or `color`
-and `material`) every `spacing` along `path`, an axis-aligned polyline, or from
-`from` to `to`. Between frames it adds emissive `strips` under the beam and low
-`edges` along both walls; pass `false` to omit either. `tunnelInstances` returns
-the boxes for custom scenes. The `lighting.mdx` deck shows each feature.
-
-### Track touches
-
-A tunnel adds light rigs to every second frame by default: `lights={{ every, count, color, intensity, chase, streak }}`
-places `count` lamps on each post's inner face, chasing down the tunnel at `chase` (0 holds them steady) and
-stretching `streak` world units along the path at peak travel speed; `lights={false}` omits them. A floor with
-`lines` or `kerbs` paints a checkered start line at `start.z` (default 0) with `rows` staggered grid slots
-behind it; `start={false}` omits it. Dashes, kerbs and the start line smear `motionBlur` world units along z at
-peak travel speed (default 2.5; 0 keeps them sharp). `speedTrails(length, { stretch, boost, accent })`
-lengthens and brightens its streaks with speed.
-
-On a station track, ids starting with a `fixed` prefix (default `["tunnel:", "trails:"]`) keep their world
-coordinates, so the camera flies past them between stations; `fixed: []` carries every part with its station.
-`blur` (default 1, 0 off) sets a radial motion blur toward the frame's centre at peak travel speed. Custom WGSL
-reads that speed, 0 at rest to 1 at the move's peak, as `travelSpeed()`.
-To calm the scenery while a slide holds, `heldMotion` (0–1) slows `continuousTime()`, which drives trails and
-tunnel lights, to that share of full speed, and `heldBlur` widens the DOF blur radius by that share of `maxBlur`.
-Both ease back to full motion and base blur with travel speed, so only camera flights run at full speed.
-`depthFade` (world units, default 0 off) keeps everything up to that far past the camera target at full brightness,
-then fades lit scenery, lights and the floor toward black in their own shaders, so the background behind content
-stays calm and distant lamps fade instead of speckling; `heldFade` (0–1) steepens that falloff while a slide holds.
-Prefer them over `heldBlur`, whose wide DOF gather breaks small bright lights into speckles.
+`defineSceneComponent(expand)` creates a pure declaration macro. It runs during scene
+preparation and may return built-in declarations or other macros. It must not call
+React hooks or mutate external state. `<Instances items={instances} />` inserts
+prepared instances from a local generator, including under a `Stage`.
 
 ```tsx
-import { Stoplight } from "slides:world/World";
-
-<Stoplight position={[0, 4.4, 0]} size={0.42} lights={[
-  { color: "#ff2d2d", glow: { 0: 6, 1: 0 } }, "#ffb020", { color: "#2dff7a", glow: { 0: 0, 1: 7 } },
-]} />
+const Sculpture = defineSceneComponent(({ color }: { color: string }) =>
+  <Instances items={[primitive("sphere", { color, size: 2 })]} />);
 ```
 
-`Stoplight` is a housing of lamps in a row facing +z, left to right; the default five run red, red, amber,
-green, green. Each lamp is a color, or `{ color, glow }` where either animates and glow 0 is off. `size` is the
-lamp diameter, `glow` the default lamp glow and `housing` its color. Bloom supplies the halo.
-`apps/slides/examples/3d/world-track.mdx` shows each touch.
+`Floor` accepts a generic `grid`, `lit`, and an optional WGSL `shader` string.
+The shader can update `color` and `mask`; `world` is the local surface position
+and `fade` supplies antialiasing at a distance. Keep themed surface patterns in
+local deck modules. Geometry uses `Custom` and `SDF`; post effects use `Effect`.
 
 ## Paths, recycled rows and stages
 
@@ -816,9 +779,8 @@ shadows, fog and bloom, for painted or luminous surfaces. It also follows
 Pillar accepts `material` for its body and `capEmissive` (default 5); a `radius` rounds the body
 and drops the cap, `gradient` darkens it toward its foot, as on RoundedBox, and `counter={false}` hides the digits. Eases that overshoot, like `spring`, overshoot the height. Routed-tube
 pulses accept head `emissive` (default 5) and `trailEmissive` (defaults to the head). Burst accepts
-`emissive` (default 12) and a repeating `colors` palette. Tunnel `strips` and
-`edges` accept a `material`; a black albedo removes their diffuse lighting while
-retaining emission. These controls leave the default materials unchanged.
+`emissive` (default 12) and a repeating `colors` palette. These controls leave
+the default materials unchanged.
 
 ## Performance tips
 
@@ -843,195 +805,3 @@ The source examples `world-steps.mdx`, `world-effects.mdx`, `assembly.mdx` and
 lighting. When copying an example, keep its local TSX/assets and effect pack pins.
 
 `<World msaaSamples={1}>` disables MSAA without changing render or post-effect scales; `msaaSamples={4}` forces 4× MSAA. FXAA remains enabled. Omitting `msaaSamples` preserves the quality preset.
-
-## MDX scene authoring
-
-`slides:world/Authoring` exports `Scene`, `Headline`, `Quote`, `CodePanel`, `List`,
-`Tree`, `Counter`, `Rule`, `Bars`, `Editor`, `Keys`, `Grid`, `Form`, `CodeMorph`,
-`CodeTrace`, `Cloud`, `Layers` and `Flight`. Each slide declares its own
-composition. Name a layout and the parts place themselves:
-
-```mdx
-<Scene id="flow" world="journey" layout="track-left" durations={[6]}>
-  <Headline id="title">One change</Headline>
-  <Headline id="caption">THE WHOLE TREE</Headline>
-  <Tree id="tree" nodes={[{ id: "App" }, { id: "List", p: 0 }, { id: "Detail", p: 0 }]} />
-  <Counter id="renders" label="RENDERS" value={3} />
-</Scene>
-```
-
-| Layout | Slots, in fill order | Use |
-| --- | --- | --- |
-| `lead-in` | none | An empty hold before the first station |
-| `statement` | `line1`, `line2`, `kicker`, `rule` | Large centered lines |
-| `title-list` | `title`, `quote` | A title over a scrolling list, then a quote |
-| `title-panels` | `title`, `quote` | A title and quote, then a pair of panels |
-| `track-left` | `title`, `subtitle`, `note`, `tree`, `stat1`, `stat2` | Heading top left, tree, stats top right |
-| `track-left-high` | as `track-left` | The same, flown into from high above |
-| `code-panels` | `left`, `topRight`, `bottomRight` | Three code panels |
-| `title-bars` | `title`, `note`, `bars` | A heading over a row of floor bars |
-| `title` | `line`, `kicker`, `rule` | One large centered line |
-| `statement-wide` | `line1`, `line2`, `rule` | `statement` from further back, for longer lines |
-| `keys` | `title`, `keys` | A heading over a keyed list |
-| `tree-wide` | `title`, `subtitle`, `tree` | A five-level tree laid out by leaves |
-| `tree-tour` | `title`, `caption1`–`3`, `tree1`–`3`, `legend1`–`3` | Three trees side by side, 9.6 apart |
-| `tree-sequence` | `caption1`–`5`, `tree1`–`5`, `title` | Trees 18 apart down the track, zigzagging 7 to each side, for camera steps to `frame` one at a time; headlines fill the captions above the trees first |
-| `code-grid` | `code`, `grid` | Code on the left, a grid of cells on the right |
-| `code-center` | `code` | One centered code panel |
-| `morph` | `morph` | A tall centered morphing code panel |
-| `form` | `form` | Panels of fields |
-| `cloud` | `cloud` | Words at depth |
-| `trace` | `title`, `trace` | Traced code on the left; its tree forms on the right |
-| `layers` | `title`, `code`, `layers` | A line of code beside stacked layers and a meter |
-
-A part takes the next free slot of its kind. `slot="kicker"` picks one by name, and
-any explicit prop, including `at`, wins over the slot. A layout's camera is merged
-under the `camera` prop. `defineSceneLayout(name, { camera, slots })` adds or
-replaces a layout for a deck. An unknown name throws, except in a `prepare` scene,
-where `layout` may stay a label the deck reads itself.
-
-`at` is local to its station. Raw World geometry and nested `Stage` groups work
-alongside these parts, so rows, columns and free placement use the same coordinate
-system. Repeat an id in the next scene to carry its geometry along the shared World
-track. Text `size`, `depth` and `track` are world units; `delay` and `duration` time
-its entrance. `expandScene(parts, layout)` gives the same World children for a plain
-`World`, and `speedTrails(length)` returns a streak effect for one.
-
-```mdx
-import { Scene, Headline, CodePanel } from "slides:world/Authoring"
-import { Card } from "slides:world/World"
-
-<Scene id="source" world="journey">
-  <Headline id="title" at={[-4,5,0]}>A small example</Headline>
-  <CodePanel id="example" at={[-4,3,0]}>
-
-~~~tsx
-const value = 42;
-~~~
-
-  </CodePanel>
-</Scene>
-
----
-
-<Scene id="column" world="journey">
-  <Headline id="title" at={[0,6,0]}>The same object</Headline>
-  <Card id="example/card" position={[0,2,0]} scale={[1,4,1]} />
-</Scene>
-```
-
-`camera` accepts the normal World track options. `durations` gives build lengths
-in seconds, one per step. `Tree nodes` uses stable `id`, optional `label` and
-`color`, and a parent index `p`; children fan out around their parent, and `x`, `y`,
-and `d` override that. `List items` supplies row data. `Counter label` and `value`
-supply its text. `Bars items` takes `label`, `value` and `color`. `Editor` takes
-`name`, `email`, and a `labels` array. A `beat={{ start, every, count }}` ticks a
-`Counter` (by `per`) and sends a pulse down each `Tree` edge on that schedule.
-Scene `colors` and `ambient`, camera easing, part `enter`, `exit` and `carry`, and code and
-chart style props are listed with their defaults in `docs/slides-scene-props.md`.
-
-Every step keyframe in these parts addresses the scene's own steps, so give the
-`Scene` `clock="step"` and one duration per step:
-
-- `Tree width` lays children out in proportion to their leaves; `levelHeight`, `nodeWidth`
-  and `labelSize` size it. `flash={[{ step, color, ids }]}` lights `ids` (default all)
-  in a wave down the levels, `hop` seconds apart, with pulses on the edges. With
-  `wave: false` and `from`, they light at once from beams out of `from`. `flash: false`
-  recolors without a flash; `repeat` and `every` replay it. Set `repeat: "infinite"`
-  to keep node flashes and travelling pulses looping while playback is active.
-- `Keys keys next` shows a keyed column. On `diff` (step 1) a copy splits off showing
-  `next`, with shared keys linked and added and removed keys colored; on `recycle`
-  (step 2) the copy flies away and the removed key's container travels behind the
-  column into the added key's slot.
-- `Keys keys viewport` frames the first `viewport` keys. On `scroll` the keys move up a row; keys outside the frame stay
-  fully visible. On `window` the column steps left and two frames come out: the keys in view before the scroll and those
-  in view after it. On `links` (default `window`) lines join the keys both frames hold, the key that left turns the
-  `removed` color and the one that entered `added`. `labels` names the column, before and after frames (default none).
-  On `recycle` the key that left the top travels behind the column into the entering slot, emptied on `scroll`, and takes its key.
-- `Grid count columns label` flashes its cells `flash={{ step, rate, duration }}` times a
-  second while a resize handle drags its frame. `flash.repeat: "infinite"` loops both.
-  `flash.while: "resizing"` pulses every cell and label at `rate` Hz during each drag,
-  returning their color and brightness to rest during the holds. Revealed rows share the same pulse.
-  `resize: "height"` keeps the top edge fixed and drags the bottom edge; `anchor: "top"`
-  is the default, while `anchor: "center"` moves both edges equally. `grow` adds that many
-  rows of cells below the starting rows (around them for a centered anchor), revealed as the
-  window opens over them and hidden as it closes. `chrome: "mac"` adds a title bar
-  with the three window buttons; `fill` (default .15) is the window body's opacity and `border` its rim strength.
-- `Form panels typing` shows panels of fields with render-count badges.
-  `typing={{ step, bind, text }}` types into the fields bound to `bind`, ticking their badges
-  and flashing them on each keystroke. `typing.repeat: "infinite"` repeats the typing
-  sequence after a short hold, resetting the bound values and badges together.
-  `parent={{ title, renders: true }}` adds a connected node above the panels. Set
-  `renders: true` on a parent or panel to tick its badge with each keystroke; omitted
-  flags keep those badges at one.
-- `CodeMorph` takes one ```` ```diff-tsx ```` fence per step after the first, each starting from
-  the previous result. Use `diff-<language>` for other languages; plain `diff` defaults to TSX.
-  Matching tokens carry over with their syntax colors; changed tokens fade out and in.
-  Only deleted lines are struck through. Changed lines get the standard code highlight band
-  (`highlight={{ opacity }}` fades it; 0 hides it). On a changed line that keeps some tokens, each
-  run of new tokens also gets a word band; `highlight.word={{ opacity }}` fades it separately. Put changes that should land together in one fence.
-  Line and word bands, and marks with a `step`, clear when the next step begins.
-- `CodeTrace source reads pass nodes` marks where state is created, passed and read on
-  `mark`, collapses the other lines on `collapse`, and lifts the source and reads into a
-  tree of `nodes` labels on `extract`, with continuously repeating edge pulses. Syntax colors stay
-  intact throughout. Those lines get the standard code highlight; `highlight={{ opacity }}` fades it. The `trace` layout centers the code, then centers the tree
-  on extraction; `anchor="center"` also enables this framing at an explicit `at` position.
-  Add a second syntax fence with one compact line per source/read (in source order) to morph
-  tokens on `collapse`. Matching tokens keep their identity, new tokens fade and scale in,
-  and the panel and row spacing tween before the same tokens lift into the tree. Set `match="lines"`
-  to match each compact line only against its corresponding source/read line, keeping repeated
-  punctuation attached to that line. Token matching across the whole block is the default. A node written
-  `{ id, text }` shares `text` with its compact line: on `extract` those tokens grow and fly into
-  the box as its label, tweening to the label color, while the other code and the panel fade out
-  and the boxes and edges draw in around them.
-- `Cloud words focus zoom` floats words at depth. Each step brings its `focus` words to
-  the front under depth of field; `zoom` defocuses everything else on that step.
-- `Flight words` puts one stop per step from `step` (default 1) down into depth: a word, or a list of
-  words side by side. Stops sit `gap` (default 10) deeper each, zigzagging up to `drift` (default 2.4)
-  sideways, or at `path[k]`. The scene camera shifts onto each stop over `duration` (default .8 s) with
-  `ease` (default `out`); the text never moves. The next `ahead` (default 2) stops wait dimmed, passed
-  ones fade out, and steps after the last stop hold the camera there and bring them all back. From
-  step `gather`, every stop instead glides into one evenly spaced row at `row` (default centered at the
-  last stop's height and depth), all lit and in focus, while the camera pulls back onto it. The
-  scene's own `camera.steps` override these moves field by field.
-- `Layers count label value meter` nests one more translucent layer around `value` per step,
-  each landing with a flash and sparks, dims the value under each layer and fills the meter to the
-  given fractions, later and slower on each step. Layer k takes `colors[k]` (default link, highlight,
-  hot, accent). Landed layers keep moving: `bob`, `orbit` and `pulse` take an amplitude or
-  `[amplitude, period]`, and each layer trails the one inside it by `lag` seconds.
-  With `words`, Layers shows its fenced code line at `size` (default .6), syntax colored and centered,
-  and layer k is a box hugging the k-th of `words` left to right, labeled above; once its box lands
-  the word moves with it.
-- `CodePanel` and `CodeMorph` take `marks={[{ text, step, opacity }]}` for the standard code highlight
-  behind each occurrence of `text`, keeping syntax colors.
-- Every code highlight is one style: a cool blue band, rgba(90,150,255,.3), with a 1px
-  rgba(140,185,255,.55) outline and 4px corners. Slides cannot recolor it; `opacity` only fades it.
-  For `CodePanel`, `anchor: "center"` centers the panel on its position.
-- `CodePanel`, `CodeMorph` and `CodeTrace` are glass panels: `fill` (0 to 1, default .9) is the
-  panel's opacity over the scenery behind it and `border` the strength of its 1.5px light border (default 1, 22% white).
-  Their code is flat, unlit text that stays crisp in focus; `flat={false}` restores extruded, lit glyphs.
-  Code parts color from the
-  compiler's syntax tokens, so their child must be a fenced block; a string child is an authoring error.
-
-A track's `steps` move the camera within a station, by step index:
-`camera={{ steps: { 2: { orbit: 30 }, 4: { dolly: .6, fov: 48 } } }}`. `orbit` turns the
-camera about its target in degrees, `dolly` scales its distance, `shift` moves both, `frame` names a
-part to stand before as the camera stands before the station target (moving across the floor, then by `shift`) and
-`fov` sets the field of view, eased from wherever the camera is over `duration` seconds. Layouts
-hold no step moves, so each slide declares its own.
-
-A step's `focus` pulls the DOF distance in world units with the camera's `duration`
-and `ease`, starting at the live focus after an interrupted move. Omit it to focus
-on `camera.focus`, or the camera target if unset. Use `sharp={false}` on a part for depth blur during the pull
-and `camera.blur=0` to disable motion streaks.
-
-For a fully choreographed deck, `Scene prepare` is an optional MDX-exported
-function receiving every scene declaration without mounting future slides. It
-returns one immutable World descriptor array, running step offsets, build
-boundaries and cameras. This allows pre-baked glyph motion and shared topology
-across navigation, while keeping all layout and choreography in the MDX.
-`createTimeline` samples and thins numeric, vector and color trajectories at
-preparation time; playback still runs on the shared UI clock. `createTypography`
-accepts a font-metrics map for decks that need individual glyph positions.
-
-Scene parts use the current camera target to decide which content stays sharp during travel. Background and departing content retain blur and depth fading. Flight and Cloud use their step selections; `sharp={true}` or `sharp={false}` overrides the entire authored part, including its panel and labels.
