@@ -2,6 +2,7 @@ import { act, render } from "@testing-library/react-native";
 import { addWindowListener, beforeWindowClose } from "@legendapp/spark/windows";
 import { DiffWindowLifecycle } from "../DiffWindowLifecycle";
 import { registerDiffWindowExitPreparation } from "../diffAppExit";
+import { storyStore } from "../story/storyStore";
 
 jest.mock("@legendapp/spark/windows", () => ({
   useWindowId: () => "viewer",
@@ -10,6 +11,7 @@ jest.mock("@legendapp/spark/windows", () => ({
 }));
 
 it("keeps one close guard while customized viewers replace their draft preparation", async () => {
+  const closeStoryRuns = jest.spyOn(storyStore, "closeWindow");
   const firstClose = jest.fn();
   const secondClose = jest.fn();
   const firstPreparation = jest.fn(async () => true);
@@ -28,6 +30,9 @@ it("keeps one close guard while customized viewers replace their draft preparati
   await act(async () => { jest.mocked(addWindowListener).mock.calls[0]![2]({ windowId: "viewer" }); });
   expect(firstClose).not.toHaveBeenCalled();
   expect(secondClose).toHaveBeenCalledTimes(1);
+  expect(closeStoryRuns).toHaveBeenCalledWith("viewer");
   unregisterSecond();
   await view.unmount();
+  expect(closeStoryRuns).toHaveBeenCalledTimes(2);
+  closeStoryRuns.mockRestore();
 });

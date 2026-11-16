@@ -159,6 +159,7 @@ function createDiffMenuHandlers(controller: DocumentAppController, openViewer: D
     checkForUpdates: () => {
       checkForUpdates().catch(reportDiffAppControllerError);
     },
+    changeStory: dispatchDiffViewerAction,
     filterFiles: dispatchDiffViewerAction,
     nextHunk: dispatchDiffViewerAction,
     previousHunk: dispatchDiffViewerAction,

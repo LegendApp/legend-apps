@@ -2,6 +2,7 @@ import { diffActiveMenuWindow$ } from "./diffMenuState";
 import type { MenuAction } from "@legendapp/spark/menus";
 
 type DiffViewerActionId =
+  | "changeStory"
   | "copyFilePath"
   | "copyRelativePath"
   | "copySource"

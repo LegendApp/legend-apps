@@ -15,6 +15,7 @@ import { useValue } from "@legendapp/state/react";
 
 
 export const diffHotkeyDefinitions = [
+  { id: "changeStory", title: "Change Story", description: "Generate or open the cached change story.", defaultBindings: ["Cmd+Shift+S"] },
   {
     defaultBindings: ["Cmd+N"],
     description: "Open another Diff window.",
