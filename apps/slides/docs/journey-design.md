@@ -38,7 +38,7 @@ curve. Jumps scale travel time by the number of crossed stations. Steps can morp
 without allocating another camera station or resetting an ongoing flight.
 
 `track` is a small per-slide declaration. Use one `spacing` throughout a Journey
-(default 32). `duration` defaults to 1.7 seconds. Camera `position` and `target`
+(default 48, or 32 with `frame: "world"`). `duration` defaults to 1.7 seconds. Camera `position` and `target`
 are local to that slide's station. `via` and `viaTarget` are quadratic control
 points for the incoming segment, also local to its destination station. They
 shape the curve without requiring a central camera timeline:
@@ -81,7 +81,7 @@ Replacing the declaration on each slide suits small scenes. With thousands of pa
 
 ## Default motion
 
-Station-to-station moves last 1.7 seconds with 32 units between stations. They
+Station-to-station moves last 1.7 seconds with 48 units between stations by default. They
 use cubic ease-in/out (`4t³` below 0.5, otherwise `1 - (-2t + 2)³ / 2`). Position
 and look target follow separate quadratic curves, with default controls
 `[2.5, 5.5, 22]` for the camera and `[0, 0, 10]` for its target. Field of view is
