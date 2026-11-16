@@ -62,6 +62,8 @@ export type PresentationRuntime = {
   slideCount: number;
   slideIndex: number;
   stepCount: number;
+  /** Step count of every slide in deck order, when the host knows the whole deck. */
+  slideStepCounts?: number[];
   stepIndex: number;
   /** Shared performance.now() epoch for the active slide animation. */
   startedAt?: number;

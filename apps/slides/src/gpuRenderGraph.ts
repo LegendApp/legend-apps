@@ -54,10 +54,10 @@ function dimensions(r: RenderGraphResources, value: string, width: number, heigh
 
 /** Setup is shared by native/web hosts and standalone browser measurements. */
 export async function prepareRenderGraph(device: GPUDevice, definition: GPURenderGraphDefinition, format: GPUTextureFormat,
-  clock: GPUBuffer, uniforms: GPUBuffer): Promise<RenderGraphResources> {
-  const { targets, buffers = [], passes } = definition;
+  clock: GPUBuffer, uniforms: GPUBuffer, loadImage?: (source: string) => Promise<GPUTexture>): Promise<RenderGraphResources> {
+  const { targets, buffers = [], images = [], passes } = definition;
   const ids = new Set<string>();
-  for (const resource of [...targets, ...buffers]) {
+  for (const resource of [...targets, ...buffers, ...images]) {
     if (!resource.id || resource.id === "screen" || resource.id.includes("@") || resource.id in Object.prototype || ids.has(resource.id)) throw new Error("Invalid or duplicate GPU resource: " + resource.id);
     ids.add(resource.id);
   }
@@ -68,6 +68,10 @@ export async function prepareRenderGraph(device: GPUDevice, definition: GPURende
   const r: RenderGraphResources = { targets, views: {}, textures: {}, buffers: {}, passes: [], clock, uniforms,
     sampler: device.createSampler({ minFilter: "linear", magFilter: "linear", mipmapFilter: "linear" }), width: 0, height: 0, scale: 1, culls: [], frame: 0 };
   const cullIndexes = new Map<string, number>();
+  if (images.length && !loadImage) throw new Error("GPU images need a host image loader");
+  const imageIds = new Set(images.map(image => image.id));
+  // Images keep their own size: resizing recreates only targets.
+  for (const [index, texture] of (await Promise.all(images.map(image => loadImage!(image.source)))).entries()) r.textures[images[index].id] = texture;
   for (const buffer of buffers) {
     if (!Number.isInteger(buffer.size) || buffer.size <= 0 || buffer.size % 4 || (buffer.init && buffer.init.byteLength > buffer.size)) throw new Error("Invalid GPU buffer size: " + buffer.id);
     r.buffers[buffer.id] = device.createBuffer({ size: buffer.size, usage: 128 | 8 });
@@ -77,7 +81,7 @@ export async function prepareRenderGraph(device: GPUDevice, definition: GPURende
     const [id, mip] = reference(value);
     if (id === "screen") { if (value !== "screen") throw new Error("Screen has no mip levels"); return; }
     if (!ids.has(id)) throw new Error("Unknown GPU resource: " + value);
-    if (!Number.isInteger(mip) || mip < 0 || (r.buffers[id] ? mip !== 0 : mip >= (targetFor(targets, value).mips ?? 1))) throw new Error("Invalid GPU mip: " + value);
+    if (!Number.isInteger(mip) || mip < 0 || (r.buffers[id] || imageIds.has(id) ? mip !== 0 : mip >= (targetFor(targets, value).mips ?? 1))) throw new Error("Invalid GPU mip: " + value);
   };
   let modules: Promise<unknown> = Promise.resolve(), parsingMs = 0;
   const preparing = passes.map(async ({ code, ...pass }) => {
@@ -85,6 +89,7 @@ export async function prepareRenderGraph(device: GPUDevice, definition: GPURende
     const reads = new Set((pass.reads ?? []).map(value => { const [id, mip] = reference(value); return id + "@" + mip; }));
     const writes = pass.kind === "compute" ? pass.writes ?? [] : pass.kind === "render" ? [...pass.color, ...(pass.depth ? [pass.depth] : [])] : [output(pass)];
     if (writes.some(value => { const [id, mip] = reference(value); return reads.has(id + "@" + mip); })) throw new Error("GPU pass cannot read and write the same resource: " + pass.id);
+    if (writes.some(value => imageIds.has(reference(value)[0]))) throw new Error("GPU images are read-only: " + pass.id);
     const entries: GPUBindGroupLayoutEntry[] = [
       { binding: 0, visibility: 7, buffer: { type: "uniform" } },
       { binding: 1, visibility: 7, buffer: { type: "read-only-storage" } },
@@ -93,7 +98,7 @@ export async function prepareRenderGraph(device: GPUDevice, definition: GPURende
     for (const [index, value] of [...(pass.reads ?? []), ...(pass.kind === "compute" ? pass.writes ?? [] : [])].entries()) {
       const writing = index >= (pass.reads?.length ?? 0), [id] = reference(value);
       if (value === "screen") throw new Error("Screen cannot be bound as a GPU resource");
-      const target = r.buffers[id] ? undefined : targetFor(targets, value);
+      const target = r.buffers[id] ? undefined : imageIds.has(id) ? { id, format: "rgba8unorm" as const } as GPUTarget : targetFor(targets, value);
       if (writing && target?.format === "depth32float") throw new Error("Depth textures cannot be storage outputs");
       entries.push({ binding: index + 3, visibility: writing ? 4 : 7,
         ...(r.buffers[id] ? { buffer: { type: writing ? "storage" as const : "read-only-storage" as const } }

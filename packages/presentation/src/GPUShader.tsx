@@ -48,13 +48,15 @@ export type GPUPass =
       depthCompare?: "never" | "less" | "equal" | "less-equal" | "greater" | "not-equal" | "greater-equal" | "always" }
   | { kind: "fullscreen"; id: string; code: string; fragment: string;
       output: string; reads?: string[]; mip?: number };
-export type GPURenderGraphDefinition = { targets: GPUTarget[]; buffers?: GPUBufferTarget[]; passes: GPUPass[] };
+/** A static image texture the host loads once from a data, file or web URI; passes read it by id like a target (rgba8unorm, premultiplied alpha). */
+export type GPUImage = { id: string; source: string };
+export type GPURenderGraphDefinition = { targets: GPUTarget[]; buffers?: GPUBufferTarget[]; images?: GPUImage[]; passes: GPUPass[] };
 export type GPURenderGraphProps = Omit<GPUShaderProps,
   "code" | "particles" | "particleCount" | "particleVertexCount" | "particleBlend" | "composite" | "image" | "frameData" | "frameDataSize" | "renderGraph"> &
   GPURenderGraphDefinition & { uniforms?: GPUShaderProps["frameData"]; /** Float capacity, defaults to 4096. */ uniformsSize?: number };
 /** Group 0: Frame at 0, read-only float uniforms at 1, linear sampler at 2,
  * then reads and compute writes. Fullscreen vertex output has position and location-0 UV. */
-export function GPURenderGraph({ targets, buffers, passes, uniforms, uniformsSize = 4096, ...props }: GPURenderGraphProps) {
-  const renderGraph = useMemo(() => ({ targets, buffers, passes }), [targets, buffers, passes]);
+export function GPURenderGraph({ targets, buffers, images, passes, uniforms, uniformsSize = 4096, ...props }: GPURenderGraphProps) {
+  const renderGraph = useMemo(() => ({ targets, buffers, images, passes }), [targets, buffers, images, passes]);
   return <GPUShader {...props} code="" renderGraph={renderGraph} frameData={uniforms} frameDataSize={uniformsSize} />;
 }
