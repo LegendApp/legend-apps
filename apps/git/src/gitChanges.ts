@@ -1,0 +1,135 @@
+import { getGitService, watchGitRepo, type GitCommitInput, type GitDirectoryWatcher, type GitDiscardBackup, type GitService, type GitStatus, type GitStatusEntry } from "@legend-apps/git-core";
+import { applyPatchSelection, discardPatchSelection, loadFilePatch, type FilePatch } from "./gitPatch";
+
+export type ChangesSection = "unstaged" | "staged";
+export type ChangesSelection = { section: ChangesSection; path: string };
+export type ChangesState = {
+  root: string | null; status: GitStatus | null; loading: boolean; writing: boolean; error: string | null;
+  selection: ChangesSelection | null; patch: (FilePatch & ChangesSelection & { conflicted: boolean }) | null;
+  lastDiscard: GitDiscardBackup | null;
+  /** A merge is in progress, so committing concludes it even when the index matches HEAD. */
+  merging: boolean;
+};
+export const emptyChanges: ChangesState = { root: null, status: null, loading: false, writing: false, error: null, selection: null, patch: null, lastDiscard: null, merging: false };
+
+/** Conflicted files are listed once, with the unstaged changes, where staging the whole file marks them resolved. */
+export const unstagedEntries = (status: GitStatus | null) => status?.entries.filter(entry => entry.worktreeStatus !== ".") ?? [];
+export const stagedEntries = (status: GitStatus | null) => status?.entries.filter(entry => entry.kind !== "untracked" && entry.kind !== "unmerged" && entry.indexStatus !== ".") ?? [];
+export const conflictedEntries = (status: GitStatus | null) => status?.entries.filter(entry => entry.kind === "unmerged") ?? [];
+
+function selectedEntry(status: GitStatus | null, selection: ChangesSelection | null): GitStatusEntry | undefined {
+  if (!selection) return undefined;
+  return (selection.section === "staged" ? stagedEntries : unstagedEntries)(status).find(entry => entry.path === selection.path);
+}
+
+export function createGitChanges(onChange: (state: ChangesState) => void, watch: GitDirectoryWatcher, serviceFor: (path: string) => GitService = getGitService) {
+  let state = emptyChanges;
+  let active: AbortController | undefined;
+  let watcher: { remove(): void } | undefined;
+  let service: GitService | undefined;
+  let closed = false;
+  let suppressedUntil = 0;
+  let generation = 0;
+  const publish = (patch: Partial<ChangesState>) => { state = { ...state, ...patch }; if (!closed) onChange(state); };
+  const current = (controller: AbortController) => !closed && active === controller && !controller.signal.aborted;
+  const report = (error: unknown, controller: AbortController) => {
+    if (current(controller)) publish({ error: error instanceof Error ? error.message : String(error) });
+  };
+  const cancel = () => { active?.abort(); watcher?.remove(); watcher = undefined; service = undefined; };
+  // Status and the selected file's patch are re-read together, so the lists and diff always describe the same index.
+  const refresh = async (git: GitService, controller: AbortController) => {
+    if (!current(controller)) return;
+    const run = ++generation;
+    const [status, lastDiscard, { merging }] = await Promise.all([git.status({ signal: controller.signal }), git.lastDiscard({ signal: controller.signal }), git.repoState({ signal: controller.signal })]);
+    const selection = state.selection;
+    const entry = selectedEntry(status, selection);
+    const conflicted = entry?.kind === "unmerged";
+    const patch = entry && selection ? { ...selection, conflicted, ...conflicted ? { text: "", file: null } : await loadFilePatch(git, entry, selection.section === "staged", controller.signal) } : null;
+    if (current(controller) && run === generation && selection === state.selection) publish({ status, lastDiscard, merging, error: null, patch, selection: entry ? selection : null });
+  };
+  /** Runs one write, then re-reads status; resolves true when the write succeeded. */
+  const write = async (operation: (git: GitService, signal: AbortSignal) => Promise<unknown>) => {
+    const git = service, controller = active;
+    if (!git || !controller || state.writing || !current(controller)) return false;
+    publish({ writing: true, error: null });
+    try {
+      await operation(git, controller.signal);
+      await refresh(git, controller);
+      return true;
+    } catch (error) {
+      await refresh(git, controller).catch(() => {});
+      report(error, controller);
+      return false;
+    } finally {
+      if (current(controller)) { suppressedUntil = Date.now() + 300; publish({ writing: false }); }
+    }
+  };
+  const currentPatch = (expectedText: string) => {
+    const patch = state.patch;
+    if (!patch?.file) return null;
+    // Line keys are only meaningful against the patch they were selected from.
+    if (patch.text !== expectedText) { publish({ error: "The diff changed. Review it and select the lines again." }); return null; }
+    return patch;
+  };
+  return {
+    async open(path: string) {
+      cancel();
+      if (closed) return;
+      const controller = active = new AbortController();
+      publish({ ...emptyChanges, loading: true });
+      try {
+        const root = await serviceFor(path).resolveRoot({ signal: controller.signal });
+        if (!current(controller)) return;
+        const git = service = serviceFor(root);
+        const locations = await git.watchLocations({ signal: controller.signal });
+        if (!current(controller)) return;
+        publish({ root });
+        watcher = watchGitRepo({ locations, watch, reload: () => refresh(git, controller), onError: error => report(error, controller), suppressedUntil: () => state.writing ? Date.now() + 300 : suppressedUntil });
+        await refresh(git, controller);
+      } catch (error) { report(error, controller); }
+      finally { if (current(controller)) publish({ loading: false }); }
+    },
+    async select(selection: ChangesSelection | null) {
+      if (selection?.section === state.selection?.section && selection?.path === state.selection?.path) return;
+      publish({ selection, patch: null });
+      const git = service, controller = active;
+      if (git && controller && selection) try { await refresh(git, controller); } catch (error) { report(error, controller); }
+    },
+    changeFile(path: string, stage: boolean) {
+      return write((git, signal) => stage ? git.stageFile(path, { signal }) : git.unstageFile(path, { signal }));
+    },
+    /** Stages lines from the unstaged diff, or unstages lines from the staged diff, of the selected file. */
+    changeLines(keys: ReadonlySet<string>, expectedText: string) {
+      const patch = currentPatch(expectedText);
+      return patch ? write((git, signal) => applyPatchSelection(git, patch.file!, patch.section === "staged", keys, signal)) : Promise.resolve(false);
+    },
+    /** Discards a whole file's unstaged changes; Git saves a backup ref first. */
+    discardFile(path: string) {
+      return write((git, signal) => git.discardFiles([path], { signal }));
+    },
+    /** Discards lines of the selected file's unstaged diff from the worktree; Git saves a backup ref first. */
+    discardLines(keys: ReadonlySet<string>, expectedText: string) {
+      const patch = currentPatch(expectedText);
+      if (patch && patch.section !== "unstaged") { publish({ error: "Only unstaged changes can be discarded." }); return Promise.resolve(false); }
+      return patch ? write((git, signal) => discardPatchSelection(git, patch.path, patch.file!, keys, signal)) : Promise.resolve(false);
+    },
+    restoreLastDiscard() {
+      const ref = state.lastDiscard?.ref;
+      return ref ? write((git, signal) => git.restoreDiscard(ref, { signal })) : Promise.resolve(false);
+    },
+    commit(input: GitCommitInput) {
+      return write((git, signal) => git.commit(input, { signal }));
+    },
+    /** HEAD's message for an amend, or null when HEAD is unborn or the read fails. */
+    async headMessage() {
+      const git = service, controller = active;
+      if (!git || !controller || state.status?.branch.oid === "(initial)") return null;
+      try { return await git.headMessage({ signal: controller.signal }); } catch (error) { report(error, controller); return null; }
+    },
+    async refresh() {
+      const git = service, controller = active;
+      if (git && controller) try { await refresh(git, controller); } catch (error) { report(error, controller); }
+    },
+    dispose() { closed = true; cancel(); },
+  };
+}

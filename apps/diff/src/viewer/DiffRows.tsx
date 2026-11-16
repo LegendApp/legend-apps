@@ -7,6 +7,7 @@ import type {
   DiffSideBySideRenderRow,
 } from "@legend-apps/diff-parser";
 import { DiffNativeRow } from "@legend-apps/diff-parser";
+import { diffUnifiedChangeBarWidth, diffUnifiedLineNumberWidth, diffUnifiedMarkerWidth, getDiffRowPalette } from "@legend-apps/diff-parser/src/diffRowPresentation";
 import {
   sourceViewerCodeFontFamily,
 } from "@legend-apps/source-viewer";
@@ -131,30 +132,10 @@ type DiffSideBySideLineRowProps = DiffSideBySideRowProps & {
 const diffSideBySidePresentationFileHeader = 1;
 const diffSideBySidePresentationHunkHeader = 2;
 
-const diffDarkPalette = {
-  addAccent: "#7ee787",
-  addBackground: "#17351f",
-  removeAccent: "#ff7b72",
-  removeBackground: "#3a1d24",
-};
-
-const diffLightPalette = {
-  addAccent: "#1a7f37",
-  addBackground: "#dafbe1",
-  removeAccent: "#cf222e",
-  removeBackground: "#ffebe9",
-};
-
-export const diffUnifiedChangeBarWidth = 3;
-export const diffUnifiedLineNumberWidth = 44;
-export const diffUnifiedMarkerWidth = 14;
+export { diffUnifiedChangeBarWidth, diffUnifiedLineNumberWidth, diffUnifiedMarkerWidth, getDiffRowPalette };
 export const diffSideBySideLineNumberWidth = 40;
 export const diffSideBySideMarkerWidth = 12;
 export const diffHunkHeaderHeight = 32;
-
-export function getDiffRowPalette(syntaxAppearance: "dark" | "light") {
-  return syntaxAppearance === "dark" ? diffDarkPalette : diffLightPalette;
-}
 
 export function getSideBySideDividerColor(syntaxAppearance: "dark" | "light") {
   return syntaxAppearance === "dark" ? "#ffffff14" : "#1118271a";

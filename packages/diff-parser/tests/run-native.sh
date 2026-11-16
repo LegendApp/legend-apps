@@ -11,6 +11,8 @@ GIT2_ROOT="$PODS_ROOT/LegendLibGit2"
 NITRO_HEADERS="$PODS_PUBLIC_HEADERS/NitroModules"
 TEST_BINARY="$BUILD_DIR/native_unified_diff_parser_test"
 GIT_FIXTURE="$BUILD_DIR/git-fixture"
+NO_NEWLINE_FIXTURE="$BUILD_DIR/no-newline-fixture"
+NO_NEWLINE_DIFF="$BUILD_DIR/no-newline-fixture.diff"
 
 MISSING_PATHS=()
 for required_path in \
@@ -90,6 +92,24 @@ EOF
 rm "$GIT_FIXTURE/src/Deleted.ts"
 printf '\xff\x00\xfe\x01' > "$GIT_FIXTURE/assets/logo.bin"
 
+rm -rf "$NO_NEWLINE_FIXTURE"
+mkdir -p "$NO_NEWLINE_FIXTURE"
+printf 'first\nlast' > "$NO_NEWLINE_FIXTURE/no-newline.txt"
+printf 'a\nb' > "$NO_NEWLINE_FIXTURE/fixed.txt"
+printf 'a\nb\n' > "$NO_NEWLINE_FIXTURE/dropped.txt"
+for line in 1 2 3 4 5 6 7 8 9 10 11 12; do echo "rename $line"; done > "$NO_NEWLINE_FIXTURE/old name.txt"
+git -C "$NO_NEWLINE_FIXTURE" init --quiet
+git -C "$NO_NEWLINE_FIXTURE" config user.email "diff-parser-native@example.com"
+git -C "$NO_NEWLINE_FIXTURE" config user.name "Diff Parser Native"
+git -C "$NO_NEWLINE_FIXTURE" add .
+git -C "$NO_NEWLINE_FIXTURE" commit --quiet -m "initial fixture"
+printf 'first\nchanged last' > "$NO_NEWLINE_FIXTURE/no-newline.txt"
+printf 'a\nb\n' > "$NO_NEWLINE_FIXTURE/fixed.txt"
+printf 'a\nb' > "$NO_NEWLINE_FIXTURE/dropped.txt"
+git -C "$NO_NEWLINE_FIXTURE" mv "old name.txt" 'renamed "quoted" näme.txt'
+sed -i '' 's/^rename 6$/rename six/' "$NO_NEWLINE_FIXTURE/renamed \"quoted\" näme.txt"
+git -C "$NO_NEWLINE_FIXTURE" -c core.quotepath=on diff --no-color -M HEAD > "$NO_NEWLINE_DIFF"
+
 clang++ \
   -std=c++20 \
   -Wall \
@@ -116,4 +136,4 @@ clang++ \
   -framework Security \
   -o "$TEST_BINARY"
 
-"$TEST_BINARY" "$GIT_FIXTURE"
+"$TEST_BINARY" "$GIT_FIXTURE" "$NO_NEWLINE_FIXTURE" "$NO_NEWLINE_DIFF"

@@ -4,6 +4,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <fstream>
+#include <iterator>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -662,6 +664,144 @@ void assertGitRepositoryDiffIgnoresWhitespace(const std::string& fixturePath) {
   expect(!hasWhitespaceFile, "git ignore-whitespace should omit whitespace-only files");
 }
 
+constexpr double diffChangeTypeMeta = 3;
+const std::string noNewlineMarker = "\\ No newline at end of file";
+
+// "<sign><text>" for line rows, or the marker text for no-newline rows, matching how git prints the hunk body.
+std::vector<std::string> hunkBodyForFile(const diffparser::DiffParsedDocument& parsed, const diffparser::DiffFileSummary& file) {
+  std::vector<std::string> body;
+  const auto start = static_cast<size_t>(file.rowStart);
+  const auto end = start + static_cast<size_t>(file.rowCount);
+  for (size_t index = start; index < end && index < parsed.rows.size(); index += 1) {
+    const auto& row = parsed.rows[index];
+    if (row.kind != diffRowKindLine) {
+      continue;
+    }
+    if (row.changeType == diffChangeTypeMeta) {
+      expectEqual(row.oldLineNumber, -1, file.path + " marker old line");
+      expectEqual(row.newLineNumber, -1, file.path + " marker new line");
+      body.push_back(row.text);
+      continue;
+    }
+    const char sign = row.changeType == diffChangeTypeAdd ? '+' : row.changeType == diffChangeTypeRemove ? '-' : ' ';
+    body.push_back(sign + row.text);
+  }
+  return body;
+}
+
+void expectHunkBody(
+    const diffparser::DiffParsedDocument& parsed,
+    std::string_view path,
+    const std::vector<std::string>& expected,
+    const std::string& label) {
+  const auto& file = findFile(parsed, path);
+  const auto actual = hunkBodyForFile(parsed, file);
+  std::string actualText;
+  std::string expectedText;
+  for (const auto& line : actual) actualText += line + "|";
+  for (const auto& line : expected) expectedText += line + "|";
+  expectEqual(actualText, expectedText, label + " " + std::string(path) + " body");
+}
+
+// Both files lack a final newline on both sides; fixed.txt gains one; dropped.txt loses one.
+const std::vector<std::string> noNewlineBothBody = { " first", "-last", noNewlineMarker, "+changed last", noNewlineMarker };
+const std::vector<std::string> noNewlineFixedBody = { " a", "-b", noNewlineMarker, "+b" };
+const std::vector<std::string> noNewlineDroppedBody = { " a", "-b", "+b", noNewlineMarker };
+
+void assertNoNewlineSideBySide(const diffparser::DiffParsedDocument& parsed, const std::string& label) {
+  const auto& file = findFile(parsed, "no-newline.txt");
+  const auto lines = diffparser::createDiffSideBySideLines(parsed.rows);
+  std::vector<std::pair<std::string, std::string>> pairs;
+  const auto sideText = [&](int32_t rowIndex) {
+    return rowIndex < 0 ? std::string() : parsed.rows[static_cast<size_t>(rowIndex)].text;
+  };
+  for (const auto& line : lines) {
+    if (line.fileIndex == file.index && line.kind == sideBySideKindChange) {
+      pairs.emplace_back(sideText(line.oldRowIndex), sideText(line.newRowIndex));
+    }
+  }
+  expectEqual(static_cast<double>(pairs.size()), 2, label + " side-by-side no-newline change count");
+  expectEqual(pairs[0].first + "|" + pairs[0].second, "last|changed last", label + " side-by-side changed line pair");
+  expectEqual(pairs[1].first + "|" + pairs[1].second, noNewlineMarker + "|" + noNewlineMarker, label + " side-by-side marker pair");
+}
+
+void assertUnifiedNoNewlineAndQuotedPaths() {
+  const std::string fixture =
+    "diff --git a/no-newline.txt b/no-newline.txt\n"
+    "index 1111111..2222222 100644\n"
+    "--- a/no-newline.txt\n"
+    "+++ b/no-newline.txt\n"
+    "@@ -1,2 +1,2 @@\n"
+    " first\n"
+    "-last\n"
+    "\\ No newline at end of file\n"
+    "+changed last\n"
+    "\\ No newline at end of file\n"
+    "diff --git \"a/old \\\"name\\\".txt\" \"b/renamed \\\"quoted\\\" n\\303\\244me.txt\"\n"
+    "similarity index 90%\n"
+    "rename from \"old \\\"name\\\".txt\"\n"
+    "rename to \"renamed \\\"quoted\\\" n\\303\\244me.txt\"\n"
+    "index 3333333..4444444 100644\n"
+    "--- \"a/old \\\"name\\\".txt\"\n"
+    "+++ \"b/renamed \\\"quoted\\\" n\\303\\244me.txt\"\n"
+    "@@ -1 +1 @@\n"
+    "-one\n"
+    "+two\n"
+    "diff --git \"a/tab\\there\" \"b/back\\\\slash\\nline\"\n"
+    "similarity index 100%\n"
+    "rename from \"tab\\there\"\n"
+    "rename to \"back\\\\slash\\nline\"\n"
+    "diff --git a/plain.txt \"b/copy \\\"of\\\" plain.txt\"\n"
+    "similarity index 100%\n"
+    "copy from plain.txt\n"
+    "copy to \"copy \\\"of\\\" plain.txt\"\n";
+
+  const auto parsed = diffparser::parseUnifiedDiffText(fixture);
+  expectHunkBody(parsed, "no-newline.txt", noNewlineBothBody, "unified");
+  const auto& noNewline = findFile(parsed, "no-newline.txt");
+  expectEqual(noNewline.additions, 1, "unified no-newline additions");
+  expectEqual(noNewline.deletions, 1, "unified no-newline deletions");
+  assertNoNewlineSideBySide(parsed, "unified");
+
+  const auto& renamed = findFile(parsed, "renamed \"quoted\" n\xC3\xA4me.txt");
+  expectEqual(renamed.oldPath, "old \"name\".txt", "unified quoted rename old path");
+  expectEqual(renamed.status, "renamed", "unified quoted rename status");
+  expectEqual(rowAt(parsed, static_cast<size_t>(renamed.rowStart)).text, renamed.path, "unified quoted rename header text");
+  const auto& pureRename = findFile(parsed, "back\\slash\nline");
+  expectEqual(pureRename.oldPath, "tab\there", "unified pure rename old path");
+  expectEqual(pureRename.status, "renamed", "unified pure rename status");
+  const auto& copied = findFile(parsed, "copy \"of\" plain.txt");
+  expectEqual(copied.oldPath, "plain.txt", "unified copy old path");
+  expectEqual(parsed.fileSources[static_cast<size_t>(copied.index)].newPath, copied.path, "unified copy source path");
+
+  assertSameUnifiedParse(parseUnifiedDiffStreamForTest(fixture, 1), parsed);
+  assertSameUnifiedParse(parseUnifiedDiffStreamForTest(fixture, 23), parsed);
+}
+
+void assertGitRepositoryNoNewline(const std::string& fixturePath) {
+  const auto parsed = diffparser::parseGitRepositoryDiff(fixturePath);
+  expectHunkBody(parsed, "no-newline.txt", noNewlineBothBody, "git");
+  expectHunkBody(parsed, "fixed.txt", noNewlineFixedBody, "git");
+  expectHunkBody(parsed, "dropped.txt", noNewlineDroppedBody, "git");
+  const auto& noNewline = findFile(parsed, "no-newline.txt");
+  expectEqual(noNewline.additions, 1, "git no-newline additions");
+  expectEqual(noNewline.deletions, 1, "git no-newline deletions");
+  assertNoNewlineSideBySide(parsed, "git");
+}
+
+void assertUnifiedGitDiffNoNewline(const std::string& diffPath) {
+  std::ifstream input(diffPath, std::ios::binary);
+  expect(input.good(), "expected git diff text at " + diffPath);
+  const std::string diffText((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+  const auto parsed = diffparser::parseUnifiedDiffText(diffText);
+  expectHunkBody(parsed, "no-newline.txt", noNewlineBothBody, "git diff text");
+  expectHunkBody(parsed, "fixed.txt", noNewlineFixedBody, "git diff text");
+  expectHunkBody(parsed, "dropped.txt", noNewlineDroppedBody, "git diff text");
+  const auto& renamed = findFile(parsed, "renamed \"quoted\" n\xC3\xA4me.txt");
+  expectEqual(renamed.oldPath, "old name.txt", "git diff text quoted rename old path");
+  assertSameUnifiedParse(parseUnifiedDiffStreamForTest(diffText, 7), parsed);
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -676,11 +816,16 @@ int main(int argc, char** argv) {
     assertIgnoreWhitespaceChanges();
     assertSameUnifiedParse(parseUnifiedDiffStreamForTest(fixture, 1), parsed);
     assertSameUnifiedParse(parseUnifiedDiffStreamForTest(fixture, 17), parsed);
+    assertUnifiedNoNewlineAndQuotedPaths();
     if (argc > 1) {
       assertGitRepositoryDiff(argv[1]);
       assertGitRepositoryDiffByFile(argv[1]);
       assertGitRepositoryDiffAgainstCompareBase(argv[1]);
       assertGitRepositoryDiffIgnoresWhitespace(argv[1]);
+    }
+    if (argc > 3) {
+      assertGitRepositoryNoNewline(argv[2]);
+      assertUnifiedGitDiffNoNewline(argv[3]);
     }
     std::cout << "native diff parser fixtures passed\n";
     return 0;

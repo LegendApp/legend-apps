@@ -7,6 +7,9 @@
     "@legendapp/spark": "catalog:",
     "react": "catalog:",
     "react-native": "catalog:",
-    "@legend-apps/git-core": "workspace:*"
+    "@legend-apps/diff-parser": "workspace:*",
+    "@legend-apps/git-core": "workspace:*",
+    "@legend-apps/file-system-watcher": "workspace:*",
+    "@legend-apps/syntax-parser": "workspace:*"
   }
 }

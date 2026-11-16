@@ -14,6 +14,10 @@ const manifest = {
   nativeModules: {
     macos: [
       "@legendapp/spark/ui",
+      "@legendapp/spark/processes",
+      "@legend-apps/diff-parser",
+      "@legend-apps/syntax-parser",
+      "@legend-apps/file-system-watcher",
       "@legendapp/spark/dialogs",
       "@legendapp/spark/menus",
       "@legendapp/spark/windows",

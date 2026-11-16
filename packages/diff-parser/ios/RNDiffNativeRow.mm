@@ -1067,6 +1067,12 @@ static void RNDiffDrawHorizontalText(
 
 - (void)mouseDown:(NSEvent *)event
 {
+  // AppKit can forward an overlay's unhandled mouseDown to this row.
+  // Leave mouseUp available to React Native unless the row itself was hit.
+  if ([self.window.contentView.superview hitTest:event.locationInWindow] != self) {
+    return;
+  }
+
   RNDiffNativeRowRenderConfig *config = RNDiffNativeRowConfigForId(self.configId);
   auto document = config ? getRegisteredDiffDocument(config.documentId) : nullptr;
   const NSPoint point = [self convertPoint:event.locationInWindow fromView:nil];

@@ -123,32 +123,83 @@ std::string trimWhitespace(std::string_view value) {
   return std::string(value.substr(start, end - start));
 }
 
-std::string stripQuotedPath(std::string_view path) {
-  auto normalizedPath = trimWhitespace(path);
-  if (normalizedPath.size() >= 2 && normalizedPath.front() == '"' && normalizedPath.back() == '"') {
-    normalizedPath = normalizedPath.substr(1, normalizedPath.size() - 2);
+// Decodes a git C-quoted path ("..." with \a \b \f \n \r \t \v \" \\ and \ooo byte escapes) starting at
+// value[0] == '"'. Returns the decoded path and sets `end` past the closing quote, or npos if unterminated.
+std::string unquoteCPath(std::string_view value, size_t& end) {
+  std::string result;
+  for (size_t index = 1; index < value.size(); index += 1) {
+    const char character = value[index];
+    if (character == '"') {
+      end = index + 1;
+      return result;
+    }
+    if (character != '\\' || index + 1 >= value.size()) {
+      result.push_back(character);
+      continue;
+    }
+    const char escaped = value[++index];
+    if (escaped >= '0' && escaped <= '7') {
+      int byte = 0;
+      const size_t octalEnd = std::min(index + 3, value.size());
+      for (; index < octalEnd && value[index] >= '0' && value[index] <= '7'; index += 1) {
+        byte = byte * 8 + (value[index] - '0');
+      }
+      index -= 1;
+      result.push_back(static_cast<char>(byte));
+      continue;
+    }
+    switch (escaped) {
+      case 'a': result.push_back('\a'); break;
+      case 'b': result.push_back('\b'); break;
+      case 'f': result.push_back('\f'); break;
+      case 'n': result.push_back('\n'); break;
+      case 'r': result.push_back('\r'); break;
+      case 't': result.push_back('\t'); break;
+      case 'v': result.push_back('\v'); break;
+      default: result.push_back(escaped); break;
+    }
   }
-  return normalizedPath;
+  end = std::string_view::npos;
+  return result;
 }
 
-std::string stripGitDiffPathPrefix(std::string_view path) {
-  auto normalizedPath = stripQuotedPath(path);
-  if (normalizedPath.starts_with("a/") || normalizedPath.starts_with("b/")) {
-    return normalizedPath.substr(2);
+std::string stripGitDiffPathPrefix(std::string path) {
+  if (path.starts_with("a/") || path.starts_with("b/")) {
+    return path.substr(2);
   }
-  return normalizedPath;
+  return path;
+}
+
+// A header path that is either C-quoted or plain; a plain path ends at a tab (git appends one to names with spaces).
+std::string parseQuotablePath(std::string_view value) {
+  if (value.starts_with('"')) {
+    size_t end = 0;
+    return unquoteCPath(value, end);
+  }
+  return trimWhitespace(value.substr(0, value.find('\t')));
 }
 
 std::pair<std::string, std::string> parseDiffGitPaths(std::string_view line) {
   constexpr auto prefix = std::string_view("diff --git ");
   const auto paths = line.substr(prefix.size());
-  const auto separator = paths.find(" b/");
+  if (paths.starts_with('"')) {
+    size_t end = 0;
+    auto oldPath = unquoteCPath(paths, end);
+    if (end == std::string_view::npos || end >= paths.size()) {
+      return { "", "" };
+    }
+    return { stripGitDiffPathPrefix(std::move(oldPath)), stripGitDiffPathPrefix(parseQuotablePath(paths.substr(end + 1))) };
+  }
+  auto separator = paths.find(" \"b/");
+  if (separator == std::string::npos) {
+    separator = paths.find(" b/");
+  }
   if (separator == std::string::npos) {
     return { "", "" };
   }
   return {
-    stripGitDiffPathPrefix(paths.substr(0, separator)),
-    stripGitDiffPathPrefix(paths.substr(separator + 1)),
+    stripGitDiffPathPrefix(trimWhitespace(paths.substr(0, separator))),
+    stripGitDiffPathPrefix(parseQuotablePath(paths.substr(separator + 1))),
   };
 }
 
@@ -156,10 +207,24 @@ std::string parseHeaderPath(std::string_view line) {
   if (line.size() <= 4) {
     return "";
   }
+  return stripGitDiffPathPrefix(parseQuotablePath(line.substr(4)));
+}
 
-  const auto tabIndex = line.find('\t', 4);
-  const auto end = tabIndex == std::string::npos ? line.size() : tabIndex;
-  return stripGitDiffPathPrefix(line.substr(4, end - 4));
+// `rename from <path>` / `copy to <path>` style extended headers carry paths without the a/ b/ prefix.
+bool parseExtendedHeaderPath(std::string_view line, std::string_view fromOrTo, std::string& path) {
+  for (const auto kind : { std::string_view("rename "), std::string_view("copy ") }) {
+    if (line.starts_with(kind) && line.substr(kind.size()).starts_with(fromOrTo)) {
+      path = parseQuotablePath(line.substr(kind.size() + fromOrTo.size()));
+      return true;
+    }
+  }
+  return false;
+}
+
+constexpr auto noNewlineMarkerText = std::string_view("\\ No newline at end of file");
+
+bool isNoNewlineMarkerRow(const DiffRenderRow& row) {
+  return row.kind == diffRowKindLine && row.oldLineNumber < 0 && row.newLineNumber < 0;
 }
 
 int parsePositiveInt(std::string_view value, size_t start) {
@@ -583,6 +648,18 @@ struct UnifiedDiffBuildState {
     diff.rows.push_back(std::move(row));
   }
 
+  void applyHeaderPaths() {
+    if (diff.currentFileIndex >= 0) {
+      auto& file = diff.files[static_cast<size_t>(diff.currentFileIndex)];
+      file.path = currentNewPath == "/dev/null" ? currentOldPath : currentNewPath;
+      file.oldPath = currentOldPath == "/dev/null" ? file.path : currentOldPath;
+      diff.rows[static_cast<size_t>(file.rowStart)].text = file.path;
+      auto& sources = fileSources[static_cast<size_t>(diff.currentFileIndex)];
+      sources.oldPath = file.oldPath;
+      sources.newPath = file.path;
+    }
+  }
+
   void startHunk(int oldStart, int newStart) {
     if (diff.currentFileIndex >= 0) {
       diff.currentHunkIndex += 1;
@@ -618,6 +695,9 @@ struct UnifiedDiffBuildState {
       row.changeType = diffChangeTypeRemove;
       diff.currentOldLine += 1;
       file.deletions += 1;
+    } else if (origin == '\\') {
+      row.changeType = diffChangeTypeMeta;
+      row.text = std::string(noNewlineMarkerText);
     } else {
       row.oldLineNumber = diff.currentOldLine;
       row.newLineNumber = diff.currentNewLine;
@@ -789,6 +869,9 @@ struct UnifiedDiffProgressiveBuildState {
       row.changeType = diffChangeTypeRemove;
       currentOldLine += 1;
       currentFile.deletions += 1;
+    } else if (origin == '\\') {
+      row.changeType = diffChangeTypeMeta;
+      row.text = std::string(noNewlineMarkerText);
     } else {
       row.oldLineNumber = currentOldLine;
       row.newLineNumber = currentNewLine;
@@ -911,6 +994,9 @@ int onProgressiveGitLine(
   double changeType = diffChangeTypeContext;
   double oldLineNumber = line->old_lineno >= 0 ? static_cast<double>(line->old_lineno) : -1;
   double newLineNumber = line->new_lineno >= 0 ? static_cast<double>(line->new_lineno) : -1;
+  const bool isNoNewlineMarker = line->origin == GIT_DIFF_LINE_CONTEXT_EOFNL ||
+    line->origin == GIT_DIFF_LINE_ADD_EOFNL ||
+    line->origin == GIT_DIFF_LINE_DEL_EOFNL;
   if (line->origin == GIT_DIFF_LINE_ADDITION) {
     changeType = diffChangeTypeAdd;
     state->currentNewLine += 1;
@@ -919,10 +1005,11 @@ int onProgressiveGitLine(
     changeType = diffChangeTypeRemove;
     state->currentOldLine += 1;
     state->currentFile.deletions += 1;
-  } else if (line->origin == GIT_DIFF_LINE_ADD_EOFNL) {
-    changeType = diffChangeTypeAdd;
-  } else if (line->origin == GIT_DIFF_LINE_DEL_EOFNL) {
-    changeType = diffChangeTypeRemove;
+  } else if (isNoNewlineMarker) {
+    // libgit2 reports the marker after the line it annotates; emit it the way unified diff text spells it.
+    changeType = diffChangeTypeMeta;
+    oldLineNumber = -1;
+    newLineNumber = -1;
   } else {
     state->currentOldLine += 1;
     state->currentNewLine += 1;
@@ -936,7 +1023,7 @@ int onProgressiveGitLine(
   row.oldLineNumber = oldLineNumber;
   row.newLineNumber = newLineNumber;
   row.changeType = changeType;
-  row.text = trimDiffLine(line->content, line->content_len);
+  row.text = isNoNewlineMarker ? std::string(noNewlineMarkerText) : trimDiffLine(line->content, line->content_len);
   row.tokens = {};
   state->rowCount += 1;
 
@@ -1004,6 +1091,7 @@ std::vector<DiffSideBySideLine> createDiffSideBySideLines(const std::vector<Diff
     flushChangedRows();
   };
 
+  const DiffRenderRow* previousRow = nullptr;
   for (const auto& row : rows) {
     if (isFileHeaderRow(row)) {
       flushPending();
@@ -1016,7 +1104,13 @@ std::vector<DiffSideBySideLine> createDiffSideBySideLines(const std::vector<Diff
       currentHunkIndex = row.hunkIndex;
     }
 
-    if (!isFileHeaderRow(row)) {
+    // A no-newline marker stays on the side of the changed line it follows.
+    const bool isMarker = previousRow != nullptr && isNoNewlineMarkerRow(row);
+    if (isMarker && isRemoveRow(*previousRow)) {
+      removedRows.push_back(&row);
+    } else if (isMarker && isAddRow(*previousRow)) {
+      addedRows.push_back(&row);
+    } else if (!isFileHeaderRow(row)) {
       if (isRemoveRow(row)) {
         flushContextRows();
         removedRows.push_back(&row);
@@ -1028,6 +1122,7 @@ std::vector<DiffSideBySideLine> createDiffSideBySideLines(const std::vector<Diff
         contextRows.push_back(&row);
       }
     }
+    previousRow = &row;
   }
 
   flushPending();
@@ -1103,13 +1198,17 @@ private:
       state.updateOldPath(parseHeaderPath(line));
     } else if (line.starts_with("+++ ") && state.currentHunkIndex < 0) {
       state.updateNewPath(parseHeaderPath(line));
+    } else if (std::string path; state.currentHunkIndex < 0 && parseExtendedHeaderPath(line, "from ", path)) {
+      state.updateOldPath(path);
+    } else if (std::string path; state.currentHunkIndex < 0 && parseExtendedHeaderPath(line, "to ", path)) {
+      state.updateNewPath(path);
     } else if (line.starts_with("@@ ")) {
       int oldStart = 0;
       int newStart = 0;
       if (parseHunkLineNumbers(line, oldStart, newStart)) {
         state.startHunk(oldStart, newStart);
       }
-    } else if (!line.empty() && (line[0] == ' ' || line[0] == '+' || line[0] == '-')) {
+    } else if (!line.empty() && (line[0] == ' ' || line[0] == '+' || line[0] == '-' || line[0] == '\\')) {
       state.appendLine(line[0], line.substr(1));
     } else if (line.starts_with("Binary files ")) {
       state.markBinary();
@@ -1321,22 +1420,19 @@ DiffParsedDocument parseUnifiedDiffText(const std::string& diffText, bool ignore
       state.currentOldPath = parseHeaderPath(line);
     } else if (line.starts_with("+++ ") && state.diff.currentHunkIndex < 0) {
       state.currentNewPath = parseHeaderPath(line);
-      if (state.diff.currentFileIndex >= 0) {
-        auto& file = state.diff.files[static_cast<size_t>(state.diff.currentFileIndex)];
-        file.path = state.currentNewPath == "/dev/null" ? state.currentOldPath : state.currentNewPath;
-        file.oldPath = state.currentOldPath == "/dev/null" ? file.path : state.currentOldPath;
-        state.diff.rows[static_cast<size_t>(file.rowStart)].text = file.path;
-        auto& sources = state.fileSources[static_cast<size_t>(state.diff.currentFileIndex)];
-        sources.oldPath = file.oldPath;
-        sources.newPath = file.path;
-      }
+      state.applyHeaderPaths();
+    } else if (
+        state.diff.currentHunkIndex < 0 &&
+        (parseExtendedHeaderPath(line, "from ", state.currentOldPath) ||
+         parseExtendedHeaderPath(line, "to ", state.currentNewPath))) {
+      state.applyHeaderPaths();
     } else if (line.starts_with("@@ ")) {
       int oldStart = 0;
       int newStart = 0;
       if (parseHunkLineNumbers(line, oldStart, newStart)) {
         state.startHunk(oldStart, newStart);
       }
-    } else if (!line.empty() && (line[0] == ' ' || line[0] == '+' || line[0] == '-')) {
+    } else if (!line.empty() && (line[0] == ' ' || line[0] == '+' || line[0] == '-' || line[0] == '\\')) {
       state.appendLine(line[0], line.substr(1));
     } else if (line.starts_with("Binary files ") && state.diff.currentFileIndex >= 0) {
       state.diff.files[static_cast<size_t>(state.diff.currentFileIndex)].isBinary = true;

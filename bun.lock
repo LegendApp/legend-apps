@@ -147,7 +147,10 @@
       "name": "@legend-apps/app-git",
       "version": "0.0.1",
       "dependencies": {
+        "@legend-apps/diff-parser": "workspace:*",
+        "@legend-apps/file-system-watcher": "workspace:*",
         "@legend-apps/git-core": "workspace:*",
+        "@legend-apps/syntax-parser": "workspace:*",
         "@legendapp/spark": "catalog:",
         "react": "catalog:",
         "react-native": "catalog:",

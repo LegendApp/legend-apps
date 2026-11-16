@@ -1,22 +1,31 @@
-import { openFileDialog } from "@legendapp/spark/dialogs";
+import { getGitService, type GitService } from "@legend-apps/git-core";
+import { watchDirectories } from "@legend-apps/file-system-watcher";
+import { Button } from "@legendapp/spark/ui";
+import { Sidebar } from "@legendapp/spark/ui/sidebar";
+import { openFileDialog, showMessage } from "@legendapp/spark/dialogs";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { SidebarSplitView } from "@legendapp/spark/ui/split-view";
-import { setWindowOptions } from "@legendapp/spark/windows";
+import { addWindowListener, setWindowOptions } from "@legendapp/spark/windows";
 import { addMacOSWindowListener } from "@legendapp/spark/windows/macos";
+import { Switch, Text, TextInput } from "react-native";
 import { App } from "../App";
 
+jest.mock("@legend-apps/git-core", () => ({ ...jest.requireActual("@legend-apps/git-core"), getGitService: jest.fn() }));
 jest.mock("react-native", () => ({
   PlatformColor: (name: string) => name,
   StyleSheet: { create: (styles: unknown) => styles },
-  Text: "Text", View: "View",
+  Text: "Text", View: "View", Pressable: "Pressable", FlatList: "FlatList", Switch: "Switch", TextInput: "TextInput", useColorScheme: () => "light",
 }));
-jest.mock("@legendapp/spark/dialogs", () => ({ openFileDialog: jest.fn(async () => ({ canceled: true })) }));
+jest.mock("@legend-apps/diff-parser", () => ({ DiffNativeRow: "DiffNativeRow", DiffNativeRowConfig: "DiffNativeRowConfig", getDiffRowPalette: () => ({}), loadUnifiedDiff: jest.fn() }));
+jest.mock("@legend-apps/file-system-watcher", () => ({ watchDirectories: jest.fn(() => ({ remove: jest.fn() })) }));
+jest.mock("@legendapp/spark/ui", () => ({ Button: "Button" }));
+jest.mock("@legendapp/spark/dialogs", () => ({ openFileDialog: jest.fn(async () => ({ canceled: true })), showMessage: jest.fn(async () => ({ buttonId: "confirm" })) }));
 jest.mock("@legendapp/spark/menus", () => ({ useMenu: jest.fn() }));
 jest.mock("@legendapp/spark/ui/sidebar", () => ({ Sidebar: "Sidebar", SidebarItem: "SidebarItem" }));
 jest.mock("@legendapp/spark/ui/split-view", () => ({
   SidebarSplitView: ({ sidebar, content }: any) => <>{sidebar}{content}</>,
 }));
-jest.mock("@legendapp/spark/windows", () => ({ setWindowOptions: jest.fn(async () => {}) }));
+jest.mock("@legendapp/spark/windows", () => ({ setWindowOptions: jest.fn(async () => {}), addWindowListener: jest.fn(async () => ({ remove: jest.fn(async () => {}) })) }));
 jest.mock("@legendapp/spark/windows/macos", () => ({
   addMacOSWindowListener: jest.fn(async () => ({ remove: jest.fn(async () => {}) })),
 }));
@@ -46,4 +55,67 @@ it("renders the empty window, toggles its sidebar, opens the folder panel and cl
 
 it("resolves the shared git workspace package without loading native capabilities", () => {
   expect(require.resolve("@legend-apps/git-core")).toMatch(/packages\/git-core\/src\/index\.ts$/);
+});
+
+it("opens a repository, selects a native file row, stages and unstages it, and releases window registrations on close", async () => {
+  jest.clearAllMocks();
+  const remove = jest.fn(); jest.mocked(watchDirectories).mockReturnValue({ remove });
+  const branch = { oid: "abc", head: "main", upstream: null, ahead: 0, behind: 0 };
+  const entry = { kind: "ordinary" as const, path: "both.txt", indexStatus: "M", worktreeStatus: "M" };
+  const git = { resolveRoot: jest.fn(async () => "/repo"), watchLocations: jest.fn(async () => ({ root: "/repo", gitDir: "/repo/.git", commonDir: "/repo/.git", ignoredPaths: [] })),
+    status: jest.fn(async () => ({ branch, entries: [entry] })), stageFile: jest.fn(async () => {}), unstageFile: jest.fn(async () => {}),
+    fileDiff: jest.fn(async () => ""), lastDiscard: jest.fn(async () => null), repoState: jest.fn(async () => ({ merging: false })), discardFiles: jest.fn(async () => {}), commit: jest.fn(async () => {}), headMessage: jest.fn(async () => "Last subject\nwrapped\n\nLast body") };
+  jest.mocked(getGitService).mockReturnValue(git as unknown as GitService);
+  jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo/nested"] });
+  let renderer!: ReactTestRenderer;
+  await act(async () => { renderer = create(<App />); });
+  const toolbar = jest.mocked(addMacOSWindowListener).mock.calls[0][1];
+  await act(async () => { toolbar({ type: "toolbarAction", windowId: "main", itemId: "open-repository" }); });
+  const text = () => renderer.root.findAllByType(Text).map(node => [node.props.children].flat().join("")).join("\n");
+  expect(text()).toContain("Unstaged (1)");
+  expect(text()).toContain("Staged (1)");
+  const select = async (section: number) => act(async () => { renderer.root.findAllByType(Sidebar)[section].props.onSelectionChange({ id: "both.txt" }); });
+  await select(1);
+  git.status.mockResolvedValueOnce({ branch, entries: [{ ...entry, worktreeStatus: "." }] });
+  await act(async () => { renderer.root.findAllByType(Button).find(button => button.props.children === "Stage")!.props.onPress(); });
+  expect(git.stageFile).toHaveBeenCalledTimes(1);
+  expect(text()).toContain("Unstaged (0)");
+  await select(1);
+  git.status.mockResolvedValueOnce({ branch, entries: [{ ...entry, indexStatus: "." }] });
+  await act(async () => { renderer.root.findAllByType(Button).find(button => button.props.children === "Unstage")!.props.onPress(); });
+  expect(git.unstageFile).toHaveBeenCalledTimes(1);
+  expect(text()).toContain("Staged (0)");
+  const button = (label: string) => renderer.root.findAllByType(Button).find(node => node.props.children === label)!;
+
+  // Discard asks with a native warning sheet first; cancelling leaves the file alone.
+  await select(1);
+  jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "cancel" });
+  await act(async () => { button("Discard…").props.onPress(); });
+  expect(git.discardFiles).not.toHaveBeenCalled();
+  await act(async () => { button("Discard…").props.onPress(); });
+  expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ windowId: "main", kind: "warning", title: "Discard changes to “both.txt”?" }));
+  expect(git.discardFiles).toHaveBeenCalledWith(["both.txt"], expect.anything());
+
+  // Commit stays disabled until something is staged and a summary is entered; amend prefills HEAD's message.
+  const inputs = () => renderer.root.findAllByType(TextInput);
+  expect(button("Commit").props.disabled).toBe(true);
+  git.status.mockResolvedValue({ branch, entries: [{ ...entry, worktreeStatus: "." }] });
+  await act(async () => { toolbar({ type: "toolbarAction", windowId: "main", itemId: "refresh" }); });
+  await act(async () => { inputs()[0]!.props.onChangeText("-Summary ✓"); inputs()[1]!.props.onChangeText("# kept\nBody"); });
+  await act(async () => { renderer.root.findAllByType(Switch)[1]!.props.onValueChange(true); });
+  expect(button("Commit").props.disabled).toBe(false);
+  await act(async () => { button("Commit").props.onPress(); });
+  expect(git.commit).toHaveBeenLastCalledWith({ message: "-Summary ✓\n\n# kept\nBody\n", amend: false, signoff: true }, expect.anything());
+  expect(inputs()[0]!.props.value).toBe("");
+  await act(async () => { renderer.root.findAllByType(Switch)[0]!.props.onValueChange(true); });
+  expect(inputs().map(input => input.props.value)).toEqual(["Last subject", "wrapped\n\nLast body"]);
+  // An unedited amend keeps HEAD's message exactly, even when its first paragraph wraps.
+  await act(async () => { button("Amend Commit").props.onPress(); });
+  expect(git.commit).toHaveBeenLastCalledWith({ message: "Last subject\nwrapped\n\nLast body\n", amend: true, signoff: true }, expect.anything());
+  await act(async () => { jest.mocked(addWindowListener).mock.calls[0][2]({ windowId: "main" }); });
+  expect(remove).toHaveBeenCalledTimes(1);
+  const registration = await jest.mocked(addMacOSWindowListener).mock.results[0].value;
+  expect(registration.remove).toHaveBeenCalledTimes(1);
+  await act(async () => { renderer.unmount(); });
+  expect(remove).toHaveBeenCalledTimes(1);
 });
