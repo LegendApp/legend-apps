@@ -155,6 +155,8 @@ git -C "$GRAPH_FIXTURE" checkout --quiet main
 git -C "$GRAPH_FIXTURE" log --topo-order --format='%H %P' > "$GRAPH_FIXTURE.expected"
 git -C "$GRAPH_FIXTURE" log --topo-order --all --format='%H %P' > "$GRAPH_FIXTURE.all"
 git -C "$GRAPH_FIXTURE" log --topo-order --format='%H %P' unrelated > "$GRAPH_FIXTURE.linear"
+BLAME_FIXTURE="$BUILD_DIR/blame-fixture"
+bash "$ROOT/packages/diff-parser/tests/blame-fixture.sh" "$BLAME_FIXTURE" > /dev/null
 
 clang++ \
   -std=c++20 \
@@ -182,4 +184,4 @@ clang++ \
   -framework Security \
   -o "$TEST_BINARY"
 
-"$TEST_BINARY" "$GIT_FIXTURE" "$NO_NEWLINE_FIXTURE" "$NO_NEWLINE_DIFF" "$EXCLUDE_FIXTURE" "$HISTORY_FIXTURE" "$HISTORY_GRAPH_FIXTURE" "$HISTORY_DETACHED_FIXTURE" "$HISTORY_UNBORN_FIXTURE" "$GRAPH_FIXTURE"
+"$TEST_BINARY" "$GIT_FIXTURE" "$NO_NEWLINE_FIXTURE" "$NO_NEWLINE_DIFF" "$EXCLUDE_FIXTURE" "$HISTORY_FIXTURE" "$HISTORY_GRAPH_FIXTURE" "$HISTORY_DETACHED_FIXTURE" "$HISTORY_UNBORN_FIXTURE" "$GRAPH_FIXTURE" "$BLAME_FIXTURE"

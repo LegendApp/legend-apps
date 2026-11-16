@@ -11,7 +11,7 @@ import { Switch, Text, TextInput } from "react-native";
 import { useMenu } from "@legendapp/spark/menus";
 import { runCommand } from "@legendapp/spark/processes";
 import { App } from "../App";
-import { loadUnifiedDiff, openGitHistory } from "@legend-apps/diff-parser";
+import { blameLine, loadUnifiedDiff, openGitHistory } from "@legend-apps/diff-parser";
 import { setStringAsync } from "@legendapp/spark/clipboard";
 import { showContextMenu } from "@legendapp/spark/context-menu";
 import { openURL } from "@legendapp/spark/links";
@@ -22,7 +22,7 @@ jest.mock("react-native", () => ({
   StyleSheet: { create: (styles: unknown) => styles },
   Text: "Text", View: "View", Pressable: "Pressable", FlatList: "FlatList", ScrollView: "ScrollView", Switch: "Switch", TextInput: "TextInput", useColorScheme: () => "light",
 }));
-jest.mock("@legend-apps/diff-parser", () => ({ DiffNativeRow: "DiffNativeRow", DiffNativeRowConfig: "DiffNativeRowConfig", getDiffRowPalette: () => ({}), loadUnifiedDiff: jest.fn(), gitHistoryPageSize: 500, openGitHistory: jest.fn() }));
+jest.mock("@legend-apps/diff-parser", () => ({ DiffNativeRow: "DiffNativeRow", DiffNativeRowConfig: "DiffNativeRowConfig", getDiffRowPalette: () => ({}), loadUnifiedDiff: jest.fn(), gitHistoryPageSize: 500, openGitHistory: jest.fn(), blameLine: jest.fn() }));
 jest.mock("@legendapp/list/react-native", () => ({ LegendList: "LegendList" }));
 jest.mock("@legendapp/spark/clipboard", () => ({ setStringAsync: jest.fn(async () => true) }));
 jest.mock("@legendapp/spark/context-menu", () => ({ showContextMenu: jest.fn(async () => ({ canceled: false, itemId: "copy-sha" })) }));
@@ -341,7 +341,9 @@ it("switches sections from the sidebar, the toolbar segment and the View menu, k
   await act(async () => { listener({ type: "toolbarSelectionChanged", windowId: "main", itemId: "section", value: "history" }); });
   expect(navigation().props.selectedId).toBe("history");
   expect(toolbarItem("section").value).toBe("history");
-  expect(toolbarItem("search").disabled).toBe(true);
+  expect(toolbarItem("search")).toMatchObject({ placeholder: "Search Commits" });
+  expect(toolbarItem("search").disabled).toBeUndefined();
+  expect(toolbarItem("search-scope")).toMatchObject({ type: "menu", label: "Message" });
   // A section switch updates only the toolbar; the title bar options went once, at mount.
   expect(jest.mocked(setWindowOptions).mock.calls.at(-1)![1]).toEqual({ macos: { toolbar: expect.anything() } });
   expect(jest.mocked(setWindowOptions).mock.calls.filter(call => call[1].macos?.titleBar)).toHaveLength(1);
@@ -350,8 +352,10 @@ it("switches sections from the sidebar, the toolbar segment and the View menu, k
   await act(async () => { row = create(list.props.renderItem({ item: commits[0] })); });
   await act(async () => { row.root.findByProps({ accessibilityRole: "button" }).props.onPress({ nativeEvent: {} }); });
   expect(renderer.root.findAllByProps({ children: "Copy SHA" }).length).toBeGreaterThan(0);
-  // Search is History's later; its events don't filter the hidden Changes lists.
+  // In History the search field searches commits; its events don't filter the hidden Changes lists. Clearing it ends the search.
   await act(async () => { listener({ type: "toolbarSearchChanged", windowId: "main", itemId: "search", value: "zzz", shiftKey: false }); });
+  expect(renderer.root.findAllByType("LegendList" as any)).toHaveLength(0);
+  await act(async () => { listener({ type: "toolbarSearchChanged", windowId: "main", itemId: "search", value: "", shiftKey: false }); });
   // A Changes error still shows while History is in front.
   git.status.mockRejectedValueOnce(new Error("status failed"));
   await act(async () => { listener({ type: "toolbarAction", windowId: "main", itemId: "refresh" }); });
@@ -418,5 +422,140 @@ it("computes each command's enabled state once for the menu bar, toolbar and con
   // Commit-only commands stay disabled in Changes, whatever the menu, toolbar or context menu.
   expect(menuItem("copy-sha")).toMatchObject({ disabled: true });
   expect(menuItem("open-github")).toMatchObject({ disabled: true });
+  await act(async () => { renderer.unmount(); });
+});
+
+it("blames a diff line into History, says when it is not committed, searches History by scope, and compares two commits", async () => {
+  jest.clearAllMocks();
+  jest.mocked(watchDirectories).mockReturnValue({ remove: jest.fn() });
+  const head = "a".repeat(40), parent = "b".repeat(40);
+  const commits = [
+    { oid: head, parents: [parent], authorName: "Ada", authorEmail: "ada@example.test", time: 1_700_000_000, summary: "Second", lane: 0, color: 0, edges: [-1, 0, 0] },
+    { oid: parent, parents: [], authorName: "Ada", authorEmail: "ada@example.test", time: 1_699_000_000, summary: "First", lane: 0, color: 0, edges: [0, -1, 0] },
+  ];
+  jest.mocked(openGitHistory).mockResolvedValue({ head: { handle: 1, headOid: head, unborn: false, detached: false }, page: jest.fn(async (offset: number) => ({ offset, commits: offset ? [] : commits, done: true })), close: jest.fn() });
+  // Rows: a context line (old 1, new 1), a removed line (old 2) and an added line (new 2).
+  const rows = [
+    { index: 0, kind: 0, fileIndex: 0, hunkIndex: 0, oldLineNumber: 1, newLineNumber: 1, changeType: 0, text: "same", tokens: [] },
+    { index: 1, kind: 0, fileIndex: 0, hunkIndex: 0, oldLineNumber: 2, newLineNumber: 0, changeType: 2, text: "old", tokens: [] },
+    { index: 2, kind: 0, fileIndex: 0, hunkIndex: 0, oldLineNumber: 0, newLineNumber: 2, changeType: 1, text: "new", tokens: [] },
+  ];
+  jest.mocked(loadUnifiedDiff).mockResolvedValue({ document: { documentId: 1, rowCount: 3, getPlainRows: () => rows, releaseNativeResources: () => {} } } as never);
+  const patch = "diff --git a/b.txt b/b.txt\n--- a/b.txt\n+++ b/b.txt\n@@ -1,2 +1,2 @@\n same\n-old\n+new\n";
+  const searchRow = { oid: parent, parents: [], authorName: "Ada", authorEmail: "ada@example.test", time: 1, summary: "First", status: "", path: "", oldPath: null };
+  const locations = { root: "/repo", gitDir: "/repo/.git", commonDir: "/repo/.git", ignoredPaths: [] };
+  const git = { repoRoot: "/repo", resolveRoot: jest.fn(async () => "/repo"), watchLocations: jest.fn(async () => locations),
+    status: jest.fn(async () => ({ branch: { oid: head, head: "main", upstream: null, ahead: 0, behind: 0 }, entries: [{ kind: "ordinary", path: "b.txt", indexStatus: ".", worktreeStatus: "M" }] })),
+    fileDiff: jest.fn(async () => patch), lastDiscard: jest.fn(async () => null), repoState: jest.fn(async () => ({ merging: false })),
+    revParse: jest.fn(async () => head), refDecorations: jest.fn(async () => new Map()), remoteUrl: jest.fn(async () => null), currentBranch: jest.fn(async () => "main"),
+    commitDetails: jest.fn(async (oid: string) => ({ oid, parents: oid === head ? [parent] : [], author: { name: "Ada", email: "a@x", time: 1 }, committer: { name: "Ada", email: "a@x", time: 1 }, message: oid === head ? "Second" : "First" })),
+    commitPatch: jest.fn(async () => patch),
+    fileHistory: jest.fn(async () => ({ commits: [{ ...searchRow, status: "M", path: "b.txt" }], done: true })),
+    searchHistory: jest.fn(async () => ({ commits: [searchRow], done: true })),
+    compareCommits: jest.fn(async () => patch) };
+  jest.mocked(getGitService).mockReturnValue(git as unknown as GitService);
+  jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
+  let renderer!: ReactTestRenderer;
+  await act(async () => { renderer = create(<App />); });
+  const toolbar = jest.mocked(addMacOSWindowListener).mock.calls[0][1];
+  await act(async () => { openRepository(); });
+  const menuItem = (id: string) => lastMenu().items.flatMap(entry => entry.items ?? []).find(entry => entry.id === id);
+  const toolbarItem = (id: string) => (jest.mocked(setWindowOptions).mock.calls.at(-1)![1].macos!.toolbar!.items! as any[]).find(entry => entry.id === id);
+  const text = () => renderer.root.findAllByType(Text).map(entry => [entry.props.children].flat().join("")).join("\n");
+  await act(async () => { renderer.root.findAllByType(Sidebar)[1]!.props.onSelectionChange({ id: "b.txt" }); });
+  const line = (index: number) => {
+    const list = renderer.root.findByType("FlatList" as any);
+    const items = list.props.data as unknown[];
+    const at = items.findIndex(entry => (entry as { row?: { index: number } }).row?.index === index);
+    return list.props.renderItem({ item: items[at], index: at }) as { props: Record<string, (event: unknown) => void> };
+  };
+
+  /** The memoized row's Pressable, rendered on its own. */
+  const rowButton = async (commit: object) => {
+    let row!: ReactTestRenderer;
+    await act(async () => { row = create(renderer.root.findByType("LegendList" as any).props.renderItem({ item: commit })); });
+    return row.root.findByProps({ accessibilityRole: "button" });
+  };
+
+  // Blame Line (⌘⌥B) needs a clicked line; an added line of an unstaged file blames the file on disk.
+  expect(menuItem("blame-line")).toMatchObject({ label: "Blame Line", shortcut: "Cmd+Alt+b", disabled: true });
+  await act(async () => { line(2).props.onPress({ nativeEvent: {} }); });
+  expect(menuItem("blame-line")).toMatchObject({ disabled: false });
+  jest.mocked(blameLine).mockResolvedValueOnce({ oid: "", path: "b.txt", startLine: 2, originalStartLine: 2, lineCount: 1, authorName: "", authorEmail: "", time: 0, summary: "" });
+  await act(async () => { lastMenu().onAction({ itemId: "blame-line" }); });
+  expect(blameLine).toHaveBeenLastCalledWith("/repo", "b.txt", "workdir", 2, undefined);
+  expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "info", title: "Not Committed Yet", message: "Line 2 of “b.txt” has changes that are not committed yet." }));
+  expect(renderer.root.findAllByType(Sidebar)[0]!.props.selectedId).toBe("changes");
+
+  // Right-clicking a removed line offers Blame Line, which blames it as staged and lands on the commit in the file's history.
+  jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: false, itemId: "blame-line" } as never);
+  jest.mocked(blameLine).mockResolvedValueOnce({ oid: parent, path: "b.txt", startLine: 2, originalStartLine: 2, lineCount: 1, authorName: "Ada", authorEmail: "a@x", time: 1, summary: "First" });
+  await act(async () => { line(1).props.onTouchEnd({ nativeEvent: { button: 2, pageX: 5, pageY: 6 } }); });
+  expect(showContextMenu).toHaveBeenLastCalledWith({ windowId: "main", position: { x: 5, y: 6 }, items: [{ type: "action", id: "blame-line", label: "Blame Line", disabled: false }] });
+  expect(blameLine).toHaveBeenLastCalledWith("/repo", "b.txt", "index", 2, undefined);
+  expect(renderer.root.findAllByType(Sidebar)[0]!.props.selectedId).toBe("history");
+  expect(git.fileHistory).toHaveBeenCalledWith("b.txt", expect.objectContaining({ offset: 0 }));
+  expect(text()).toContain("File History: b.txt");
+  expect(git.commitDetails).toHaveBeenLastCalledWith(parent, expect.anything());
+
+  // In a commit's diff, removed lines blame as of its first parent and the rest as of the commit.
+  await act(async () => { lastMenu().onAction({ itemId: "show-all-history" }); });
+  { const button = await rowButton(commits[0]!); await act(async () => { button.props.onPress({ nativeEvent: {} }); }); }
+  jest.mocked(blameLine).mockResolvedValueOnce(null);
+  await act(async () => { line(1).props.onPress({ nativeEvent: {} }); });
+  await act(async () => { lastMenu().onAction({ itemId: "blame-line" }); });
+  expect(blameLine).toHaveBeenLastCalledWith("/repo", "b.txt", parent, 2, expect.any(AbortSignal));
+
+  // The toolbar search searches History in the chosen scope after typing pauses; Show All clears it.
+  expect(toolbarItem("search-scope").items.map((entry: { label: string; checked: boolean }) => `${entry.label}${entry.checked ? " ✓" : ""}`)).toEqual(["Message ✓", "Author", "Path", "Content"]);
+  await act(async () => { toolbar({ type: "toolbarSearchChanged", windowId: "main", itemId: "search", value: "fir", shiftKey: false }); });
+  await act(async () => { toolbar({ type: "toolbarSearchChanged", windowId: "main", itemId: "search", value: "first", shiftKey: false }); });
+  expect(text()).toContain("Searching…");
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 300)); });
+  expect(git.searchHistory).toHaveBeenCalledTimes(1);
+  expect(git.searchHistory).toHaveBeenLastCalledWith(head, "message", "first", expect.objectContaining({ offset: 0, count: 500 }));
+  expect(text()).toContain("Search: “first”");
+  expect(text()).toContain("1 in Message");
+  expect(renderer.root.findByType("LegendList" as any).props.data.map((commit: { oid: string }) => commit.oid)).toEqual([parent]);
+  await act(async () => { toolbar({ type: "toolbarMenuAction", windowId: "main", itemId: "search-scope", action: { type: "action", itemId: "search-author" } as any }); });
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 300)); });
+  expect(git.searchHistory).toHaveBeenLastCalledWith(head, "author", "first", expect.anything());
+  expect(toolbarItem("search-scope")).toMatchObject({ label: "Author" });
+  expect(menuItem("show-all-history")).toMatchObject({ disabled: false });
+  // Showing a file's history ends the search and clears the field too.
+  expect(toolbarItem("search").value).toBe("first");
+  await act(async () => { lastMenu().onAction({ itemId: "show-file-history" }); });
+  expect(text()).toContain("File History: b.txt");
+  expect(toolbarItem("search").value).toBe("");
+  await act(async () => { toolbar({ type: "toolbarSearchChanged", windowId: "main", itemId: "search", value: "first", shiftKey: false }); });
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 300)); });
+  expect(text()).toContain("Search: “first”");
+  await act(async () => { renderer.root.findAllByType(Button).find(button => button.props.children === "Show All")!.props.onPress(); });
+  // Leaving the field (the Show All click) sends its action with the old text; that doesn't search again,
+  // and after a switch to Changes it doesn't filter the files either.
+  await act(async () => { toolbar({ type: "toolbarSearchSubmitted", windowId: "main", itemId: "search", value: "first", shiftKey: false }); });
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 300)); });
+  expect(text()).not.toContain("Search:");
+  await act(async () => { lastMenu().onAction({ itemId: "show-changes" }); });
+  await act(async () => { toolbar({ type: "toolbarSearchSubmitted", windowId: "main", itemId: "search", value: "first", shiftKey: false }); });
+  expect(text()).not.toContain("No matching files");
+  await act(async () => { lastMenu().onAction({ itemId: "show-history" }); });
+  expect(toolbarItem("search").value).toBe("");
+
+  // Command-click compares with the selection (older first), Swap reverses it and Done goes back.
+  { const button = await rowButton(commits[0]!); await act(async () => { button.props.onPress({ nativeEvent: {} }); }); }
+  { const button = await rowButton(commits[1]!); await act(async () => { button.props.onPress({ nativeEvent: { metaKey: true } }); }); }
+  expect(git.compareCommits).toHaveBeenLastCalledWith(parent, head, expect.anything());
+  expect(text()).toContain("Comparing bbbbbbb → aaaaaaa");
+  expect(text()).toContain("1 changed file");
+  await act(async () => { renderer.root.findAllByType(Button).find(button => button.props.children === "Swap")!.props.onPress(); });
+  expect(git.compareCommits).toHaveBeenLastCalledWith(head, parent, expect.anything());
+  await act(async () => { renderer.root.findAllByType(Button).find(button => button.props.children === "Done")!.props.onPress(); });
+  expect(text()).not.toContain("Comparing");
+  // The row context menu offers Compare with Selected for another commit.
+  jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: false, itemId: "compare-with-selected" } as never);
+  { const button = await rowButton(commits[1]!); await act(async () => { button.props.onTouchEnd({ nativeEvent: { button: 2, pageX: 1, pageY: 2 } }); }); }
+  expect(jest.mocked(showContextMenu).mock.calls.at(-1)![0].items[0]).toEqual({ type: "action", id: "compare-with-selected", label: "Compare with Selected", disabled: false });
+  expect(git.compareCommits).toHaveBeenLastCalledWith(parent, head, expect.anything());
   await act(async () => { renderer.unmount(); });
 });

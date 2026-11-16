@@ -177,6 +177,18 @@ export function parseFileHistory(output: string, path: string): GitFileHistoryCo
   return commits;
 }
 
+export type GitHistorySearchScope = "message" | "author" | "path" | "content";
+export type GitHistorySearchPage = { commits: GitFileHistoryCommit[]; done: boolean };
+
+const searchArgs: Record<GitHistorySearchScope, (text: string) => { options: string[]; paths: string[] }> = {
+  // Fixed strings, case-insensitive, like a search field: "fix(" finds "fix(" and does not fail as a regex.
+  message: text => ({ options: ["--regexp-ignore-case", "--fixed-strings", `--grep=${text}`], paths: [] }),
+  author: text => ({ options: ["--regexp-ignore-case", "--fixed-strings", `--author=${text}`], paths: [] }),
+  // Without :(glob), `*` also matches `/`, so "parser" finds any path containing it.
+  path: text => ({ options: [], paths: [`:(icase)*${text.replace(/[*?[\\]/g, "\\$&")}*`] }),
+  content: text => ({ options: [`-S${text}`], paths: [] }),
+};
+
 export function parseRefDecorations(output: string) {
   const decorations = new Map<string, GitRefDecoration[]>();
   for (const line of output.split("\n")) {
@@ -651,6 +663,32 @@ export class GitService {
     ], options);
     const commits = parseFileHistory(output, path).slice(offset);
     return { commits: commits.slice(0, count), done: commits.length <= count };
+  }
+
+  /**
+   * Commits reachable from `head` whose message, author, a changed path or content (`git log -S`)
+   * matches `text`, in `git log --topo-order` order, `count` at a time from `offset`. Pages walk from
+   * the same `head` oid, so they stay consistent while refs move. Git does the walk: it applies the
+   * commit-graph's changed-path filters for paths and has the pickaxe for content.
+   */
+  async searchHistory(head: string, scope: GitHistorySearchScope, text: string, { offset = 0, count = 500, ...options }: GitReadOptions & { offset?: number; count?: number } = {}): Promise<GitHistorySearchPage> {
+    if (!/^[0-9a-f]{40,64}$/i.test(head)) throw new Error("Expected a commit id.");
+    if (!text || text.includes("\0")) return { commits: [], done: true };
+    const { options: filters, paths } = searchArgs[scope](text);
+    // `--skip` counts commits before the pickaxe filters them, so content pages walk from `head` and drop the first `offset`.
+    const skip = scope === "content" ? 0 : offset;
+    const output = await this.read([
+      "log", "--topo-order", "-z", "--no-show-signature", "--format=%x1e%H%x00%P%x00%an%x00%ae%x00%at%x00%s",
+      ...filters, `--skip=${skip}`, `--max-count=${offset - skip + count + 1}`, head, "--", ...paths,
+    ], options);
+    const commits = parseFileHistory(output, "").slice(offset - skip);
+    return { commits: commits.slice(0, count), done: commits.length <= count };
+  }
+
+  /** The patch from commit `base` to commit `target` (`git diff base target`), in `commitPatch`'s format. */
+  compareCommits(base: string, target: string, options: GitReadOptions = {}) {
+    if (![base, target].every(oid => /^[0-9a-f]{4,64}$/i.test(oid))) return Promise.reject(new Error("Expected a commit id."));
+    return this.read(["-c", "diff.submodule=short", ...diffFormat, "-M", `${base}^{commit}`, `${target}^{commit}`, "--"], options);
   }
 
   /** Branches, remote branches and tags by the commit they point at; annotated tags are peeled. */

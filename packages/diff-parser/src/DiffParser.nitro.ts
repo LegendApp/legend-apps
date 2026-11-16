@@ -195,6 +195,24 @@ export interface GitHistoryPage {
   done: boolean;
 }
 
+/** Lines of a blamed file that last changed in one commit, or that are not committed yet. */
+export interface GitBlameHunk {
+  /** The commit that last changed these lines; empty when they are not committed yet. */
+  oid: string;
+  /** The file's path in that commit (it differs after a rename). */
+  path: string;
+  /** First line of the hunk in the blamed file, 1-based. */
+  startLine: number;
+  /** First line of the hunk in `path` as of `oid`. */
+  originalStartLine: number;
+  lineCount: number;
+  authorName: string;
+  authorEmail: string;
+  /** Author time, in seconds since the epoch. */
+  time: number;
+  summary: string;
+}
+
 export interface DiffDocument
   extends HybridObject<{
     ios: "c++";
@@ -283,4 +301,13 @@ export interface DiffParser
   readGitHistoryPage(handle: number, offset: number, count: number): Promise<GitHistoryPage>;
   /** Releases the walk; a page still being read fails as cancelled. */
   closeGitHistory(handle: number): void;
+  /**
+   * Opens a blame of `path` as of `source`: a commit, "index" or "workdir" (lines not in HEAD are not
+   * committed yet). Release it with closeGitBlame.
+   */
+  openGitBlame(folderPath: string, path: string, source: string): Promise<number>;
+  /** Hunks covering `lineCount` lines from `startLine` (1-based), clipped to the file. */
+  readGitBlame(handle: number, startLine: number, lineCount: number): Promise<GitBlameHunk[]>;
+  /** Releases the blame; a read still running fails as cancelled. */
+  closeGitBlame(handle: number): void;
 }

@@ -1,5 +1,5 @@
 import { NitroModules } from "react-native-nitro-modules";
-import type { DiffGitFolderLoadOptions, DiffParser, GitHistoryHead, GitHistoryPage } from "./DiffParser.nitro";
+import type { DiffGitFolderLoadOptions, DiffParser, GitBlameHunk, GitHistoryHead, GitHistoryPage } from "./DiffParser.nitro";
 
 let diffParser: DiffParser | undefined;
 
@@ -116,6 +116,50 @@ export async function openGitHistory(folderPath: string, signal?: AbortSignal): 
   };
 }
 
+/** What a blame is read as of: a commit, the staged contents or the file on disk. */
+export type GitBlameSource = string | "index" | "workdir";
+
+export type GitBlameReader = {
+  /** Hunks covering `count` lines from `startLine` (1-based); rejects with GitHistoryCancelledError once closed or aborted. */
+  lines(startLine: number, count: number, signal?: AbortSignal): Promise<GitBlameHunk[]>;
+  /** Releases the native blame; idempotent. */
+  close(): void;
+};
+
+/**
+ * Opens a native blame of `path` as of `source`; lines read from "index" or "workdir" that HEAD does not
+ * have come back with an empty `oid` (not committed yet). Aborting `signal` while opening releases it.
+ */
+export async function openGitBlame(folderPath: string, path: string, source: GitBlameSource, signal?: AbortSignal): Promise<GitBlameReader> {
+  const parser = getDiffParser();
+  const opening = parser.openGitBlame(folderPath, path, source);
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    void opening.then(handle => parser.closeGitBlame(handle), () => {});
+  };
+  const handle = await untilAborted(opening, signal, close);
+  return {
+    lines(startLine, count, linesSignal) {
+      if (closed) return Promise.reject(new GitHistoryCancelledError());
+      const reading = parser.readGitBlame(handle, startLine, count).catch((error: unknown) => {
+        throw closed ? new GitHistoryCancelledError() : error;
+      });
+      return untilAborted(reading, linesSignal, close);
+    },
+    close,
+  };
+}
+
+/** The hunk that last changed one line, or null past the end of the file. */
+export async function blameLine(folderPath: string, path: string, source: GitBlameSource, line: number, signal?: AbortSignal): Promise<GitBlameHunk | null> {
+  const reader = await openGitBlame(folderPath, path, source, signal);
+  try {
+    return (await reader.lines(line, 1, signal))[0] ?? null;
+  } finally { reader.close(); }
+}
+
 export { default as DiffNativeRowConfig } from "./DiffNativeRowConfigNativeComponent";
 export { default as DiffNativeRow } from "./DiffNativeRowNativeComponent";
 export { default as DiffHorizontalScroller } from "./DiffHorizontalScrollerNativeComponent";
@@ -141,6 +185,7 @@ export type {
   DiffSyntaxStyle,
   DiffSyntaxTokenRun,
   DiffTokenizedRowRange,
+  GitBlameHunk,
   GitHistoryCommit,
   GitHistoryHead,
   GitHistoryPage,

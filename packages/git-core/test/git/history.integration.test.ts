@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -128,4 +129,70 @@ it("follows one file's history across a rename, a delete and re-add, and a path 
 it("has no file history on an unborn HEAD", async () => {
   const { git } = repo("file-history-unborn");
   expect(await git.fileHistory("a.txt")).toEqual({ commits: [], done: true });
+});
+
+it("searches history by message, author, path and content, paged across 500/501 with no duplicates, matching git log", async () => {
+  const { path, git } = repo("search");
+  // 1,002 commits; the even ones match every scope, so each search finds 501.
+  let stream = "";
+  for (let index = 0; index < 1002; index++) {
+    const match = index % 2 === 0;
+    const file = match ? `src/Parser/p${index}.ts` : `docs/d${index}.md`;
+    const content = match ? `NEEDLE ${index}\n` : `plain ${index}\n`;
+    const message = match ? `Fix parser (#${index})\n` : `chore ${index}\n`;
+    const who = match ? "Ann Match <ann@example.test>" : "Bob <bob@example.test>";
+    stream += `commit refs/heads/main\nauthor ${who} ${1_700_000_000 + index} +0000\ncommitter ${who} ${1_700_000_000 + index} +0000\n`;
+    stream += `data ${Buffer.byteLength(message)}\n${message}M 644 inline ${file}\ndata ${Buffer.byteLength(content)}\n${content}\n`;
+  }
+  execFileSync("git", ["fast-import", "--quiet"], { cwd: path, input: stream });
+  fixtureGit(path, "reset", "-q", "--hard", "main");
+  const head = fixtureGit(path, "rev-parse", "HEAD");
+  const queries = [
+    ["message", "PARSER (#", ["--regexp-ignore-case", "--fixed-strings", "--grep=PARSER (#"]],
+    ["author", "ann match", ["--regexp-ignore-case", "--fixed-strings", "--author=ann match"]],
+    ["path", "parser/", ["--", ":(icase)*parser/*"]],
+    ["content", "NEEDLE", ["-SNEEDLE"]],
+  ] as const;
+  for (const [scope, text, args] of queries) {
+    const expected = fixtureGit(path, "log", "--topo-order", "--format=%H", ...args.filter(arg => arg !== "--" && !arg.startsWith(":")), head, ...args.filter(arg => arg === "--" || arg.startsWith(":"))).split("\n");
+    expect(expected).toHaveLength(501);
+    const first = await git.searchHistory(head, scope, text);
+    expect(first.done).toBe(false);
+    expect(first.commits).toHaveLength(500);
+    const second = await git.searchHistory(head, scope, text, { offset: 500 });
+    expect(second).toMatchObject({ done: true });
+    const oids = [...first.commits, ...second.commits].map(commit => commit.oid);
+    expect(new Set(oids).size).toBe(501);
+    expect(oids).toEqual(expected);
+    expect(first.commits[0]).toMatchObject({ oid: fixtureGit(path, "rev-parse", "HEAD~1"), summary: "Fix parser (#1000)", authorName: "Ann Match" });
+  }
+  // A regex metacharacter is plain text, and an empty query finds nothing.
+  expect((await git.searchHistory(head, "message", "(#100")).commits.map(commit => commit.summary)).toEqual(["Fix parser (#1000)", "Fix parser (#100)"]);
+  expect(await git.searchHistory(head, "message", "")).toEqual({ commits: [], done: true });
+  await expect(git.searchHistory("HEAD", "message", "x")).rejects.toThrow("Expected a commit id.");
+});
+
+it("compares two commits in either order, a merge with its second parent, and a root commit", async () => {
+  const { path, git } = repo("compare");
+  const rootOid = commit(path, "a.txt", "one\n", "Root");
+  fixtureGit(path, "switch", "-q", "-c", "side");
+  const sideOid = commit(path, "b.txt", "side\n", "Side");
+  fixtureGit(path, "switch", "-q", "main");
+  const mainOid = commit(path, "a.txt", "two\n", "Main");
+  fixtureGit(path, "merge", "-q", "--no-ff", "-m", "Merge side", "side");
+  const mergeOid = fixtureGit(path, "rev-parse", "HEAD");
+
+  const forward = await git.compareCommits(rootOid, mainOid);
+  expect(forward).toContain("-one\n+two\n");
+  const backward = await git.compareCommits(mainOid, rootOid);
+  expect(backward).toContain("-two\n+one\n");
+  // The merge against its second parent shows main's change, not side's file.
+  const merge = await git.compareCommits(sideOid, mergeOid);
+  expect(merge).toContain("diff --git a/a.txt b/a.txt");
+  expect(merge).not.toContain("b.txt");
+  expect(fixtureGit(path, "diff", "--stat", sideOid, mergeOid)).toContain("a.txt");
+  const fromRoot = await git.compareCommits(rootOid, mergeOid);
+  expect(fromRoot).toContain("diff --git a/b.txt b/b.txt\nnew file mode 100644");
+  expect(await git.compareCommits(mergeOid, mergeOid)).toBe("");
+  await expect(git.compareCommits("--output=/tmp/x", mergeOid)).rejects.toThrow("Expected a commit id.");
 });

@@ -136,4 +136,42 @@ private:
   std::unique_ptr<Impl> impl_;
 };
 
+/** Lines of a blamed file that last changed in one commit (or are not committed yet). */
+struct GitBlameHunkRow {
+  /** The commit that last changed these lines; empty when they are not committed yet. */
+  std::string oid;
+  /** The file's path in that commit (it differs after a rename). */
+  std::string path;
+  /** First line of the hunk in the blamed file, 1-based. */
+  size_t startLine = 0;
+  /** First line of the hunk in `path` as of `oid`. */
+  size_t originalStartLine = 0;
+  size_t lineCount = 0;
+  std::string authorName;
+  std::string authorEmail;
+  double time = 0;
+  std::string summary;
+};
+
+/**
+ * Blames one file with libgit2, a range of lines at a time. `source` is a commit (blame as of it),
+ * "index" (staged contents) or "workdir" (the file on disk); lines of the last two that differ from
+ * HEAD are not committed yet. A commit's blame covers only the asked lines; the index and workdir blame
+ * the whole committed file once and reuse it.
+ */
+class GitBlameReader {
+public:
+  GitBlameReader(const std::string& folderPath, const std::string& path, const std::string& source);
+  ~GitBlameReader();
+  GitBlameReader(const GitBlameReader&) = delete;
+  GitBlameReader& operator=(const GitBlameReader&) = delete;
+
+  /** Hunks covering lines `startLine` to `startLine + count - 1` (1-based), clipped to the file. */
+  std::vector<GitBlameHunkRow> lines(size_t startLine, size_t count, const std::function<bool()>& shouldCancel = {});
+
+private:
+  struct Impl;
+  std::unique_ptr<Impl> impl_;
+};
+
 } // namespace margelo::nitro::legendapps::diffparser

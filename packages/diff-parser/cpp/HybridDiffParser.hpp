@@ -46,6 +46,9 @@ public:
   std::shared_ptr<Promise<GitHistoryHead>> openGitHistory(const std::string& folderPath) override;
   std::shared_ptr<Promise<GitHistoryPage>> readGitHistoryPage(double handle, double offset, double count) override;
   void closeGitHistory(double handle) override;
+  std::shared_ptr<Promise<double>> openGitBlame(const std::string& folderPath, const std::string& path, const std::string& source) override;
+  std::shared_ptr<Promise<std::vector<GitBlameHunk>>> readGitBlame(double handle, double startLine, double lineCount) override;
+  void closeGitBlame(double handle) override;
 };
 
 } // namespace margelo::nitro::legendapps::diffparser

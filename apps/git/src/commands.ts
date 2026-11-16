@@ -1,3 +1,5 @@
+import { searchScopes, type SearchScope } from "./gitHistory";
+
 export type Section = "changes" | "history";
 
 /** What every command reads to decide its label and whether it is enabled, plus the actions it runs. */
@@ -12,6 +14,11 @@ export type CommandContext = {
   /** The file whose history History shows, if any. */
   fileHistoryPath: string | null;
   gitHubUrl(oid: string): string | null;
+  /** History shows search results. */
+  searching: boolean;
+  /** The diff pane has a line to blame (the one clicked last). */
+  canBlame: boolean;
+  searchScope: SearchScope;
   canApplyLines: boolean;
   linesLabel: string;
   canDiscardFile: boolean;
@@ -29,6 +36,9 @@ export type CommandContext = {
     openOnGitHub(oid: string): void;
     showFileHistory(path: string): void;
     closeFileHistory(): void;
+    blameLine(): void;
+    compareWith(oid: string): void;
+    setSearchScope(scope: SearchScope): void;
     applyLines(): void;
     discardFile(): void;
     discardLines(): void;
@@ -66,7 +76,18 @@ export const commands = [
     enabled: (context, target) => context.hasRepository && !!(target ?? context.selectedFile),
     run: (context, target) => context.run.showFileHistory((target ?? context.selectedFile)!),
   },
-  { id: "show-all-history", label: "Show All History", enabled: context => !!context.fileHistoryPath, run: context => context.run.closeFileHistory() },
+  { id: "show-all-history", label: "Show All History", enabled: context => !!context.fileHistoryPath || context.searching, run: context => context.run.closeFileHistory() },
+  { id: "blame-line", label: "Blame Line", shortcut: "Cmd+Alt+b", enabled: context => context.hasRepository && context.canBlame, run: context => context.run.blameLine() },
+  {
+    id: "compare-with-selected", label: "Compare with Selected",
+    enabled: (context, target) => !!target && !!context.selectedCommit && target !== context.selectedCommit,
+    run: (context, target) => context.run.compareWith(target!),
+  },
+  ...searchScopes.map(({ scope, label }) => ({
+    id: `search-${scope}` as const, label,
+    enabled: (context: CommandContext) => context.hasRepository && context.section === "history",
+    run: (context: CommandContext) => context.run.setSearchScope(scope),
+  })),
   { id: "apply-lines", label: context => context.linesLabel, shortcut: "Cmd+Shift+l", enabled: context => context.canApplyLines, run: context => context.run.applyLines() },
   { id: "discard-file", label: "Discard Changes to File…", shortcut: "Cmd+Shift+Backspace", enabled: context => context.canDiscardFile, run: context => context.run.discardFile() },
   { id: "discard-lines", label: "Discard Selected Lines…", enabled: context => context.canDiscardLines, run: context => context.run.discardLines() },

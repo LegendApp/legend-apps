@@ -100,6 +100,35 @@ describe("@legend-apps/diff-parser", () => {
     expect(parser.closeGitHistory).not.toHaveBeenCalled();
   });
 
+  it("blames one line through a native blame it always releases, and closes a blame aborted mid-read", async () => {
+    let release: (() => void) | undefined;
+    const hunk = { oid: "abc", path: "a.txt", startLine: 3, originalStartLine: 2, lineCount: 1, authorName: "Ann", authorEmail: "a@x", time: 1, summary: "Fix" };
+    const parser = {
+      ...createParser(),
+      openGitBlame: jest.fn(async () => 4),
+      readGitBlame: jest.fn((_handle: number, startLine: number) => new Promise((resolve, reject) => {
+        release = () => reject(new Error("Blame was cancelled."));
+        if (startLine === 3) resolve([hunk]);
+      })),
+      closeGitBlame: jest.fn(() => release?.()),
+    };
+    const { diffParser } = loadModuleWithParser(parser);
+
+    await expect(diffParser.blameLine("/tmp/repo", "a.txt", "workdir", 3)).resolves.toEqual(hunk);
+    expect(parser.openGitBlame).toHaveBeenCalledWith("/tmp/repo", "a.txt", "workdir");
+    expect(parser.readGitBlame).toHaveBeenCalledWith(4, 3, 1);
+    await Promise.resolve();
+    expect(parser.closeGitBlame).toHaveBeenCalledTimes(1);
+
+    const controller = new AbortController();
+    const pending = diffParser.blameLine("/tmp/repo", "a.txt", "HEAD", 9, controller.signal);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    controller.abort();
+    await expect(pending).rejects.toThrow(diffParser.GitHistoryCancelledError);
+    await Promise.resolve();
+    expect(parser.closeGitBlame).toHaveBeenCalledTimes(2);
+  });
+
   it("exports the native diff rendering surfaces", () => {
     const { diffParser } = loadModuleWithParser();
 

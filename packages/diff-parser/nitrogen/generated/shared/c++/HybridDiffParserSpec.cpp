@@ -23,6 +23,9 @@ namespace margelo::nitro::legendapps::diffparser {
       prototype.registerHybridMethod("openGitHistory", &HybridDiffParserSpec::openGitHistory);
       prototype.registerHybridMethod("readGitHistoryPage", &HybridDiffParserSpec::readGitHistoryPage);
       prototype.registerHybridMethod("closeGitHistory", &HybridDiffParserSpec::closeGitHistory);
+      prototype.registerHybridMethod("openGitBlame", &HybridDiffParserSpec::openGitBlame);
+      prototype.registerHybridMethod("readGitBlame", &HybridDiffParserSpec::readGitBlame);
+      prototype.registerHybridMethod("closeGitBlame", &HybridDiffParserSpec::closeGitBlame);
     });
   }
 

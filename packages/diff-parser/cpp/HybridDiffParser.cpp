@@ -106,6 +106,15 @@ GitHistoryEntry findGitHistory(double handle) {
   return found->second;
 }
 
+struct GitBlameEntry {
+  std::shared_ptr<GitBlameReader> reader;
+  std::shared_ptr<std::atomic<bool>> closed;
+};
+
+std::mutex gitBlameMutex;
+std::map<double, GitBlameEntry> gitBlames;
+double nextGitBlameHandle = 1;
+
 } // namespace
 
 HybridDiffParser::HybridDiffParser() : HybridObject(TAG) {}
@@ -292,6 +301,48 @@ void HybridDiffParser::closeGitHistory(double handle) {
   if (found == gitHistories.end()) return;
   found->second.closed->store(true);
   gitHistories.erase(found);
+}
+
+std::shared_ptr<Promise<double>> HybridDiffParser::openGitBlame(const std::string& folderPath, const std::string& path, const std::string& source) {
+  return Promise<double>::async([folderPath, path, source]() -> double {
+    auto reader = std::make_shared<GitBlameReader>(folderPath, path, source);
+    std::lock_guard<std::mutex> lock(gitBlameMutex);
+    const double handle = nextGitBlameHandle++;
+    gitBlames.emplace(handle, GitBlameEntry{std::move(reader), std::make_shared<std::atomic<bool>>(false)});
+    return handle;
+  });
+}
+
+std::shared_ptr<Promise<std::vector<GitBlameHunk>>> HybridDiffParser::readGitBlame(double handle, double startLine, double lineCount) {
+  return Promise<std::vector<GitBlameHunk>>::async([handle, startLine, lineCount]() -> std::vector<GitBlameHunk> {
+    if (!(startLine >= 1) || !(lineCount >= 0) || std::floor(startLine) != startLine || std::floor(lineCount) != lineCount) {
+      throw std::runtime_error("Blame reads need a whole start line from 1 and a whole line count.");
+    }
+    GitBlameEntry entry;
+    {
+      std::lock_guard<std::mutex> lock(gitBlameMutex);
+      const auto found = gitBlames.find(handle);
+      if (found == gitBlames.end()) throw std::runtime_error("Blame was cancelled.");
+      entry = found->second;
+    }
+    const auto rows = entry.reader->lines(static_cast<size_t>(startLine), static_cast<size_t>(lineCount), [closed = entry.closed] { return closed->load(); });
+    if (entry.closed->load()) throw std::runtime_error("Blame was cancelled.");
+    std::vector<GitBlameHunk> hunks;
+    hunks.reserve(rows.size());
+    for (const auto& row : rows) {
+      hunks.emplace_back(row.oid, row.path, static_cast<double>(row.startLine), static_cast<double>(row.originalStartLine), static_cast<double>(row.lineCount),
+                         row.authorName, row.authorEmail, row.time, row.summary);
+    }
+    return hunks;
+  });
+}
+
+void HybridDiffParser::closeGitBlame(double handle) {
+  std::lock_guard<std::mutex> lock(gitBlameMutex);
+  const auto found = gitBlames.find(handle);
+  if (found == gitBlames.end()) return;
+  found->second.closed->store(true);
+  gitBlames.erase(found);
 }
 
 } // namespace margelo::nitro::legendapps::diffparser

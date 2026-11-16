@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <fstream>
+#include <functional>
 #include <sstream>
 #include <iterator>
 #include <iostream>
@@ -1121,6 +1122,76 @@ void assertGraphLanes(const std::string& graphFixture, const std::string& histor
 
 } // namespace
 
+/** One "oid path origLine" per line, as blame-porcelain.py writes it ("-" when not committed yet). */
+std::vector<std::string> blameLines(const std::vector<diffparser::GitBlameHunkRow>& hunks) {
+  std::vector<std::string> lines;
+  for (const auto& hunk : hunks) {
+    for (size_t offset = 0; offset < hunk.lineCount; ++offset) {
+      lines.push_back(hunk.oid.empty() ? "- " + hunk.path : hunk.oid + " " + hunk.path + " " + std::to_string(hunk.originalStartLine + offset));
+    }
+  }
+  return lines;
+}
+
+std::vector<std::string> expectedBlame(const std::string& path) {
+  std::vector<std::string> lines;
+  for (const auto& line : readExpectedHistory(path)) lines.push_back(line.front() == '-' ? line.substr(0, line.rfind(' ')) : line);
+  return lines;
+}
+
+void expectBlame(diffparser::GitBlameReader& reader, const std::string& expectedPath, const std::string& name) {
+  const auto expected = expectedBlame(expectedPath);
+  const auto whole = blameLines(reader.lines(1, 10'000));
+  expectEqual(static_cast<double>(whole.size()), static_cast<double>(expected.size()), name + " line count");
+  for (size_t index = 0; index < expected.size() && index < whole.size(); ++index) {
+    expectEqual(whole[index], expected[index], name + " line " + std::to_string(index + 1));
+  }
+  // Pages of 7 and single lines blame the same as one read of the whole file.
+  std::vector<std::string> paged;
+  for (size_t start = 1; start <= expected.size(); start += 7) {
+    const auto page = blameLines(reader.lines(start, 7));
+    paged.insert(paged.end(), page.begin(), page.end());
+  }
+  expect(paged == whole, name + " pages of 7 equal one read");
+  for (size_t line = 1; line <= expected.size(); line += 5) {
+    const auto single = blameLines(reader.lines(line, 1));
+    expect(single.size() == 1 && single[0] == whole[line - 1], name + " single line " + std::to_string(line));
+  }
+  expect(reader.lines(expected.size() + 1, 5).empty(), name + " past the end is empty");
+}
+
+void assertGitBlame(const std::string& fixture) {
+  // HEAD: across the rename (lines from a.txt), main's change, and side's moved and changed lines brought in by the merge.
+  diffparser::GitBlameReader head(fixture, "b.txt", "HEAD");
+  expectBlame(head, fixture + ".head", "blame HEAD");
+  std::ifstream sideOid(fixture + ".side-oid");
+  std::string side;
+  sideOid >> side;
+  diffparser::GitBlameReader atSide(fixture, "b.txt", side);
+  expectBlame(atSide, fixture + ".side", "blame side");
+  // Staged and unstaged lines are not committed yet.
+  diffparser::GitBlameReader workdir(fixture, "b.txt", "workdir");
+  expectBlame(workdir, fixture + ".workdir", "blame workdir");
+  diffparser::GitBlameReader index(fixture, "b.txt", "index");
+  expectBlame(index, fixture + ".index", "blame index");
+  diffparser::GitBlameReader crlf(fixture + "-crlf", "c.txt", "workdir");
+  expectBlame(crlf, fixture + "-crlf.workdir", "blame CRLF workdir");
+
+  bool cancelledRead = false;
+  try { head.lines(1, 5, [] { return true; }); } catch (const std::runtime_error&) { cancelledRead = true; }
+  expect(cancelledRead, "blame stops when cancelled");
+  const auto threw = [](const std::function<void()>& run) { try { run(); } catch (const std::runtime_error&) { return true; } return false; };
+  expect(threw([&] { diffparser::GitBlameReader(fixture, "missing.txt", "HEAD"); }), "blame of a file missing from the commit fails");
+  expect(threw([&] { diffparser::GitBlameReader(fixture, "../b.txt", "workdir"); }), "blame rejects paths outside the repository");
+}
+
+void assertUnbornGitBlame(const std::string& repositoryPath) {
+  std::ofstream(repositoryPath + "/new.txt") << "one\ntwo\nthree";
+  diffparser::GitBlameReader reader(repositoryPath, "new.txt", "workdir");
+  const auto lines = blameLines(reader.lines(1, 100));
+  expect(lines == std::vector<std::string>{"- new.txt", "- new.txt", "- new.txt"}, "every line of an unborn HEAD's file is not committed yet");
+}
+
 int main(int argc, char** argv) {
   try {
     const auto fixture = makeUnifiedDiffFixture();
@@ -1155,6 +1226,10 @@ int main(int argc, char** argv) {
     }
     if (argc > 9) {
       assertGraphLanes(argv[9], argv[5], argv[6]);
+    }
+    if (argc > 10) {
+      assertGitBlame(argv[10]);
+      assertUnbornGitBlame(argv[8]);
     }
     std::cout << "native diff parser fixtures passed\n";
     return 0;

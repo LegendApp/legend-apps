@@ -8,6 +8,10 @@
 #include <cstdint>
 #include "git2.h"
 #include <limits>
+#include <iterator>
+#include <optional>
+#include <map>
+#include <fstream>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
@@ -1982,6 +1986,253 @@ std::vector<GitHistoryCommitRow> GitHistoryWalker::page(size_t offset, size_t co
     if (!text.empty() && text.back() == '\r') text.remove_suffix(1);
     row.summary = std::string(text);
     rows.push_back(std::move(row));
+  }
+  return rows;
+}
+
+struct GitBlameDeleter {
+  void operator()(git_blame* blame) const { git_blame_free(blame); }
+};
+
+struct GitBlameReader::Impl {
+  std::unique_ptr<git_repository, GitRepositoryDeleter> repo;
+  std::string path;
+  bool fromCommit = false;
+  git_oid commit = {};
+  /** Lines in the blamed version of the file. */
+  size_t lineCount = 0;
+  /** Index or workdir contents, blamed against HEAD on the first read. */
+  std::string contents;
+  /** HEAD's blame of the file, or none when HEAD lacks it (every line is then not committed). */
+  std::unique_ptr<git_blame, GitBlameDeleter> base;
+  /** HEAD's line for each line of `contents` (1-based), or 0 for a line HEAD does not have. */
+  std::vector<size_t> headLines;
+  bool bufferRead = false;
+  /** Author and summary by commit oid. */
+  std::map<std::string, GitBlameHunkRow> commits;
+  std::mutex mutex;
+
+  static size_t countLines(std::string_view text) {
+    if (text.empty()) return 0;
+    return static_cast<size_t>(std::count(text.begin(), text.end(), '\n')) + (text.back() == '\n' ? 0 : 1);
+  }
+
+  /** The blob of `path` in `commitId`'s tree, or empty when the file is not there. */
+  std::optional<std::string> blobAt(const git_oid& commitId) {
+    git_commit* rawCommit = nullptr;
+    if (git_commit_lookup(&rawCommit, repo.get(), &commitId) != 0) throw std::runtime_error(gitErrorMessage("Failed to read commit"));
+    std::unique_ptr<git_commit, GitCommitDeleter> owned(rawCommit);
+    git_tree* rawTree = nullptr;
+    if (git_commit_tree(&rawTree, rawCommit) != 0) throw std::runtime_error(gitErrorMessage("Failed to read commit tree"));
+    std::unique_ptr<git_tree, GitTreeDeleter> tree(rawTree);
+    git_tree_entry* entry = nullptr;
+    if (git_tree_entry_bypath(&entry, rawTree, path.c_str()) != 0) return std::nullopt;
+    git_object* object = nullptr;
+    const int found = git_tree_entry_to_object(&object, repo.get(), entry);
+    git_tree_entry_free(entry);
+    if (found != 0) throw std::runtime_error(gitErrorMessage("Failed to read file"));
+    std::unique_ptr<git_object, GitObjectDeleter> owner(object);
+    if (git_object_type(object) != GIT_OBJECT_BLOB) return std::nullopt;
+    auto* blob = reinterpret_cast<git_blob*>(object);
+    return std::string(static_cast<const char*>(git_blob_rawcontent(blob)), static_cast<size_t>(git_blob_rawsize(blob)));
+  }
+
+  void fill(GitBlameHunkRow& row, const git_blame_hunk& hunk) {
+    char text[GIT_OID_MAX_HEXSIZE + 1] = {};
+    git_oid_tostr(text, sizeof(text), &hunk.final_commit_id);
+    row.oid = text;
+    row.path = hunk.orig_path ? hunk.orig_path : path;
+    auto found = commits.find(row.oid);
+    if (found == commits.end()) {
+      git_commit* rawCommit = nullptr;
+      if (git_commit_lookup(&rawCommit, repo.get(), &hunk.final_commit_id) != 0) throw std::runtime_error(gitErrorMessage("Failed to read commit"));
+      std::unique_ptr<git_commit, GitCommitDeleter> owned(rawCommit);
+      GitBlameHunkRow details;
+      if (const git_signature* author = git_commit_author(rawCommit)) {
+        details.authorName = author->name ? author->name : "";
+        details.authorEmail = author->email ? author->email : "";
+        details.time = static_cast<double>(author->when.time);
+      }
+      std::string_view message = git_commit_message(rawCommit) ? git_commit_message(rawCommit) : "";
+      message = message.substr(0, message.find('\n'));
+      if (!message.empty() && message.back() == '\r') message.remove_suffix(1);
+      details.summary = std::string(message);
+      found = commits.emplace(row.oid, std::move(details)).first;
+    }
+    row.authorName = found->second.authorName;
+    row.authorEmail = found->second.authorEmail;
+    row.time = found->second.time;
+    row.summary = found->second.summary;
+  }
+
+  /** Clips `hunk` to [first, last] and appends it. */
+  void append(std::vector<GitBlameHunkRow>& rows, const git_blame_hunk& hunk, size_t first, size_t last) {
+    const size_t start = std::max(first, hunk.final_start_line_number);
+    const size_t end = std::min(last, hunk.final_start_line_number + hunk.lines_in_hunk - 1);
+    if (hunk.lines_in_hunk == 0 || start > end) return;
+    GitBlameHunkRow row;
+    if (git_oid_is_zero(&hunk.final_commit_id)) {
+      row.path = path;
+    } else {
+      fill(row, hunk);
+    }
+    row.startLine = start;
+    row.originalStartLine = hunk.orig_start_line_number + (start - hunk.final_start_line_number);
+    row.lineCount = end - start + 1;
+    rows.push_back(std::move(row));
+  }
+};
+
+GitBlameReader::GitBlameReader(const std::string& folderPath, const std::string& path, const std::string& source) : impl_(std::make_unique<Impl>()) {
+  ensureLibGit2Initialized();
+  if (path.empty() || path.front() == '/' || path.find('\0') != std::string::npos || ("/" + path + "/").find("/../") != std::string::npos) {
+    throw std::runtime_error("Expected a repository path.");
+  }
+  git_repository* rawRepo = nullptr;
+  const std::string normalizedPath = normalizeFolderPath(folderPath);
+  if (git_repository_open_ext(&rawRepo, normalizedPath.c_str(), 0, nullptr) != 0) {
+    throw std::runtime_error(gitErrorMessage("Failed to open git repository"));
+  }
+  impl_->repo.reset(rawRepo);
+  impl_->path = path;
+  if (source == "workdir") {
+    const char* workdir = git_repository_workdir(rawRepo);
+    if (!workdir) throw std::runtime_error("The repository has no working tree.");
+    std::ifstream file(std::string(workdir) + path, std::ios::binary);
+    if (!file) throw std::runtime_error("The file is not in the working tree.");
+    std::string raw((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    // Blame the file as Git would store it (line endings, eol attributes), like `git blame` does.
+    git_filter_list* filters = nullptr;
+    if (git_filter_list_load(&filters, rawRepo, nullptr, path.c_str(), GIT_FILTER_TO_ODB, GIT_FILTER_DEFAULT) != 0) {
+      throw std::runtime_error(gitErrorMessage("Failed to load the file's filters"));
+    }
+    if (filters) {
+      git_buf converted = GIT_BUF_INIT;
+      const int applied = git_filter_list_apply_to_buffer(&converted, filters, raw.data(), raw.size());
+      git_filter_list_free(filters);
+      if (applied != 0) throw std::runtime_error(gitErrorMessage("Failed to convert the file"));
+      raw.assign(converted.ptr, converted.size);
+      git_buf_dispose(&converted);
+    }
+    impl_->contents = std::move(raw);
+  } else if (source == "index") {
+    git_index* rawIndex = nullptr;
+    if (git_repository_index(&rawIndex, rawRepo) != 0) throw std::runtime_error(gitErrorMessage("Failed to read the index"));
+    const git_index_entry* entry = git_index_get_bypath(rawIndex, path.c_str(), 0);
+    git_blob* blob = nullptr;
+    const int found = entry ? git_blob_lookup(&blob, rawRepo, &entry->id) : -1;
+    git_index_free(rawIndex);
+    if (found != 0) throw std::runtime_error("The file is not staged.");
+    impl_->contents.assign(static_cast<const char*>(git_blob_rawcontent(blob)), static_cast<size_t>(git_blob_rawsize(blob)));
+    git_blob_free(blob);
+  } else {
+    git_object* object = nullptr;
+    if (git_revparse_single(&object, rawRepo, (source + "^{commit}").c_str()) != 0) {
+      throw std::runtime_error(gitErrorMessage("Failed to resolve the commit"));
+    }
+    git_oid_cpy(&impl_->commit, git_object_id(object));
+    git_object_free(object);
+    impl_->fromCommit = true;
+    const auto contents = impl_->blobAt(impl_->commit);
+    if (!contents) throw std::runtime_error("The file is not in that commit.");
+    impl_->lineCount = Impl::countLines(*contents);
+    return;
+  }
+  impl_->lineCount = Impl::countLines(impl_->contents);
+}
+
+GitBlameReader::~GitBlameReader() = default;
+
+std::vector<GitBlameHunkRow> GitBlameReader::lines(size_t startLine, size_t count, const std::function<bool()>& shouldCancel) {
+  std::lock_guard<std::mutex> lock(impl_->mutex);
+  std::vector<GitBlameHunkRow> rows;
+  const auto cancelled = [&] { return shouldCancel && shouldCancel(); };
+  if (startLine == 0) startLine = 1;
+  if (count == 0 || startLine > impl_->lineCount) return rows;
+  const size_t last = std::min(impl_->lineCount, startLine + count - 1);
+  if (cancelled()) throw std::runtime_error("Blame was cancelled.");
+  if (impl_->fromCommit) {
+    git_blame_options options;
+    git_blame_options_init(&options, GIT_BLAME_OPTIONS_VERSION);
+    git_oid_cpy(&options.newest_commit, &impl_->commit);
+    options.min_line = startLine;
+    options.max_line = last;
+    git_blame* rawBlame = nullptr;
+    if (git_blame_file(&rawBlame, impl_->repo.get(), impl_->path.c_str(), &options) != 0) {
+      throw std::runtime_error(gitErrorMessage("Failed to blame the file"));
+    }
+    std::unique_ptr<git_blame, GitBlameDeleter> blame(rawBlame);
+    if (cancelled()) throw std::runtime_error("Blame was cancelled.");
+    for (uint32_t index = 0, total = git_blame_get_hunk_count(rawBlame); index < total; ++index) {
+      impl_->append(rows, *git_blame_get_hunk_byindex(rawBlame, index), startLine, last);
+    }
+    return rows;
+  }
+  if (!impl_->bufferRead) {
+    // Lines outside a zero-context diff against HEAD's file map to HEAD's lines, which HEAD's blame
+    // attributes. (git_blame_buffer would do this, but reports wrong original line numbers for split hunks.)
+    impl_->headLines.assign(impl_->lineCount + 1, 0);
+    git_oid head = {};
+    const auto committed = git_reference_name_to_id(&head, impl_->repo.get(), "HEAD") == 0 ? impl_->blobAt(head) : std::nullopt;
+    if (committed) {
+      git_blame* rawBase = nullptr;
+      if (git_blame_file(&rawBase, impl_->repo.get(), impl_->path.c_str(), nullptr) != 0) {
+        throw std::runtime_error(gitErrorMessage("Failed to blame the file"));
+      }
+      impl_->base.reset(rawBase);
+      if (cancelled()) throw std::runtime_error("Blame was cancelled.");
+      std::vector<git_diff_hunk> hunks;
+      git_diff_options options;
+      git_diff_options_init(&options, GIT_DIFF_OPTIONS_VERSION);
+      options.context_lines = 0;
+      options.flags = GIT_DIFF_FORCE_TEXT;
+      const auto collect = [](const git_diff_delta*, const git_diff_hunk* hunk, void* payload) {
+        static_cast<std::vector<git_diff_hunk>*>(payload)->push_back(*hunk);
+        return 0;
+      };
+      if (git_diff_buffers(committed->data(), committed->size(), nullptr, impl_->contents.data(), impl_->contents.size(), nullptr, &options, nullptr, nullptr, collect, nullptr, &hunks) != 0) {
+        throw std::runtime_error(gitErrorMessage("Failed to compare the changes"));
+      }
+      size_t next = 0;
+      long delta = 0;
+      for (size_t line = 1; line <= impl_->lineCount; ++line) {
+        bool changed = false;
+        for (; next < hunks.size(); ++next) {
+          const auto& hunk = hunks[next];
+          const size_t start = static_cast<size_t>(hunk.new_start), lines = static_cast<size_t>(hunk.new_lines);
+          if (lines && line >= start && line < start + lines) { changed = true; break; }
+          // A deletion-only hunk sits after line `new_start`.
+          if (lines ? line < start + lines : line <= start) break;
+          delta += hunk.new_lines - hunk.old_lines;
+        }
+        if (!changed) impl_->headLines[line] = static_cast<size_t>(static_cast<long>(line) - delta);
+      }
+    }
+    impl_->bufferRead = true;
+  }
+  if (cancelled()) throw std::runtime_error("Blame was cancelled.");
+  for (size_t line = startLine; line <= last; ++line) {
+    const size_t headLine = impl_->headLines[line];
+    const git_blame_hunk* found = headLine && impl_->base ? git_blame_get_hunk_byline(impl_->base.get(), headLine) : nullptr;
+    git_blame_hunk hunk = {};
+    if (found) {
+      hunk = *found;
+      hunk.orig_start_line_number = found->orig_start_line_number + (headLine - found->final_start_line_number);
+    }
+    hunk.final_start_line_number = line;
+    hunk.lines_in_hunk = 1;
+    const size_t before = rows.size();
+    impl_->append(rows, hunk, line, line);
+    // Joins a line onto the previous hunk when it continues it.
+    if (before && rows.size() > before) {
+      auto& previous = rows[before - 1];
+      const auto& added = rows.back();
+      if (previous.oid == added.oid && previous.path == added.path && previous.startLine + previous.lineCount == added.startLine
+          && (added.oid.empty() || previous.originalStartLine + previous.lineCount == added.originalStartLine)) {
+        previous.lineCount += 1;
+        rows.pop_back();
+      }
+    }
   }
   return rows;
 }

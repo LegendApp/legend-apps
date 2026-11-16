@@ -21,6 +21,8 @@ namespace margelo::nitro::legendapps::diffparser { struct DiffLoadResult; }
 namespace margelo::nitro::legendapps::diffparser { struct GitHistoryHead; }
 // Forward declaration of `GitHistoryPage` to properly resolve imports.
 namespace margelo::nitro::legendapps::diffparser { struct GitHistoryPage; }
+// Forward declaration of `GitBlameHunk` to properly resolve imports.
+namespace margelo::nitro::legendapps::diffparser { struct GitBlameHunk; }
 
 #include <memory>
 #include "HybridDiffLoadSessionSpec.hpp"
@@ -30,6 +32,7 @@ namespace margelo::nitro::legendapps::diffparser { struct GitHistoryPage; }
 #include <NitroModules/Promise.hpp>
 #include "GitHistoryHead.hpp"
 #include "GitHistoryPage.hpp"
+#include "GitBlameHunk.hpp"
 
 namespace margelo::nitro::legendapps::diffparser {
 
@@ -71,6 +74,9 @@ namespace margelo::nitro::legendapps::diffparser {
       virtual std::shared_ptr<Promise<GitHistoryHead>> openGitHistory(const std::string& folderPath) = 0;
       virtual std::shared_ptr<Promise<GitHistoryPage>> readGitHistoryPage(double handle, double offset, double count) = 0;
       virtual void closeGitHistory(double handle) = 0;
+      virtual std::shared_ptr<Promise<double>> openGitBlame(const std::string& folderPath, const std::string& path, const std::string& source) = 0;
+      virtual std::shared_ptr<Promise<std::vector<GitBlameHunk>>> readGitBlame(double handle, double startLine, double lineCount) = 0;
+      virtual void closeGitBlame(double handle) = 0;
 
     protected:
       // Hybrid Setup

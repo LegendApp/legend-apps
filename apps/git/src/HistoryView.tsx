@@ -1,15 +1,15 @@
 import { memo, useCallback, useMemo } from "react";
 import { PlatformColor, Pressable, ScrollView, StyleSheet, Text, View, useColorScheme, type GestureResponderEvent } from "react-native";
 
-type MouseDetails = { button?: number; ctrlKey?: boolean; pageX?: number; pageY?: number };
+type MouseDetails = { button?: number; ctrlKey?: boolean; metaKey?: boolean; pageX?: number; pageY?: number };
 import { LegendList } from "@legendapp/list/react-native";
 import type { GitHistoryCommit } from "@legend-apps/diff-parser";
 import type { GitRefDecoration } from "@legend-apps/git-core";
 import { Button } from "@legendapp/spark/ui";
 import { Sidebar, SidebarItem } from "@legendapp/spark/ui/sidebar";
-import { DiffPane } from "./DiffPane";
+import { DiffPane, type DiffLineTarget } from "./DiffPane";
 import { EmptyState } from "./EmptyState";
-import { commitGitHubUrl, relativeDate, shortOid, type HistoryState } from "./gitHistory";
+import { commitGitHubUrl, relativeDate, searchScopes, shortOid, type CommitFile, type HistoryState } from "./gitHistory";
 import { pathParts } from "./FileRow";
 
 export const historyRowHeight = 44;
@@ -88,7 +88,17 @@ export type HistoryActions = {
   /** Right-click on a changed file of the selected commit, in window coordinates. */
   fileContextMenu(path: string, position: { x: number; y: number }): void;
   closeFileHistory(): void;
+  /** Command-click: compares the selected commit with this one. */
+  compare(oid: string): void;
+  swapCompare(): void;
+  closeCompare(): void;
+  /** The line clicked last in a commit's or comparison's diff, with the revision its side was blamed as of. */
+  lineChange(target: BlameTarget | null): void;
+  lineContextMenu(target: BlameTarget, position: { x: number; y: number }): void;
 };
+
+/** A diff line and the revision to blame it as of: a commit, "index" or "workdir". */
+export type BlameTarget = DiffLineTarget & { source: string };
 
 type RowCommit = Pick<GitHistoryCommit, "oid" | "summary" | "authorName" | "time"> & Partial<Pick<GitHistoryCommit, "lane" | "color" | "edges" | "parents">> & { path?: string };
 
@@ -104,13 +114,18 @@ function RefNames({ refs, currentBranch, selected }: { refs: GitRefDecoration[];
   </Text>;
 }
 
-const CommitRow = memo(function CommitRow({ commit, columns, palette, path, selected, refs, currentBranch, onSelect, onContextMenu }: {
+const CommitRow = memo(function CommitRow({ commit, columns, palette, path, selected, refs, currentBranch, onSelect, onCompare, onContextMenu }: {
   commit: RowCommit; columns: number; palette: LanePalette; path?: string; selected: boolean; refs: GitRefDecoration[] | undefined; currentBranch: string | null;
-  onSelect: (oid: string) => void; onContextMenu: (oid: string, position: { x: number; y: number }) => void;
+  onSelect: (oid: string) => void; onCompare: (oid: string) => void; onContextMenu: (oid: string, position: { x: number; y: number }) => void;
 }) {
   return <Pressable accessibilityRole="button" accessibilityLabel={`${commit.summary}, ${shortOid(commit.oid)}${refs?.length ? `, ${refs.map(ref => ref.name).join(", ")}` : ""}`} accessibilityState={{ selected }}
     style={[styles.row, selected && styles.rowSelected]}
-    onPress={event => { if (!(event.nativeEvent as MouseDetails).ctrlKey) onSelect(commit.oid); }}
+    onPress={event => {
+      const mouse = event.nativeEvent as MouseDetails;
+      if (mouse.ctrlKey) return;
+      if (mouse.metaKey) onCompare(commit.oid);
+      else onSelect(commit.oid);
+    }}
     // Pressability only presses for the primary button, so the context menu comes from the raw touch end.
     onTouchEnd={(event: GestureResponderEvent) => {
       const mouse = event.nativeEvent as MouseDetails;
@@ -133,31 +148,43 @@ const CommitRow = memo(function CommitRow({ commit, columns, palette, path, sele
 
 /** History's list column: the commit list with its graph, one file's history, or the unborn/loading state. */
 export function HistoryList({ history, actions }: { history: HistoryState; actions: HistoryActions }) {
-  const { commits, refs, selectedOid, currentBranch, file } = history;
+  const { commits, refs, selectedOid, currentBranch, file, search, compare } = history;
   const onSelect = useCallback((oid: string) => actions.select(oid), [actions]);
+  const onCompare = useCallback((oid: string) => actions.compare(oid), [actions]);
   const onContextMenu = useCallback((oid: string, position: { x: number; y: number }) => actions.contextMenu(oid, position), [actions]);
   const columns = useMemo(() => graphColumns(commits), [commits]);
   const palette = laneColors[useColorScheme() === "dark" ? "dark" : "light"];
   // A new object whenever selection, refs, the graph width or the appearance change, so recycled rows redraw.
-  const extraData = useMemo(() => ({ selectedOid, refs, currentBranch, columns, palette }), [selectedOid, refs, currentBranch, columns, palette]);
+  const extraData = useMemo(() => ({ selectedOid, refs, currentBranch, columns, palette, compare }), [selectedOid, refs, currentBranch, columns, palette, compare]);
 
   if (history.head?.unborn) return <EmptyState title="No Commits Yet" message="Make the first commit from Changes." />;
   if (!history.head) return history.error ? <Text accessibilityRole="alert" style={styles.error}>{history.error}</Text> : <EmptyState title="Loading History…" />;
   const folder = file && pathParts(file.path);
+  const filter = search ?? file;
+  const scopeLabel = search && searchScopes.find(entry => entry.scope === search.scope)!.label;
+  const highlighted = (oid: string) => compare ? oid === compare.base || oid === compare.target : oid === selectedOid;
   return <View style={styles.list}>
-    {file && folder ? <View style={styles.heading}>
+    {search ? <View style={styles.heading}>
+      <View style={styles.headingText}>
+        <Text style={styles.headingLabel} accessibilityRole="header" numberOfLines={1}>{`Search: “${search.text}”`}</Text>
+        <Text style={styles.headingFolder} numberOfLines={1}>{search.loading ? `Searching ${scopeLabel!.toLowerCase()}…` : `${search.commits.length}${search.done ? "" : "+"} in ${scopeLabel}`}</Text>
+      </View>
+      <Button style={styles.showAll} onPress={() => actions.closeFileHistory()}>Show All</Button>
+    </View> : file && folder ? <View style={styles.heading}>
       <View style={styles.headingText}>
         <Text style={styles.headingLabel} accessibilityRole="header" numberOfLines={1}>File History: {folder.name}</Text>
         {folder.folder ? <Text style={styles.headingFolder} numberOfLines={1}>{folder.folder}</Text> : null}
       </View>
       <Button style={styles.showAll} onPress={() => actions.closeFileHistory()}>Show All</Button>
     </View> : null}
-    {(file ?? history).error ? <Text accessibilityRole="alert" style={styles.error}>{(file ?? history).error}</Text> : null}
-    {file?.loading ? <EmptyState title="Loading File History…" />
+    {(filter ?? history).error ? <Text accessibilityRole="alert" style={styles.error}>{(filter ?? history).error}</Text> : null}
+    {search?.loading && !search.commits.length ? <EmptyState title="Searching…" />
+      : search && !search.commits.length ? search.error ? null : <EmptyState title="No Results" message={`No commit matches in ${scopeLabel!.toLowerCase()}.`} />
+      : file?.loading ? <EmptyState title="Loading File History…" />
       : file && !file.commits.length ? <EmptyState title="No History" message="No commit touched this file." />
       : <LegendList<RowCommit>
-        key={file?.path}
-        data={file ? file.commits : commits}
+        key={search ? `search:${search.scope}:${search.text}` : file?.path}
+        data={filter ? filter.commits : commits}
         keyExtractor={item => item.oid}
         estimatedItemSize={historyRowHeight}
         getFixedItemSize={() => historyRowHeight}
@@ -165,8 +192,8 @@ export function HistoryList({ history, actions }: { history: HistoryState; actio
         recycleItems
         onEndReached={() => actions.loadMore()}
         onEndReachedThreshold={2}
-        renderItem={({ item }) => <CommitRow commit={item} columns={file ? 0 : columns} palette={palette} path={file?.path} selected={item.oid === selectedOid} refs={refs.get(item.oid)} currentBranch={currentBranch} onSelect={onSelect} onContextMenu={onContextMenu} />}
-        ListFooterComponent={(file ?? history).done ? null : <Text style={styles.footer}>Loading more…</Text>}
+        renderItem={({ item }) => <CommitRow commit={item} columns={filter ? 0 : columns} palette={palette} path={file?.path} selected={highlighted(item.oid)} refs={refs.get(item.oid)} currentBranch={currentBranch} onSelect={onSelect} onCompare={onCompare} onContextMenu={onContextMenu} />}
+        ListFooterComponent={(filter ?? history).done ? null : <Text style={styles.footer}>Loading more…</Text>}
       />}
   </View>;
 }
@@ -174,6 +201,7 @@ export function HistoryList({ history, actions }: { history: HistoryState; actio
 /** History's detail pane: the selected commit's header, message, changed files and the selected file's patch. */
 export function CommitDetails({ history, actions }: { history: HistoryState; actions: HistoryActions }) {
   const { details } = history;
+  if (history.compare) return <CompareDetails history={history} actions={actions} />;
   if (!details) return <EmptyState title="No Selection" message="Select a commit to see its details." />;
   if (details.error) return <Text accessibilityRole="alert" style={styles.error}>{details.error}</Text>;
   const commit = details.commit;
@@ -211,7 +239,53 @@ export function CommitDetails({ history, actions }: { history: HistoryState; act
         </SidebarItem>)}
       </Sidebar> : null}
     </View>
-    {file ? <DiffPane readOnly disabled patch={{ path: file.path, text: file.text, file: file.file, section: "unstaged", conflicted: false }} onApply={() => {}} /> : null}
+    {file ? <CommitDiff file={file} actions={actions} oldSource={commit.parents[0]} newSource={commit.oid} /> : null}
+  </View>;
+}
+
+/** A read-only diff whose lines blame as of `newSource` (added and context lines) or `oldSource` (removed lines). */
+function CommitDiff({ file, actions, oldSource, newSource }: { file: CommitFile; actions: HistoryActions; oldSource: string | undefined; newSource: string }) {
+  const source = (target: DiffLineTarget) => target.side === "old" ? oldSource : newSource;
+  return <DiffPane readOnly disabled patch={{ path: file.path, text: file.text, file: file.file, section: "unstaged", conflicted: false }} onApply={() => {}}
+    onLineChange={target => { const from = target && source(target); actions.lineChange(target && from ? { ...target, source: from } : null); }}
+    onLineContextMenu={(target, position) => { const from = source(target); if (from) actions.lineContextMenu({ ...target, source: from }, position); }} />;
+}
+
+function commitLabel(history: HistoryState, oid: string) {
+  const summary = listedSummary(history, oid);
+  return summary ? `${shortOid(oid)} ${summary}` : shortOid(oid);
+}
+const listedSummary = (history: HistoryState, oid: string) =>
+  (history.search?.commits.find(commit => commit.oid === oid) ?? history.file?.commits.find(commit => commit.oid === oid) ?? history.commits.find(commit => commit.oid === oid))?.summary;
+
+/** Two commits compared: `git diff base target`, its changed files and the selected file's patch. */
+function CompareDetails({ history, actions }: { history: HistoryState; actions: HistoryActions }) {
+  const compare = history.compare!;
+  const file = compare.files.find(entry => entry.path === compare.selectedPath);
+  return <View style={styles.details}>
+    <View style={styles.header}>
+      <View style={styles.headerTitle}>
+        <Text style={styles.subject} accessibilityRole="header" numberOfLines={1}>{`Comparing ${shortOid(compare.base)} → ${shortOid(compare.target)}`}</Text>
+        <Text style={styles.compareLine} numberOfLines={1} selectable>{`From ${commitLabel(history, compare.base)}`}</Text>
+        <Text style={styles.compareLine} numberOfLines={1} selectable>{`To ${commitLabel(history, compare.target)}`}</Text>
+      </View>
+      <Button style={styles.action} onPress={() => actions.swapCompare()}>Swap</Button>
+      <Button style={styles.action} onPress={() => actions.closeCompare()}>Done</Button>
+    </View>
+    {compare.error ? <Text accessibilityRole="alert" style={styles.error}>{compare.error}</Text>
+      : compare.loading ? <EmptyState title="Comparing…" />
+      : !compare.files.length ? <EmptyState title="No Differences" message="The two commits have the same files." />
+      : <>
+        <View style={styles.files}>
+          <Text style={styles.filesHeading}>{compare.files.length === 1 ? "1 changed file" : `${compare.files.length} changed files`}</Text>
+          <Sidebar style={{ height: Math.min(compare.files.length * 24 + 4, 120) }} selectedId={compare.selectedPath} onSelectionChange={event => { if (event.id) actions.selectFile(event.id); }} defaultRowHeight={24}>
+            {compare.files.map(entry => <SidebarItem key={entry.path} id={entry.path} onContextMenu={event => actions.fileContextMenu(entry.path, event.windowPosition)}>
+              <Text style={styles.file} numberOfLines={1}>{entry.file.oldPath && entry.file.newPath && entry.file.oldPath !== entry.file.newPath ? `${entry.file.oldPath} → ${entry.file.newPath}` : entry.path}</Text>
+            </SidebarItem>)}
+          </Sidebar>
+        </View>
+        {file ? <CommitDiff file={file} actions={actions} oldSource={compare.base} newSource={compare.target} /> : null}
+      </>}
   </View>;
 }
 
@@ -252,6 +326,7 @@ const styles = StyleSheet.create({
   headerTitle: { flex: 1, gap: 2 },
   subject: { fontSize: 14, fontWeight: "600", color: PlatformColor("labelColor") },
   oid: { fontSize: 11, fontFamily: "Menlo", color: PlatformColor("secondaryLabelColor") },
+  compareLine: { fontSize: 12, color: PlatformColor("secondaryLabelColor") },
   action: { width: 96, height: 28 },
   wideAction: { width: 128, height: 28 },
   metaScroll: { maxHeight: 180, flexGrow: 0 },

@@ -4,10 +4,10 @@ import { watchDirectories } from "@legend-apps/file-system-watcher";
 import type { GitStatusEntry } from "@legend-apps/git-core";
 import { Button } from "@legendapp/spark/ui";
 import { conflictedEntries, createGitChanges, emptyChanges, stagedEntries, unstagedEntries } from "./gitChanges";
-import { DiffPane } from "./DiffPane";
-import { CommitDetails, HistoryList, type HistoryActions } from "./HistoryView";
+import { DiffPane, type DiffLineTarget } from "./DiffPane";
+import { CommitDetails, HistoryList, type BlameTarget, type HistoryActions } from "./HistoryView";
 import { commandEnabled, commandLabel, commandMenuItem, runCommand, type CommandContext, type CommandId, type Section } from "./commands";
-import { commitGitHubUrl, createGitHistory, emptyHistory } from "./gitHistory";
+import { commitGitHubUrl, createGitHistory, emptyHistory, searchScopes, type SearchScope } from "./gitHistory";
 import { setStringAsync } from "@legendapp/spark/clipboard";
 import { showContextMenu } from "@legendapp/spark/context-menu";
 import { openURL } from "@legendapp/spark/links";
@@ -32,6 +32,14 @@ export function App() {
   const [filter, setFilter] = useState("");
   const [history, setHistory] = useState(emptyHistory);
   const historyController = useRef<ReturnType<typeof createGitHistory> | null>(null);
+  const [searchScope, setSearchScope] = useState<SearchScope>("message");
+  const [historyQuery, setHistoryQuery] = useState("");
+  // Bumped when the app clears the search field (Show All), so the toolbar re-sends its text.
+  const [searchEpoch, setSearchEpoch] = useState(0);
+  // The diff line Blame Line acts on; the ref is current at once for a context menu opened in the same event.
+  const [blameTarget, setBlameTargetState] = useState<BlameTarget | null>(null);
+  const blameTargetRef = useRef<BlameTarget | null>(null);
+  const setBlameTarget = (target: BlameTarget | null) => { blameTargetRef.current = target; setBlameTargetState(target); };
   const historyRef = useRef(history);
   historyRef.current = history;
   const root = changes.root;
@@ -69,6 +77,26 @@ export function App() {
     if (await confirmDestructive(`Discard ${what}?`, "Discard")) await controller.current?.discardFile(entry.path);
   }
 
+  /** Shows History for the line's file with the commit that last changed the line selected. */
+  async function blameLine() {
+    const target = blameTargetRef.current, owner = historyController.current, root = historyRef.current.root;
+    if (!target || !owner) return;
+    try {
+      const hunk = await owner.blameLine(target.path, target.source, target.line);
+      // Another repository opened while the blame ran.
+      if (!hunk || historyController.current !== owner || historyRef.current.root !== root) return;
+      if (!hunk.oid) {
+        await showMessage({ windowId: "main", kind: "info", title: "Not Committed Yet", message: `Line ${target.line} of “${target.path}” has changes that are not committed yet.` });
+        return;
+      }
+      setSection("history");
+      await owner.showFileHistory(target.path, hunk.oid);
+    } catch (error) {
+      if (error instanceof Error && error.name === "GitHistoryCancelledError") return;
+      await showMessage({ windowId: "main", kind: "warning", title: "Couldn’t Blame the Line", message: error instanceof Error ? error.message : String(error) }).catch(console.error);
+    }
+  }
+
   async function restoreDiscard() {
     const backup = controller.current && lastDiscard;
     if (!backup) return;
@@ -88,7 +116,10 @@ export function App() {
     selectedCommit,
     selectedFile: !root ? null : section === "changes" ? selected?.path ?? null : history.details?.selectedPath ?? null,
     fileHistoryPath: root ? history.file?.path ?? null : null,
+    searching: root ? !!history.search : false,
     gitHubUrl: oid => commitGitHubUrl(historyRef.current, oid),
+    canBlame: !!root && !!blameTarget,
+    searchScope,
     canApplyLines: !!root && section === "changes" && !!changes.patch?.file?.hunks.length,
     linesLabel: `${selected?.section === "staged" ? "Unstage" : "Stage"} Selected Lines`,
     canDiscardFile: section === "changes" && canDiscardFile,
@@ -108,7 +139,16 @@ export function App() {
         if (url) openURL(url).catch(console.error);
       },
       showFileHistory: path => { setSection("history"); void historyController.current?.showFileHistory(path); },
-      closeFileHistory: () => historyController.current?.closeFileHistory(),
+      closeFileHistory: () => {
+        historyController.current?.closeFileHistory();
+        if (historyQuery) { setHistoryQuery(""); setSearchEpoch(value => value + 1); }
+      },
+      blameLine: () => void blameLine(),
+      compareWith: oid => void historyController.current?.compare(oid),
+      setSearchScope: scope => {
+        setSearchScope(scope);
+        if (historyQuery) historyController.current?.search(scope, historyQuery);
+      },
       applyLines: () => applyLines.current?.(),
       discardFile: () => void discardFile(),
       discardLines: () => discardLines.current?.(),
@@ -126,7 +166,7 @@ export function App() {
     items: [
       { type: "submenu", id: "app", label: "Legend Git", target: { menu: "app" }, items: [] },
       { type: "submenu", id: "file", label: "File", target: { menu: "file" }, items: [item("open-repository")] },
-      { type: "submenu", id: "edit", label: "Edit", target: { menu: "edit" }, items: [item("copy-sha")] },
+      { type: "submenu", id: "edit", label: "Edit", target: { menu: "edit" }, items: [item("copy-sha"), { type: "separator" }, item("blame-line")] },
       // AppKit's own View ▸ Show/Hide Sidebar drives the split view, so the menu has no second one.
       { type: "submenu", id: "view", label: "View", target: { menu: "view" }, items: [item("show-changes"), item("show-history"), { type: "separator" }, item("show-file-history"), item("show-all-history")] },
       { type: "submenu", id: "repository", label: "Repository", placement: { before: { menu: "window" } }, items: [item("refresh"), { type: "separator" }, item("open-github")] },
@@ -142,6 +182,10 @@ export function App() {
     onAction: action => { runCommand(action.itemId, contextRef.current); },
   });
 
+  // A search ended by something other than the field (a file's history, a blame) clears the field too.
+  useEffect(() => {
+    if (!history.search && historyQuery) { setHistoryQuery(""); setSearchEpoch(value => value + 1); }
+  }, [history.search]); // eslint-disable-line react-hooks/exhaustive-deps -- only when the search ends
   useEffect(() => {
     historyController.current?.setRoot(root);
     if (!root) setSection("changes");
@@ -157,14 +201,35 @@ export function App() {
     copySha: oid => { runCommand("copy-sha", contextRef.current, oid); },
     openOnGitHub: oid => { runCommand("open-github", contextRef.current, oid); },
     contextMenu: (oid, position) => {
-      void historyController.current?.select(oid);
       const menuContext = contextRef.current;
-      showContextMenu({ windowId: "main", position, items: (["copy-sha", "open-github"] as const).map(id => commandMenuItem(id, menuContext, { target: oid, shortcut: false })) })
+      // The row keeps the selection, so Compare with Selected can compare the two.
+      const items = [
+        commandMenuItem("compare-with-selected", menuContext, { target: oid, shortcut: false }), { type: "separator" as const },
+        ...(["copy-sha", "open-github"] as const).map(id => commandMenuItem(id, menuContext, { target: oid, shortcut: false })),
+      ];
+      showContextMenu({ windowId: "main", position, items })
         .then(result => { if (!result.canceled) runCommand(result.itemId, contextRef.current, oid); }, console.error);
     },
     fileContextMenu: (path, position) => { historyController.current?.selectFile(path); showFileMenu(path, position); },
     closeFileHistory: () => { runCommand("show-all-history", contextRef.current); },
+    compare: oid => void historyController.current?.compare(oid),
+    swapCompare: () => void historyController.current?.swapCompare(),
+    closeCompare: () => historyController.current?.closeCompare(),
+    lineChange: target => setBlameTarget(target),
+    lineContextMenu: (target, position) => showLineMenu(target, position),
   }));
+
+  function showLineMenu(target: BlameTarget, position: { x: number; y: number }) {
+    setBlameTarget(target);
+    showContextMenu({ windowId: "main", position, items: [commandMenuItem("blame-line", { ...contextRef.current, canBlame: true }, { shortcut: false })] })
+      .then(result => { if (!result.canceled) runCommand(result.itemId, { ...contextRef.current, canBlame: !!blameTargetRef.current }); }, console.error);
+  }
+
+  /** Changes blames added and context lines as on disk (unstaged) or staged, and removed lines one step older. */
+  const changesBlameTarget = (target: DiffLineTarget | null): BlameTarget | null => {
+    const staged = changes.patch?.section === "staged";
+    return target && { ...target, source: target.side === "new" ? staged ? "index" : "workdir" : staged ? "HEAD" : "index" };
+  };
 
   function showFileMenu(path: string, position: { x: number; y: number }) {
     showContextMenu({ windowId: "main", position, items: [commandMenuItem("show-file-history", contextRef.current, { target: path, shortcut: false })] })
@@ -191,11 +256,16 @@ export function App() {
       // Fetch, Pull and Push arrive with M3: a `disabled` toolbar button still shows and acts enabled (Spark ask), so they are left out until then.
       button("refresh", "arrow.clockwise"),
       // AppKit's NSSearchToolbarItem (it collapses itself when the toolbar is narrow); Spark's `collapses` button ignores real clicks (Spark ask).
-      { type: "search", id: "search", label: "Search", placeholder: section === "changes" ? "Filter Files" : "Search", width: 200, disabled: section !== "changes" },
+      { type: "search", id: "search", label: "Search", placeholder: section === "changes" ? "Filter Files" : "Search Commits", width: 200 },
+      ...section === "history" ? [{
+        type: "menu" as const, id: "search-scope", label: searchScopes.find(entry => entry.scope === searchScope)!.label, tooltip: "Search in",
+        items: searchScopes.map(({ scope, label }) => ({ type: "checkbox" as const, id: `search-${scope}`, label, checked: scope === searchScope })),
+      }] : [],
     ] satisfies MacOSToolbarItem[] : [],
   ];
-  // The search field keeps its own text; it is passed only when the toolbar is rebuilt for another reason.
-  const toolbar = { visible: true, style: "unified" as const, items: toolbarItems.map(entry => entry.type === "search" && filter ? { ...entry, value: filter } : entry) };
+  // The search field keeps its own text; it is passed only when the toolbar is rebuilt (a section switch or Show All).
+  const searchText = section === "history" ? historyQuery : filter;
+  const toolbar = { visible: true, style: "unified" as const, items: toolbarItems.map(entry => entry.type === "search" ? { ...entry, value: searchText } : entry) };
   const toolbarRef = useRef(toolbar);
   toolbarRef.current = toolbar;
   // Title bar options go once: re-sending them grows the window by 20 pt each time (Spark ask).
@@ -213,7 +283,7 @@ export function App() {
     }).catch(console.error);
   }, [root]);
   // Item changes (section, labels, availability) update only the toolbar.
-  const toolbarKey = JSON.stringify(toolbarItems);
+  const toolbarKey = JSON.stringify([toolbarItems, searchEpoch]);
   const toolbarShown = useRef(toolbarKey);
   useEffect(() => {
     if (toolbarShown.current === toolbarKey) return;
@@ -232,7 +302,15 @@ export function App() {
       if (event.type === "toolbarAction") runCommand(event.itemId, contextRef.current);
       else if (event.type === "toolbarMenuAction") runCommand(event.action.itemId, contextRef.current);
       else if (event.type === "toolbarSelectionChanged" && event.itemId === "section") runCommand(event.value === "history" ? "show-history" : "show-changes", contextRef.current);
-      else if ((event.type === "toolbarSearchChanged" || event.type === "toolbarSearchSubmitted") && contextRef.current.section === "changes") setFilter(event.value);
+      // Typing already filters or searches. AppKit also sends the field's action when the field loses focus (a click
+      // on Show All, a section switch), with the text from before, so submits are ignored.
+      else if (event.type === "toolbarSearchChanged") {
+        if (contextRef.current.section === "changes") setFilter(event.value);
+        else {
+          setHistoryQuery(event.value);
+          historyOwner.search(contextRef.current.searchScope, event.value);
+        }
+      }
     });
     const closeRegistration = addWindowListener("main", "closed", () => {
       disposed = true;
@@ -275,6 +353,8 @@ export function App() {
   </View>;
 
   const changesDetail = changes.patch ? <DiffPane patch={changes.patch} disabled={busy} applyRef={applyLines} discardRef={discardLines}
+    onLineChange={target => setBlameTarget(changesBlameTarget(target))}
+    onLineContextMenu={(target, position) => { const blame = changesBlameTarget(target); if (blame) showLineMenu(blame, position); }}
     onApply={(keys, text) => void controller.current?.changeLines(keys, text)}
     onDiscard={async (keys, text, what) => { if (await confirmDestructive(`Discard ${what}?`, "Discard")) await controller.current?.discardLines(keys, text); }} />
     : selected ? <EmptyState title="Loading Diff…" />
