@@ -7,7 +7,7 @@ import { buildWorldGraph, worldGraphTopology } from "./render";
 import { prepareWorldPlans, sampleWorldPlan, worldPlanCopies, worldPlanFits, worldPlanIds, type WorldPlan } from "./plan";
 import { sampleWorldClock, type CatchUp, type WorldClock } from "./timing";
 import { advanceResolution, createResolutionState } from "./resolution";
-import { tunnelInstances, type EnvironmentOptions, type KeyLightOptions, type TunnelOptions } from "./lighting";
+import type { EnvironmentOptions, KeyLightOptions } from "./lighting";
 import { renderTreeInstances, type RenderTreeOptions } from "./renderTree";
 import { text3dInstances, type Text3DOptions } from "./text3d";
 import { cardInstances, compileTrack, customInstances, graphInstances, labelInstance, orbInstances, prepareWorldSample, prepareWorldScene, primitive, pulseInstances, rowInstances,
@@ -16,18 +16,21 @@ import { cardInstances, compileTrack, customInstances, graphInstances, labelInst
   type EffectOptions, type PostOptions, type PreparedWorldScene, type PrimitiveOptions, type PulseOptions, type RowsOptions, type SDFOptions, type SprayOptions, type StageMotion, type StageOptions, type VoxelsOptions, type WorldScene } from "./scene";
 // motion.ts imports scene.ts; load scene first so its worklets capture motion's exports, not the cycle's undefined bindings.
 import { burstInstances, choreographyInstances, type BurstOptions, type ChoreographyOptions } from "./motion";
-import { pillarInstances, roundedBoxInstances, routedTubeInstances, stoplightInstances, type PillarOptions, type RoundedBoxOptions, type RoutedTubeOptions, type StoplightOptions } from "./stage";
+import { pillarInstances, roundedBoxInstances, routedTubeInstances, type PillarOptions, type RoundedBoxOptions, type RoutedTubeOptions } from "./stage";
 import { createTrackFrame, retainTrackScene, sampleTrackFrame, trackIds, type TrackFrame, type WorldTrack } from "./track";
 
 export type { WorldCarry, WorldSegment, WorldStepCamera, WorldTrack } from "./track";
 
-export { pillarInstances, roundedBoxInstances, routedTubeInstances, stoplightInstances } from "./stage";
-export type { PillarOptions, RoundedBoxOptions, RoutedTubeOptions, StoplightLamp, StoplightOptions, TubePulse } from "./stage";
+export { pillarInstances, roundedBoxInstances, routedTubeInstances } from "./stage";
+export type { PillarOptions, RoundedBoxOptions, RoutedTubeOptions, TubePulse } from "./stage";
 export { tree, wave, subset, layoutTree } from "./graph";
 export { evaluateCamera, flyTo } from "./camera";
 export { buildWorldGraph } from "./render";
 export { cardInstances, orbInstances, graphInstances, labelInstance, primitive, prepareWorldScene, pulseInstances, recyclePathPoint, rowInstances, sprayInstances, voxelInstances, sampleWorldUniforms } from "./scene";
-export type { Shot, CameraPose, Vec3 } from "./camera";
+export { contentClearance } from "./camera";
+export { colorVector, compileTrack } from "./scene";
+export type { Keyframe } from "./scene";
+export type { Ease, Shot, CameraPose, Vec3 } from "./camera";
 export type { RenderFlash, RenderTreeOptions } from "./renderTree";
 export { layoutText3D, registerText3DFont, text3dInstances } from "./text3d";
 export type { GlyphMotion, Text3DEnter, Text3DFont, Text3DOptions } from "./text3d";
@@ -39,6 +42,14 @@ export type { Instance } from "./scene";
 export function Choreography(_: ChoreographyOptions) { return null; }
 export function Burst(_: BurstOptions) { return null; }
 
+type SceneComponent<P> = ((props: P) => null) & { expandScene: (props: P) => ReactNode };
+/** Pure declaration macros expand during scene preparation, before sampling on the UI thread. */
+export function defineSceneComponent<P>(expand: (props: P) => ReactNode): SceneComponent<P> {
+  return Object.assign((_: P) => null, { expandScene: expand });
+}
+/** Prepared instances retain their tracks, geometry identity and containing Stage transforms. */
+export function Instances(_: { items: Instance[] }) { return null; }
+
 export function Camera(_: CameraOptions) { return null; }
 export function Graph(_: GraphOptions) { return null; }
 export function Orbs(_: OrbsOptions) { return null; }
@@ -47,7 +58,6 @@ export function Box(_: PrimitiveOptions) { return null; }
 export function RoundedBox(_: RoundedBoxOptions) { return null; }
 export function RoutedTube(_: RoutedTubeOptions) { return null; }
 export function Pillar(_: PillarOptions) { return null; }
-export function Stoplight(_: StoplightOptions) { return null; }
 export function Tube(_: PrimitiveOptions) { return null; }
 export function Ring(_: PrimitiveOptions & { radius?: Animated<number> }) { return null; }
 export function Fog(_: NonNullable<WorldScene["fog"]>) { return null; }
@@ -82,9 +92,7 @@ export function Custom(_: CustomOptions) { return null; }
 export function SDF(_: SDFOptions) { return null; }
 export function KeyLight(_: KeyLightOptions) { return null; }
 export function Environment(_: EnvironmentOptions) { return null; }
-export function Tunnel(_: TunnelOptions) { return null; }
-export { tunnelInstances } from "./lighting";
-export type { EnvironmentOptions, FloorKerb, FloorLine, FloorMarkings, KeyLightOptions, TunnelOptions } from "./lighting";
+export type { EnvironmentOptions, FloorSurface, KeyLightOptions } from "./lighting";
 
 const poses = new Map<string, SharedValue<CameraPose | null>>();
 const scenes = new WeakMap<PreparedWorldScene, SharedValue<WorldSampleScene>>();
@@ -172,6 +180,8 @@ function worldContent(children: ReactNode, quality: WorldScene["quality"], msaaS
         scene.stages!.push({ stage, parents: stages });
         collect(options.children as ReactNode, [...stages, stage]);
       }
+      else if (child.type === Instances) add((options.items as Instance[]).map(instance => ({ ...instance })), stages);
+      else if (typeof child.type === "function" && "expandScene" in child.type) collect((child.type as SceneComponent<Record<string, unknown>>).expandScene(options), stages);
       else if (child.type === Choreography) add(choreographyInstances(options as ChoreographyOptions), stages);
       else if (child.type === Burst) add(burstInstances(options as BurstOptions), stages);
       else if (child.type === Camera) scene.camera = options as CameraOptions;
@@ -203,8 +213,6 @@ function worldContent(children: ReactNode, quality: WorldScene["quality"], msaaS
       else if (child.type === RimLight) scene.rim = options;
       else if (child.type === KeyLight) scene.keyLight = options;
       else if (child.type === Environment) scene.environment = options;
-      else if (child.type === Tunnel) add(tunnelInstances(options), stages);
-      else if (child.type === Stoplight) add(stoplightInstances(options as StoplightOptions), stages);
       else if (child.type === PointLight || child.type === SpotLight) scene.lights!.push({ ...options, kind: child.type === PointLight ? "point" : "spot" });
       else if (child.type === Pass) scene.passes!.push(options as PostOptions);
       else if (child.type === Effect) scene.effects!.push(options as EffectOptions);

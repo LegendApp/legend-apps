@@ -8,7 +8,7 @@ import { buildCourse, createTrackFrame, heldBlurSlot, depthFadeSlot, retainTrack
 import { sampleWorldClock } from "../packs/world/timing";
 import { routedTubeInstances } from "../packs/world/stage";
 
-const options = { spacing: 32, duration: 2 };
+const options = { spacing: 32, duration: 2, fixed: ["environment:"] };
 const scene = (column = false, extra = false) => prepareWorldScene({ instances: [
   ...cardInstances({ id: "sample", title: "const a = 24", avatar: 0, titleOpacity: column ? 0 : 1,
     position: column ? [3, -1, 0] : [-3, 1, 0], scale: column ? [1, 5, 1] : [4, 1.5, 0.2] }),
@@ -103,21 +103,14 @@ test("default motion has a quintic flight, a mid-travel rise, 40 degree FOV and 
   expect(at(start, "1", 1.7).values.slice(0, 3)).toEqual([0, 3.6, -18]);
 });
 
-test("unannotated slides each take a different leg of one continuous track", () => {
+test("unannotated slides use a straight path with uniform spacing and pace", () => {
   const course = buildCourse({}, 12);
-  const sides = buildCourse({}, 61).dx.slice(1).map(Math.sign);
-  for (const side of [-1, 0, 1]) expect(sides.filter(value => value === side)).toHaveLength(20);
-  for (let k = 1; k < sides.length; k++) expect(sides[k] * sides[k - 1]).toBeGreaterThanOrEqual(0);
-  const legs = course.dx.slice(1).map((dx, i) => [Math.round(dx * 10), Math.round(course.rise[i + 1] * 10), Math.round(course.duration[i + 1] * 100)].join());
-  expect(new Set(legs).size).toBe(legs.length);
+  expect(course.dx).toEqual(Array(12).fill(0));
+  expect(course.rise).toEqual(Array(12).fill(0));
+  expect(course.bank).toEqual(Array(12).fill(0));
+  expect(course.offset).toEqual(Array.from({ length: 12 }, (_, i) => i * 48));
+  expect(course.duration).toEqual(Array(12).fill(1.7));
   expect(buildCourse({}, 12)).toEqual(course);
-  for (let k = 1; k < 12; k++) if (course.dx[k] === 0) expect([course.bank[k], course.rise[k]]).toEqual([0, 0]);
-  for (let k = 1; k < 12; k++) {
-    // Curves stay clear of the stations: each station's content and resting camera sit on a straight.
-    expect(trackX(course, -course.offset[k])).toBeCloseTo(course.x[k], 9);
-    expect(trackX(course, -course.offset[k] + 14)).toBeCloseTo(course.x[k], 9);
-    expect(trackX(course, -course.offset[k] - 4)).toBeCloseTo(course.x[k], 9);
-  }
 });
 
 test("authored legs set turn, rise, length and pace; the camera and bend window follow the curve and hold level", () => {
@@ -407,7 +400,7 @@ test("station-frame caching matches fresh sampling across steps, navigation and 
 });
 
 test("travel speed peaks mid-move, and fixed track parts stay put while the camera passes them", () => {
-  const prepared = prepareWorldScene({ instances: [primitive("box", { id: "tunnel:post", position: [0, 0, -4] }), primitive("box", { id: "panel", position: [0, 1, 0] })] });
+  const prepared = prepareWorldScene({ instances: [primitive("box", { id: "environment:post", position: [0, 0, -4] }), primitive("box", { id: "panel", position: [0, 1, 0] })] });
   const at = (previous: TrackFrame, time: number, slide: string, track: WorldTrack = options) => {
     const playback = { ...createPlaybackState({ phase: "playing", slideKey: slide, stepKey: "0", stepIndex: 0 }), slideTime: time, stepTime: time };
     return sampleTrackFrame(previous, sampleWorldUniforms(prepared, sampleWorldClock(playback, 4, "slide", undefined, false)) as number[], trackIds(prepared), playback, track);
@@ -420,13 +413,13 @@ test("travel speed peaks mid-move, and fixed track parts stay put while the came
   expect(at(at(rest, 0, "1"), .5, "1").values[travelSpeedSlot]).toBeCloseTo(.5625);
   expect(middle.values[travelSpeedSlot + 1]).toBeCloseTo(1);
   expect(at(at(rest, 0, "1", { ...options, blur: 0 }), 1, "1", { ...options, blur: 0 }).values[travelSpeedSlot + 1]).toBe(0);
-  expect(z(middle, "box:tunnel:post")).toBe(-4);
+  expect(z(middle, "box:environment:post")).toBe(-4);
   expect(z(middle, "box:panel")).toBeCloseTo(-16);
   const arrived = at(middle, 2, "1");
   expect(arrived.values[travelSpeedSlot]).toBe(0);
-  expect(z(arrived, "box:tunnel:post")).toBe(-4);
+  expect(z(arrived, "box:environment:post")).toBe(-4);
   expect(z(arrived, "box:panel")).toBe(-32);
-  expect(z(at(at(rest, 0, "1", { ...options, fixed: [] }), 2, "1", { ...options, fixed: [] }), "box:tunnel:post")).toBe(-36);
+  expect(z(at(at(rest, 0, "1", { ...options, fixed: [] }), 2, "1", { ...options, fixed: [] }), "box:environment:post")).toBe(-36);
 });
 
 test("held stations slow the scenery clock and widen focus blur, easing back to full motion in flight", () => {
@@ -450,15 +443,15 @@ test("held stations slow the scenery clock and widen focus blur, easing back to 
 });
 
 test("fixed scenery nearer than the camera target clears out of the content's way; custom draws are left alone", () => {
-  const prepared = prepareWorldScene({ instances: [primitive("box", { id: "tunnel:near", position: [-6, 4, 6] }), primitive("box", { id: "tunnel:plane", position: [-6, 4, 0] }),
-    primitive("box", { id: "tunnel:far", position: [-6, 4, -12] }), ...customInstances({ id: "tunnel:lights", vertexCount: 36, wgsl: "" }), primitive("box", { id: "panel", position: [0, 4, 6] })] });
+  const prepared = prepareWorldScene({ instances: [primitive("box", { id: "environment:near", position: [-6, 4, 6] }), primitive("box", { id: "environment:plane", position: [-6, 4, 0] }),
+    primitive("box", { id: "environment:far", position: [-6, 4, -12] }), ...customInstances({ id: "environment:lights", vertexCount: 36, wgsl: "" }), primitive("box", { id: "panel", position: [0, 4, 6] })] });
   const playback = { ...createPlaybackState({ phase: "playing", slideKey: "0", stepKey: "0", stepIndex: 0 }), slideTime: 3, stepTime: 3 };
   const frame = sampleTrackFrame(createTrackFrame(), sampleWorldUniforms(prepared, sampleWorldClock(playback, 4, "slide", undefined, false)) as number[], trackIds(prepared), playback, options);
   const opacity = (id: string) => part(frame, id)[23];
-  expect(opacity("box:tunnel:near")).toBe(0);
-  expect(opacity("box:tunnel:plane")).toBe(0);
-  expect(opacity("box:tunnel:far")).toBe(1);
-  expect(opacity("custom:tunnel:lights:0")).toBe(1);
+  expect(opacity("box:environment:near")).toBe(0);
+  expect(opacity("box:environment:plane")).toBe(0);
+  expect(opacity("box:environment:far")).toBe(1);
+  expect(opacity("custom:environment:lights:0")).toBe(1);
   expect(opacity("box:panel")).toBe(1);
 });
 
@@ -494,7 +487,7 @@ test("station carry bows shared objects and Previous retraces the flight", () =>
   continuityPart(forward, "shared").slice(0, 3).forEach((value, i) => expect(continuityPart(back, "shared")[i]).toBeCloseTo(value,6));
 });
 test("banking holds level at stations and retraces the same roll on Previous", () => {
-  const scene = prepareWorldScene({ instances: [] }), options = { bank: 4, duration: 2 };
+  const scene = prepareWorldScene({ instances: [] }), options = { bank: 4, turn: 8, duration: 2 };
   const first = continuitySample(createTrackFrame(), scene, "0", 3, options);
   const entered = continuitySample(first, scene, "1", 0, options);
   // The camera banks while it runs through the curve.

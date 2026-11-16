@@ -7,7 +7,7 @@ import { d } from "typegpu";
 import { loaderCode } from "./layout";
 import { defineWorldEffect, paramsCode, worldEffect, type WorldEffect, type WorldEffectPass, type WorldEffectStage } from "./effects";
 import { glyphVertexCount, text3dBuffer, text3dCode, text3dFont } from "./text3d";
-import { contactShadowCode, environmentCode, floorMarkingsCode, keyLightCode, type FloorMarkings } from "./lighting";
+import { contactShadowCode, environmentCode, floorSurfaceCode, keyLightCode, type FloorSurface } from "./lighting";
 import { depthCode } from "./post";
 import { glyphAtlas, glyphEm, glyphFirst, glyphLast, glyphRange, glyphMetrics, glyphKernings, glyphPixelCount } from "./glyphs";
 
@@ -443,8 +443,8 @@ function glyphBuffer() {
   }
   return { id: "glyphs", size: glyphWords.byteLength, init: glyphWords };
 }
-function floorCode(lights: number, look: Look = {}, markings: FloorMarkings = {}) {
-  const paint = floorMarkingsCode(markings);
+function floorCode(lights: number, look: Look = {}, markings: FloorSurface = {}) {
+  const paint = floorSurfaceCode(markings);
   return `${worldBindings}${lightingCode(lights, look)}
 struct FloorVertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
 @vertex fn floorVertex(@builtin(vertex_index) id:u32)->FloorVertex {
@@ -556,7 +556,7 @@ export type WorldGraphTopology = {
   quality: WorldScene["quality"]; msaaSamples?: WorldScene["msaaSamples"]; toneMapping?: WorldScene["toneMapping"]; outputColorSpace?: WorldScene["outputColorSpace"]; bloomMode?: "soft" | "unreal"; counts: Record<PrimitiveKind, number>; backgroundVector: Vec3;
   floor?: boolean; dof?: boolean; shafts?: boolean; lightCount?: number; supersampled?: boolean;
   bloomScale?: number; dofScale?: number; dofSamples?: number; shaftScale?: number; shaftSamples?: number;
-  key?: boolean; environment?: boolean; shadow?: "map" | "contact"; shadowScale?: number; floorMarkings?: FloorMarkings;
+  key?: boolean; environment?: boolean; shadow?: "map" | "contact"; shadowScale?: number; floorSurface?: FloorSurface;
   customs?: CustomDraw[]; sdfs?: SDFDraw[]; glyphs?: GlyphDraw[]; cards?: { offset: number; count: number }; labels?: { offset: number; count: number }; passes?: WorldPostPass[]; postOrder?: string[];
   effects?: { effect: string; options: Record<string, unknown>; before?: WorldEffectStage; after?: WorldEffectStage; base: number }[];
 };
@@ -594,7 +594,7 @@ export function worldGraphTopology(scene: PreparedWorldScene): WorldGraphTopolog
     bloomScale: scene.bloom?.scale, dofScale: scene.dof?.scale, dofSamples: scene.dof?.samples, shaftScale: scene.shafts?.scale, shaftSamples: scene.shafts?.samples,
     key: !!scene.keyLight, environment: !!scene.environment, shadow: scene.keyLight ? (scene.keyLight.shadow ?? "map") || undefined : undefined,
     shadowScale: scene.keyLight?.shadowScale,
-    floorMarkings: scene.floor && { lit: scene.floor.lit, grid: scene.floor.grid, lines: scene.floor.lines, kerbs: scene.floor.kerbs },
+    floorSurface: scene.floor && { lit: scene.floor.lit, grid: scene.floor.grid, shader: scene.floor.shader },
     customs, sdfs, glyphs, cards, labels, passes: scene.passes, postOrder: scene.postOrder,
     effects: scene.effectUses.map(({ effect, options, before, after, base }) => ({ effect, options, before, after, base })) };
 }
@@ -633,7 +633,7 @@ export function buildWorldGraph(scene: PreparedWorldScene | WorldGraphTopology):
       clear: draws++ === 0 ? [0, 0, 0, 0] : false, reads: [`text3d-${glyphFonts.indexOf(draw.font)}`] });
     if (!draws) cast("empty", "box", 0, 0);
   }
-  if (topology.floor) passes.push({ kind: "render", id: "floor", code: floorCode(lights, { ...look, environment: false, shadeAll: true }, topology.floorMarkings),
+  if (topology.floor) passes.push({ kind: "render", id: "floor", code: floorCode(lights, { ...look, environment: false, shadeAll: true }, topology.floorSurface),
     vertex: "floorVertex", fragment: "floorFragment", color: ["hdr"], depth: "depth", vertexCount: 3, clear, ...shadowMap ? { reads: ["shadow"] } : {} });
   let offset = 0, draws = 0;
   const add = (id: string, kind: PrimitiveKind, count: number, start: number, custom?: CustomGeometry, sdf?: SDFGeometry) => {

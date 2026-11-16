@@ -7,7 +7,6 @@ import { observable } from "@legendapp/state";
 import { BackgroundHost, GPUShaderProvider, PresentationObservableProvider } from "@legend-apps/presentation";
 import { frames, flushUI } from "../../../apps/slides/src/__tests__/uiClockMock";
 import { Box, Card, Sphere, Tube, World, WorldSlide, prepareWorldSlides } from "../packs/world/World";
-import { Scene } from "../packs/world/Authoring";
 import { worldHeaderSize, worldInstanceSize } from "../packs/world/scene";
 
 test("per-slide components retain one World, including reverse travel, independent previews and a world reset", async () => {
@@ -19,12 +18,12 @@ test("per-slide components retain one World, including reverse travel, independe
   const first$ = runtime(0), second$ = runtime(1);
   let mounts = 0;
   function Renderer(props) { useEffect(() => { mounts++; }, []); return <world-gpu {...props} />; }
-  function Panels({ world }) { return <Scene id="panels" world={world} camera={{ duration: 2 }} quality="high">
+  function Panels({ world }) { return <WorldSlide world={world} track={{ duration: 2 }} quality="high">
     <Card id="sample" title="const a = 24" avatar={0} position={[-3, 1, 0]} scale={[4, 1.5, 0.2]} />
-  </Scene>; }
-  function Columns({ world }) { return <Scene id="columns" world={world} camera={{ duration: 2 }} quality="high">
+  </WorldSlide>; }
+  function Columns({ world }) { return <WorldSlide world={world} track={{ duration: 2 }} quality="high">
     <Card id="sample" title="const a = 24" avatar={0} titleOpacity={0} position={[3, -1, 0]} scale={[1, 5, 1]} />
-  </Scene>; }
+  </WorldSlide>; }
   const content = (index, preview = false, world = "track-test") => <GPUShaderProvider renderer={Renderer}>
     <BackgroundHost slideIndex={index} isPreview={preview} color="#05060a">
       <PresentationObservableProvider value={first$}><Panels world={world} /></PresentationObservableProvider>

@@ -7,9 +7,8 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { act, create } from "react-test-renderer";
 import { BackgroundHost, DeckContentContext, GPUShaderProvider, PresentationObservableProvider, useRuntimeProjection } from "@legend-apps/presentation";
-import { Box, Camera, World } from "../../../../packages/slides-effects/packs/world/World";
+import { Box, Camera, World, WorldSlide } from "../../../../packages/slides-effects/packs/world/World";
 import { useValue } from "@legendapp/state/react";
-import { Scene } from "../../../../packages/slides-effects/packs/world/Authoring";
 import { worldHeaderSize } from "../../../../packages/slides-effects/packs/world/scene";
 import { getSlidesState, nextSlide, previousSlide, setSlidesState, slidesState$ } from "../slidesStore";
 
@@ -102,10 +101,10 @@ test.each([false, true])("retained scene changes establish time zero then move t
     definitions: [{ id: "next", title: "Next Slide", defaultBindings: ["Right"], repeat: true }],
     handlers: { next: nextSlide }, scope: { kind: "window", windowId: "slides-presenter" },
   });
-  const declarations = [0, 1].map(index => <Scene id={`latency-${index}`} world="latency-scenes" quality="high"
-    camera={{ duration: 1.2, ease: "inOut", steps: { 1: { shift: [2, 0, 0], duration: 1 } } }}>
+  const declarations = [0, 1].map(index => <WorldSlide world="latency-scenes" quality="high"
+    track={{ duration: 1.2, ease: "inOut", steps: { 1: { shift: [2, 0, 0], duration: 1 } } }}>
     <Box id="part" position={[index, 0, 0]} />
-  </Scene>);
+  </WorldSlide>);
   function Renderer(props) { return <gpu {...props} />; }
   function Slide({ index }) {
     const runtime$ = useRuntimeProjection(() => {

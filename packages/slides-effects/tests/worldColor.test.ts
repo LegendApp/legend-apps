@@ -3,7 +3,6 @@ import { buildWorldGraph, worldGraphTopology } from "../packs/world/render";
 import { prepareWorldScene, sampleWorldUniforms } from "../packs/world/scene";
 import { pillarInstances, routedTubeInstances } from "../packs/world/stage";
 import { burstInstances } from "../packs/world/motion";
-import { tunnelInstances } from "../packs/world/lighting";
 import { clockAtTime } from "../packs/world/camera";
 
 test("scene emissive scale has an identity default and shares the animated uniform snapshot", () => {
@@ -69,6 +68,5 @@ test("material controls preserve primitive defaults and support authored HDR acc
   expect(sparks.map(instance => instance.emissive.initial)).toEqual([6, 6, 6]);
   expect(sparks[0].color.initial).toEqual(sparks[2].color.initial);
   expect(sparks[0].color.initial).not.toEqual(sparks[1].color.initial);
-  const portals = tunnelInstances({ from: [0, 0, 0], to: [0, 0, -6], strips: { material: { albedo: "#000000" } } });
-  expect(portals.find(instance => instance.id?.includes(":strip:"))!.material).toEqual({ albedo: "#000000" });
+
 });

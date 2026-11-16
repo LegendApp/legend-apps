@@ -10,11 +10,9 @@ theme:
 
 import { Background } from "@legend-apps/presentation"
 import { Text } from "react-native"
-import { World, Camera, Box, Sphere, Material, Floor, KeyLight, Environment, Tunnel, PointLight, Orbs, Fog, Bloom, Vignette, Grain } from "slides:world/World"
+import { World, Camera, Box, Sphere, Material, Floor, KeyLight, Environment, PointLight, Orbs, Fog, Bloom, Vignette, Grain } from "slides:world/World"
 
 export const grid = { spacing: 2, intensity: 0.02 }
-export const lines = [{ x: 9, width: 0.12, intensity: 0.55 }, { x: 3, width: 0.08, dash: 1.5, gap: 1.5, intensity: 0.2 }]
-export const kerbs = [{ x: 9.4, width: 0.8, stripe: 1.6, colors: ["#808080", "#ff3b30"] }]
 
 export const parts = <>
   <Material id="chrome" albedo="#c8ccd4" roughness={0.3} metal={1} rim={0} />
@@ -38,7 +36,7 @@ export const look = <>
     {parts}
     <KeyLight position={[-10, 14, -8]} target={[0, 0, 0]} intensity={2.4} shadowSize={12} softness={2} />
     <Environment intensity={0.9} />
-    <Floor y={0} color="#1c1d22" metal={0.2} roughness={0.3} size={200} grid={grid} lines={lines} kerbs={kerbs} />
+    <Floor y={0} color="#1c1d22" metal={0.2} roughness={0.3} size={200} grid={grid} />
     {look}
   </World>
 </Background>
@@ -55,7 +53,7 @@ export const look = <>
     {parts}
     <KeyLight position={[-10, 14, -8]} target={[0, 0, 0]} intensity={2.4} shadowSize={12} softness={2} />
     <Environment intensity={[{ step: 0, value: 0 }, { step: 1, value: 1.2, duration: 1.6 }]} />
-    <Floor y={0} color="#0a0a0c" roughness={0.08} size={200} grid={grid} lines={lines} kerbs={kerbs} />
+    <Floor y={0} color="#0a0a0c" roughness={0.08} size={200} grid={grid} />
     {look}
   </World>
 </Background>
@@ -72,34 +70,16 @@ export const look = <>
     {parts}
     <KeyLight position={[8, 14, -10]} target={[0, 0, 0]} intensity={2} shadowSize={14} />
     <Environment intensity={0.8} />
-    <Floor y={0} color="#0a0a0c" roughness={0.06} size={300} grid={grid} lines={lines} kerbs={kerbs} />
+    <Floor y={0} color="#0a0a0c" roughness={0.06} size={300} grid={grid} />
     <PointLight position={[0, 4, -30]} color="#ff3b30" intensity={30} range={40} />
     <Orbs count={40} colors={["#ffffff", "#ff3b30"]} radius={0.03} spread={[24, 6, 40]} position={[0, 3, -10]} seed={5} drift={0.2} emissive={3} />
     {look}
   </World>
 </Background>
 
-# Floor markings
+# Floor grid
 
-<Text className="text-2xl text-zinc-400 text-center self-center">Lines, dashes and kerb stripes on the floor</Text>
-
----
-
-<Background>
-  <World id="lighting-tunnel" background quality="auto" exposure={1.15}>
-    <Camera shots={[{ at: 0, position: [0, 3.2, 26], target: [0, 3, -10], fov: 50 }, { at: 0.3, position: [0, 3, -40], target: [0, 2.6, -90], duration: 12, ease: "smoothstep" }]} />
-    <Tunnel from={[0, 0, 18]} to={[0, 0, -110]} spacing={8} width={24} height={11} />
-    <KeyLight position={[6, 16, 12]} target={[0, 0, -20]} intensity={1.2} shadowSize={30} softness={3} />
-    <Environment intensity={0.6} />
-    <Floor y={0} color="#0a0a0c" roughness={0.06} size={300} grid={grid} lines={lines} kerbs={kerbs} />
-    <Fog density={0.018} color="#050506" />
-    <Bloom intensity={1.1} threshold={1} /><Vignette amount={0.3} /><Grain amount={0.008} />
-  </World>
-</Background>
-
-# Tunnel
-
-<Text className="text-2xl text-zinc-400 text-center self-center">Portal frames with light strips along a path</Text>
+<Text className="text-2xl text-zinc-400 text-center self-center">A subtle grid on the lit floor</Text>
 
 ---
 
@@ -109,7 +89,7 @@ export const look = <>
     {parts}
     <KeyLight position={[-10, 14, -8]} target={[0, 0, 0]} intensity={2.4} shadowSize={12} shadow="contact" />
     <Environment intensity={0.9} />
-    <Floor y={0} color="#1c1d22" metal={0.2} roughness={0.3} size={200} grid={grid} lines={lines} kerbs={kerbs} />
+    <Floor y={0} color="#1c1d22" metal={0.2} roughness={0.3} size={200} grid={grid} />
     {look}
   </World>
 </Background>

@@ -11,13 +11,13 @@ export type WorldTrack = {
   spacing?: number; duration?: number; ease?: Ease;
   position?: Vec3; target?: Vec3; via?: Vec3; viaTarget?: Vec3;
   frame?: "station" | "world"; carry?: WorldCarry;
-  /** Raw part-id prefixes that keep fixed world coordinates inside a station-frame scene, so the camera travels past them (default `["tunnel:", "trails:"]`; `[]` moves everything with the station). */
+  /** Raw part-id prefixes that keep fixed world coordinates inside a station-frame scene, so the camera travels past them (default `[]` moves everything with the station). */
   fixed?: string[];
   /** Radial motion blur toward the frame's centre at peak travel speed (default 1; 0 turns it off). */
   blur?: number;
   /** DOF focus distance in world units; defaults to the camera target and can be overridden per step. */
   focus?: number;
-  /** Share of full speed that `continuousTime()` scenery, such as trails and tunnel lights, keeps while the camera holds at a station (default 1). */
+  /** Share of full speed that custom `continuousTime()` scenery keeps while the camera holds at a station (default 1). */
   heldMotion?: number;
   /** Extra DOF blur radius while the camera holds, as a share of `maxBlur` (default 0). Both ease back to full motion and base blur during flights. */
   heldBlur?: number;
@@ -25,15 +25,15 @@ export type WorldTrack = {
   depthFade?: number;
   /** Steepens that falloff while the camera holds, from 0 to 1 (default 0); it eases back during flights like `heldBlur`. */
   heldFade?: number;
-  /** Peak rail banking in degrees, leaning into the curve; stations hold level (default 12% of `turn`). */
+  /** Peak rail banking in degrees, leaning into the curve; stations hold level (default 0). */
   bank?: number;
   /** Peak heading in degrees the track swings through between the previous station and this one: positive curves right, negative left. */
   turn?: number;
-  /** `heading` retains each leg's turn as a change of road heading; a zero turn continues straight. Accumulated headings must stay within ±60°. Default `swing` returns parallel after each bend. */
+  /** `heading` retains each leg's turn as a change of path heading; a zero turn continues straight. Accumulated headings must stay within ±60°. Default `swing` returns parallel after each bend. */
   turnMode?: "swing" | "heading";
   /** World units the camera's path lifts at mid-travel into this station; negative dips. */
   rise?: number;
-  /** Segments by slide index, so every station sits on one track even before it is visited. Unset fields get varied per-slide defaults. */
+  /** Segments by slide index, so every station sits on one track even before it is visited. Unset fields use uniform defaults. */
   course?: (WorldSegment | undefined)[];
   /** Camera moves within the station, by local step index. */
   steps?: Record<number, WorldStepCamera>;
@@ -43,7 +43,7 @@ export type WorldStepCamera = { orbit?: number; dolly?: number; shift?: Vec3; fo
 /** One slide's leg of the track, from the previous station into this one. */
 export type WorldSegment = Pick<WorldTrack, "spacing" | "duration" | "ease" | "bank" | "turn" | "rise" | "position">;
 type Station = { offset: number; track: WorldTrack; step?: WorldStepCamera; stepIndex?: number; pose?: CameraPose };
-const defaultFixed = ["tunnel:", "trails:"];
+const defaultFixed: string[] = [];
 /** Longest flight, in seconds, for a jump across more than one station. */
 const jumpDuration = 1.5;
 type TrackSample = { scene: WorldSampleScene; clock: ClockSample; ids: string[] };
@@ -130,14 +130,9 @@ export const depthFadeSlot = heldBlurSlot + 1;
 export const trackHeadingSlot = depthFadeSlot + 2;
 /** How far content may reach past its station before the next curve begins. */
 const contentDepth = 4;
-function hash(index: number, salt: number) {
-  "worklet";
-  const x = Math.sin(index * 12.9898 + salt * 78.233) * 43758.5453;
-  return x - Math.floor(x);
-}
 /** Each curve sits between one station's content and the next station's camera, so settled slides stay rigid.
  * Without a `course`, visited stations keep their own track and the rest use `options`.
- * Unset fields vary by slide: gentle curves run in pairs, separated by straights before changing sides. */
+ * Unset fields use a straight path with uniform spacing and timing. */
 export function buildCourse(options: WorldTrack, count: number, stations: Record<number, Station> = {}): Course {
   "worklet";
   const world = options.frame === "world", base = options.spacing ?? (world ? 32 : 48);
@@ -145,9 +140,8 @@ export function buildCourse(options: WorldTrack, count: number, stations: Record
     tracks: [options.course?.[0] ?? {}] };
   for (let k = 1; k < count; k++) {
     const seg: WorldSegment = options.course ? options.course[k] ?? {} : stations[k]?.track ?? options;
-    const spacing = seg.spacing ?? (world ? base : base * (1 + 0.15 * hash(k, 4)));
-    const side = [1, 1, 0, -1, -1, 0][(k - 1) % 6];
-    const turn = seg.turn ?? (world ? 0 : side * (6 + 4 * hash(k, 2)));
+    const spacing = seg.spacing ?? base;
+    const turn = seg.turn ?? 0;
     const offset = course.offset[k - 1] + spacing, from = -course.offset[k - 1] - contentDepth, to = -offset + (seg.position?.[2] ?? 14) + 1;
     const priorSlope = course.slope[k - 1];
     const heading = Math.atan(priorSlope) + turn * Math.PI / 180;
@@ -157,9 +151,9 @@ export function buildCourse(options: WorldTrack, count: number, stations: Record
     course.offset.push(offset); course.from.push(from); course.to.push(to); course.dx.push(dx);
     course.slope.push(course.heading ? priorSlope + dx : 0);
     course.x.push(course.x[k - 1] + (course.heading ? priorSlope * spacing + dx * ((from - to) / 2 + to + offset) : dx));
-    course.bank.push(seg.bank ?? Math.abs(turn) * 0.12);
-    course.rise.push(seg.rise ?? (world || turn === 0 ? 0 : 0.3 * hash(k, 3)));
-    course.duration.push(seg.duration ?? (world ? 1.7 : 1.7 * Math.sqrt(spacing / 32) * (0.9 + 0.2 * hash(k, 5))));
+    course.bank.push(seg.bank ?? 0);
+    course.rise.push(seg.rise ?? 0);
+    course.duration.push(seg.duration ?? options.duration ?? 1.7);
     course.ease.push(seg.ease);
     course.tracks.push(options.course ? seg : {});
   }

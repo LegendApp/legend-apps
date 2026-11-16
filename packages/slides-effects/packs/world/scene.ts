@@ -5,7 +5,7 @@ import { cameraFocus, clockAtTime, easeProgress, evaluateCamera, mixVector, shot
 import { activationAt, layoutTree, type Activation, type LayoutNode, type TreeNode } from "./graph";
 import { glyphMetrics, glyphKernings, glyphFirst, glyphLast } from "./glyphs";
 import type { GlyphInstance } from "./text3d";
-import type { EnvironmentOptions, FloorMarkings, KeyLightOptions } from "./lighting";
+import type { EnvironmentOptions, FloorSurface, KeyLightOptions } from "./lighting";
 import { worldEffect, type WorldEffectStage, type WorldEffectUse } from "./effects";
 import { d } from "typegpu";
 import { floatLayout } from "./layout";
@@ -109,7 +109,7 @@ export type WorldScene = {
   bloom?: { intensity?: Animated<number>; threshold?: Animated<number>; radius?: Animated<number>; mode?: "soft" | "unreal"; scale?: number }; vignette?: Animated<number>; grain?: Animated<number>; scrim?: number;
   stages?: { stage: StageMotion; parents: StageMotion[] }[]; materials?: Record<string, MaterialOptions>;
   dof?: { focus?: Animated<number | string>; focusRange?: Animated<number>; aperture?: Animated<number>; maxBlur?: Animated<number>; scale?: number; samples?: number };
-  floor?: { y?: Animated<number>; roughness?: Animated<number>; emissive?: Animated<number>; size?: Animated<number>; color?: Animated<string>; metal?: Animated<number> } & FloorMarkings;
+  floor?: { y?: Animated<number>; roughness?: Animated<number>; emissive?: Animated<number>; size?: Animated<number>; color?: Animated<string>; metal?: Animated<number> } & FloorSurface;
   shafts?: { intensity?: Animated<number>; density?: Animated<number>; anisotropy?: Animated<number>; scale?: number; samples?: number };
   chromatic?: Animated<number>; rim?: { color?: Animated<string>; intensity?: Animated<number> }; ambient?: Animated<number>;
   lights?: LightOptions[]; passes?: PostOptions[]; effects?: EffectOptions[];

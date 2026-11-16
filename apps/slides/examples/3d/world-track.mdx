@@ -1,75 +1,22 @@
 ---
-title: Track
+title: Camera travel
 width: 1920
 height: 1080
 transition: none
-theme:
-  backgroundColor: "#04060a"
-  color: "#f8fafc"
 ---
 
-import { Scene, Headline, Rule, speedTrails } from "slides:world/Authoring"
-import { Bloom, DOF, Environment, Floor, Fog, Grain, KeyLight, Orbs, PointLight, Stoplight, Tunnel, Vignette } from "slides:world/World"
+import { WorldSlide, Box, Sphere, Text3D, Bloom, Floor, KeyLight } from "slides:world/World"
 
-export const world = { world: "track", clock: "step", quality: "high", toneMapping: "neutral", backgroundColor: "#04060a" }
-
-export const track = <>
-  <Tunnel from={[0, 0, 18]} to={[0, 0, -200]} spacing={8} width={24} height={11}
-    strips={{ color: "#cfe8ff", intensity: 2.2 }} edges={{ color: "#38bdf8", intensity: 1.8 }} />
-  <Floor y={0} color="#15171d" emissive={1} lit={false} size={400} grid={{ spacing: 2, intensity: .022 }}
-    lines={[{ x: 9, width: .12, intensity: .55 }, { x: 3, width: .06, dash: 1.5, gap: 1.5, intensity: .1 }]}
-    kerbs={[{ x: 9.6, width: .8, stripe: 1.6, colors: ["#b8c4d6", "#0ea5e9"] }]} />
-  {speedTrails(220, { accent: "#38bdf8" })}
-  <Orbs id="dust" count={300} colors={["#cfe0f4"]} radius={.018} spread={[24, 10, 220]} position={[0, 4, -90]} seed={5} drift={.08} emissive={.8} />
-  <KeyLight position={[6, 16, 12]} target={[0, 0, 0]} intensity={2.2} shadowSize={14} softness={2} shadowStrength={.55} />
-  <Environment intensity={.5} />
-  <PointLight position={[-10, 4, -8]} color="#38bdf8" intensity={30} range={40} />
-  <PointLight position={[10, 5, -6]} color="#a78bfa" intensity={25} range={40} />
-  <Fog density={.02} color="#04060a" />
-  <DOF focusRange={2.4} aperture={1.8} maxBlur={12} />
-  <Bloom intensity={.6} radius={.5} scale={.35} threshold={1} mode="unreal" />
-  <Vignette amount={.45} />
-  <Grain amount={.03} />
-</>
-
-<Steps count={2}>{() => null}</Steps>
-<Scene {...world} id="start" layout="title" durations={[2, 1.5]}>
-  {track}
-  <Stoplight id="lights" position={[0, 4.4, 0]} size={.42} lights={[
-    { color: "#ff2d2d", glow: { 0: 6, 1: 0 } }, { color: "#ff2d2d", glow: { 0: 6, 1: 0 } }, { color: "#ffb020", glow: 0 },
-    { color: "#2dff7a", glow: { 0: 0, 1: 7 } }, { color: "#2dff7a", glow: { 0: 0, 1: 7 } },
-  ]} />
-  <Headline id="title">Track Day</Headline>
-  <Rule id="title-rule" />
-</Scene>
-
-<!--
-1. Lights hold red.
-2. Green: go.
--->
+<WorldSlide world="gallery" track={{ spacing: 40, duration: 1.5, position: [0, 4, 16], target: [0, 2, 0] }}>
+  <Box id="exhibit" position={[-2, 2, 0]} scale={[2, 3, 2]} color="#38bdf8" />
+  <Text3D id="title" text="Gallery" position={[0, 5, 0]} size={1} />
+  <KeyLight /><Floor /><Bloom intensity={.5} />
+</WorldSlide>
 
 ---
 
-<Scene {...world} id="still" layout="statement" durations={[2]}>
-  {track}
-  <Headline id="still-1">Hold still,</Headline>
-  <Headline id="still-2">then move</Headline>
-</Scene>
-
----
-
-<Scene {...world} id="streaks" layout="statement-wide" durations={[2.4]}>
-  {track}
-  <Headline id="streaks-1">Every light</Headline>
-  <Headline id="streaks-2">leaves a streak</Headline>
-  <Rule id="streaks-rule" />
-</Scene>
-
----
-
-<Scene {...world} id="finish" layout="title" durations={[2]}>
-  {track}
-  <Stoplight id="lights" position={[0, 4.4, 0]} size={.42} lights={["#2dff7a", "#2dff7a", "#2dff7a", "#2dff7a", "#2dff7a"]} />
-  <Headline id="finish-title">Finish</Headline>
-  <Rule id="finish-rule" />
-</Scene>
+<WorldSlide world="gallery" track={{ spacing: 40, duration: 1.5, position: [3, 4, 16], target: [0, 2, 0], via: [-4, 7, 24] }}>
+  <Sphere id="sculpture" position={[2, 2, 0]} size={2} color="#a78bfa" />
+  <Text3D id="title" text="Sculpture" position={[0, 5, 0]} size={1} />
+  <KeyLight /><Floor /><Bloom intensity={.5} />
+</WorldSlide>
