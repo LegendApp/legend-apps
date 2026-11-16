@@ -2,7 +2,8 @@
   "schemaVersion": 1,
   "packs": {
     "journey": {
-      "path": "../../../packages/slides-effects/packs/journey"
+      "version": "1.0.0",
+      "sha256": "8e50c713d34e0205736384f7f6d1f0745413021cd18c1f5b33446074a1c3c32c"
     }
   }
 }
