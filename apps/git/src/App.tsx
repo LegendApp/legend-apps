@@ -3,7 +3,8 @@ import { PlatformColor, StyleSheet, Text, View } from "react-native";
 import { watchDirectories } from "@legend-apps/file-system-watcher";
 import type { GitStatusEntry } from "@legend-apps/git-core";
 import { Button } from "@legendapp/spark/ui";
-import { createGitChanges, emptyChanges } from "./gitChanges";
+import { createGitChanges, emptyChanges, stagedEntries, unstagedEntries } from "./gitChanges";
+import { DiffPane } from "./DiffPane";
 import { openFileDialog } from "@legendapp/spark/dialogs";
 import { useMenu } from "@legendapp/spark/menus";
 import { Sidebar, SidebarItem } from "@legendapp/spark/ui/sidebar";
@@ -15,10 +16,12 @@ export function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [changes, setChanges] = useState(emptyChanges);
   const controller = useRef<ReturnType<typeof createGitChanges> | null>(null);
-  const [selection, setSelection] = useState<{ section: "unstaged" | "staged"; path: string } | null>(null);
-  const unstaged = changes.status?.entries.filter(entry => entry.worktreeStatus !== ".") ?? [];
-  const staged = changes.status?.entries.filter(entry => entry.kind !== "untracked" && entry.indexStatus !== ".") ?? [];
-  const selected = selection && (selection.section === "staged" ? staged : unstaged).some(entry => entry.path === selection.path) ? selection : null;
+  const unstaged = unstagedEntries(changes.status);
+  const staged = stagedEntries(changes.status);
+  const selected = changes.selection;
+  const busy = changes.writing || changes.loading;
+  const applyLines = useRef<(() => void) | null>(null);
+  const linesLabel = `${selected?.section === "staged" ? "Unstage" : "Stage"} Selected Lines`;
   const sidebarLabel = sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar";
 
   useMenu({
@@ -33,10 +36,15 @@ export function App() {
         type: "submenu", id: "view", label: "View", target: { menu: "view" },
         items: [{ type: "action", id: "toggle-sidebar", label: sidebarLabel, shortcut: "Cmd+Ctrl+s" }],
       },
+      {
+        type: "submenu", id: "changes", label: "Changes",
+        items: [{ type: "action", id: "apply-lines", label: linesLabel, shortcut: "Cmd+Shift+l", disabled: !changes.patch?.file?.hunks.length }],
+      },
     ],
     onAction: (action) => {
       if (action.itemId === "open-repository") void chooseRepository();
       if (action.itemId === "toggle-sidebar") setSidebarCollapsed(value => !value);
+      if (action.itemId === "apply-lines") applyLines.current?.();
     },
   });
 
@@ -44,7 +52,7 @@ export function App() {
     const owner = controller.current;
     try {
       const result = await openFileDialog({ windowId: "main", selection: "directories", multiple: false, title: "Open Repository" });
-      if (!result.canceled && controller.current === owner) { setSelection(null); await owner?.open(result.paths[0]!); }
+      if (!result.canceled && controller.current === owner) await owner?.open(result.paths[0]!);
     } catch (error) { console.error(error); }
   }
 
@@ -105,7 +113,7 @@ export function App() {
       style={styles.root}
       sidebarWidth={240}
       sidebarMinWidth={200}
-      contentMinWidth={420}
+      contentMinWidth={760}
       sidebarCollapsed={sidebarCollapsed}
       onSidebarCollapsedChange={setSidebarCollapsed}
       titleBar={{ content: { height: 52, material: "titlebar" } }}
@@ -123,12 +131,18 @@ export function App() {
           {changes.error && <Text accessibilityRole="alert" style={styles.error}>{changes.error}</Text>}
           {changes.root ? <>
             <Text style={styles.repository} numberOfLines={1}>{changes.root}</Text>
-            <ChangesList title="Unstaged" entries={unstaged} selectedPath={selected?.section === "unstaged" ? selected.path : null}
-              onSelect={path => setSelection(path === null ? null : { section: "unstaged", path })}
-              action="Stage" disabled={changes.writing || changes.loading} onAction={path => void controller.current?.changeFile(path, true)} />
-            <ChangesList title="Staged" entries={staged} selectedPath={selected?.section === "staged" ? selected.path : null}
-              onSelect={path => setSelection(path === null ? null : { section: "staged", path })}
-              action="Unstage" disabled={changes.writing || changes.loading} onAction={path => void controller.current?.changeFile(path, false)} />
+            <View style={styles.split}>
+              <View style={styles.lists}>
+                <ChangesList title="Unstaged" entries={unstaged} selectedPath={selected?.section === "unstaged" ? selected.path : null}
+                  onSelect={path => void controller.current?.select(path === null ? null : { section: "unstaged", path })}
+                  action="Stage" disabled={busy} onAction={path => void controller.current?.changeFile(path, true)} />
+                <ChangesList title="Staged" entries={staged} selectedPath={selected?.section === "staged" ? selected.path : null}
+                  onSelect={path => void controller.current?.select(path === null ? null : { section: "staged", path })}
+                  action="Unstage" disabled={busy} onAction={path => void controller.current?.changeFile(path, false)} />
+              </View>
+              {changes.patch ? <DiffPane patch={changes.patch} disabled={busy} applyRef={applyLines} onApply={(keys, text) => void controller.current?.changeLines(keys, text)} />
+                : <View style={styles.placeholder}><Text style={styles.secondary}>{selected ? "Loading diff…" : "Select a file to view its changes"}</Text></View>}
+            </View>
           </> : <View style={styles.empty}>
             <Text style={styles.secondary}>{changes.loading ? "Opening repository…" : "No repository open"}</Text>
             <Button onPress={() => void chooseRepository()}>Open Repository…</Button>
@@ -163,6 +177,9 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   content: { flex: 1, paddingTop: 58, backgroundColor: PlatformColor("windowBackgroundColor") },
   empty: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
+  split: { flex: 1, flexDirection: "row" },
+  lists: { width: 320 },
+  placeholder: { flex: 1, alignItems: "center", justifyContent: "center", borderLeftWidth: StyleSheet.hairlineWidth, borderColor: PlatformColor("separatorColor") },
   listSection: { flex: 1, borderTopWidth: StyleSheet.hairlineWidth, borderColor: PlatformColor("separatorColor") },
   heading: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 8 },
   headingLabel: { fontSize: 13, fontWeight: "600", color: PlatformColor("labelColor") },

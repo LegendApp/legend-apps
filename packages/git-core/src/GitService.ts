@@ -48,6 +48,10 @@ for name in index.lock MERGE_HEAD rebase-apply rebase-merge CHERRY_PICK_HEAD REV
   if test -e "$1/$name"; then printf '%s\\0' "$name"; fi
 done`;
 
+function isRepoPath(path: string) {
+  return !!path && !path.includes("\0") && !path.startsWith("/") && !path.split("/").some(part => part === ".." || part === "." || !part);
+}
+
 function checkAborted(signal?: AbortSignal) {
   if (signal?.aborted) throw new GitServiceError("aborted", "Git operation was cancelled.");
 }
@@ -105,7 +109,7 @@ export class GitService {
     return Promise.race([pending, aborted]).finally(() => signal.removeEventListener("abort", onAbort));
   }
 
-  private async process(command: string, args: readonly string[], options: GitReadOptions, timeoutMs = 60_000, input?: string): Promise<string> {
+  private async process(command: string, args: readonly string[], options: GitReadOptions, timeoutMs = 60_000, input?: string, okCodes: readonly number[] = [0]): Promise<string> {
     checkAborted(options.signal);
     const entry: GitOperationLog = { command, args: [...args], startedAt: Date.now(), endedAt: null, exit: null, stderrTail: "" };
     this.operations.push(entry);
@@ -126,7 +130,7 @@ export class GitService {
       if (result.aborted) throw new GitServiceError("aborted", "Git operation was cancelled.", args);
       if (result.timedOut) throw new GitServiceError("timed-out", `${command} timed out.`, args);
       if (result.outputTruncated) throw new GitServiceError("output-truncated", `${command} output exceeded the capture limit.`, args);
-      if (result.exit.type !== "exited" || result.exit.code !== 0) {
+      if (result.exit.type !== "exited" || !okCodes.includes(result.exit.code)) {
         if (/index\.lock/.test(entry.stderrTail)) throw new GitIndexLockedError(`${this.gitDir ?? `${this.repoRoot}/.git`}/index.lock`);
         throw new GitServiceError("command-failed", entry.stderrTail || `${command} failed (${result.exit.type === "exited" ? result.exit.code : "terminated"}).`, args);
       }
@@ -140,8 +144,8 @@ export class GitService {
     }
   }
 
-  private git(args: readonly string[], options: GitReadOptions, timeoutMs = 60_000, input?: string) {
-    return this.process("git", ["-c", "core.quotepath=off", ...args], options, timeoutMs, input);
+  private git(args: readonly string[], options: GitReadOptions, timeoutMs = 60_000, input?: string, okCodes?: readonly number[]) {
+    return this.process("git", ["-c", "core.quotepath=off", ...args], options, timeoutMs, input, okCodes);
   }
 
   private async inspect(gitDir: string, options: GitReadOptions): Promise<GitRepoState> {
@@ -161,10 +165,10 @@ export class GitService {
     };
   }
 
-  private read(args: readonly string[], options: GitReadOptions, timeoutMs = 60_000, requiresIndex = false) {
+  private read(args: readonly string[], options: GitReadOptions, timeoutMs = 60_000, requiresIndex = false, okCodes?: readonly number[]) {
     return this.enqueue(options, async (gitDir) => {
       if (requiresIndex) await this.inspect(gitDir, options);
-      return this.git(args, options, timeoutMs);
+      return this.git(args, options, timeoutMs, undefined, okCodes);
     });
   }
 
@@ -173,7 +177,7 @@ export class GitService {
   }
 
   private changeFile(path: string, stage: boolean, options: GitReadOptions) {
-    if (!path || path.includes("\0") || path.startsWith("/") || path.split("/").some(part => part === ".." || part === "." || !part)) {
+    if (!isRepoPath(path)) {
       return Promise.reject(new Error("Expected a repository-relative file path."));
     }
     return this.enqueue(options, async (gitDir) => {
@@ -204,6 +208,27 @@ export class GitService {
         const removals = paths.map(path => `0 ${"0".repeat(head.length)}\t${path}`);
         await this.git([...prefix, "update-index", "-z", "--index-info"], options, 60_000, [...removals, ...entries, ""].join("\0"));
       }
+    });
+  }
+
+  /**
+   * Reads one file's patch for the unstaged (index → worktree) or staged (HEAD → index) side,
+   * in a stable format `git apply` accepts regardless of the user's diff config.
+   * Untracked files diff against /dev/null; staged renames pass both paths so Git pairs them.
+   */
+  fileDiff(file: { path: string; originalPath?: string | null; untracked?: boolean }, staged: boolean, options: GitReadOptions = {}) {
+    const paths = [file.path, ...(staged && file.originalPath ? [file.originalPath] : [])];
+    if (paths.some(path => !isRepoPath(path))) return Promise.reject(new Error("Expected a repository-relative file path."));
+    const format = ["-c", "diff.suppressBlankEmpty=false", "-c", "diff.noprefix=false", "diff", "--no-ext-diff", "--no-textconv", "--no-color", "--unified=3", "--src-prefix=a/", "--dst-prefix=b/", "--ignore-submodules=none"];
+    if (!staged && file.untracked) return this.read([...format, "--no-index", "--", "/dev/null", file.path], options, 60_000, false, [0, 1]);
+    return this.read(["--literal-pathspecs", ...format, ...(staged ? ["--cached", "-M"] : ["--no-renames"]), "--", ...paths], options, 60_000, true);
+  }
+
+  /** Applies a patch to the index only (`git apply --cached`), optionally reversed, after checking index.lock. */
+  applyPatch(patch: string, options: GitReadOptions & { reverse?: boolean } = {}) {
+    return this.enqueue(options, async (gitDir) => {
+      await this.inspect(gitDir, options);
+      await this.git(["apply", "--cached", "--whitespace=nowarn", "--no-ignore-whitespace", ...(options.reverse ? ["--reverse"] : []), "-"], options, 60_000, patch);
     });
   }
 

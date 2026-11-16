@@ -85,3 +85,5 @@ export type {
   DiffSyntaxTokenRun,
   DiffTokenizedRowRange,
 } from "./DiffParser.nitro";
+export * from "./unifiedPatch";
+export * from "./diffRowPresentation";

@@ -235,3 +235,18 @@ it.each(["", "/absolute", "../outside", "nested/../outside", "file\0bad", ".", "
   await expect(git.unstageFile(path)).rejects.toThrow("repository-relative");
   expect(runner).not.toHaveBeenCalled();
 });
+
+it("reads file patches in a config-independent format and applies patches to the index through the queue", async () => {
+  const runner = runnerFor(async (options) => processResult({ stdout: "patch", exitCode: options.args?.includes("--no-index") ? 1 : 0 }));
+  const git = new GitService("/repo-patch", runner);
+  expect(await git.fileDiff({ path: "-a b.txt" }, false)).toBe("patch");
+  expect(await git.fileDiff({ path: "new.txt", originalPath: "old.txt" }, true)).toBe("patch");
+  expect(await git.fileDiff({ path: "-untracked.txt", untracked: true }, false)).toBe("patch");
+  await git.applyPatch("diff\n", { reverse: true });
+  const calls = runner.mock.calls.map(([options]) => options).filter(options => options.target.type === "command" && options.target.name === "git" && !options.args?.includes("--absolute-git-dir"));
+  expect(calls[0]!.args).toEqual(expect.arrayContaining(["--literal-pathspecs", "--no-ext-diff", "--no-textconv", "--src-prefix=a/", "--dst-prefix=b/", "--no-renames", "--", "-a b.txt"]));
+  expect(calls[1]!.args?.slice(-4)).toEqual(["-M", "--", "new.txt", "old.txt"]);
+  expect(calls[2]!.args?.slice(-4)).toEqual(["--no-index", "--", "/dev/null", "-untracked.txt"]);
+  expect(calls[3]).toMatchObject({ args: ["-c", "core.quotepath=off", "apply", "--cached", "--whitespace=nowarn", "--no-ignore-whitespace", "--reverse", "-"], input: "diff\n" });
+  await expect(git.fileDiff({ path: "../escape" }, false)).rejects.toThrow("repository-relative");
+});

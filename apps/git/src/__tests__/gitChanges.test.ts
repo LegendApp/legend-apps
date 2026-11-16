@@ -3,6 +3,8 @@ import { createGitChanges, type ChangesState } from "../gitChanges";
 
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done; }); return { promise, resolve }; }
 const status = (xy = "MM"): GitStatus => ({ entries: [{ kind: "ordinary", path: "both.txt", indexStatus: xy[0]!, worktreeStatus: xy[1]! }], branch: { oid: "abc", head: "main", upstream: null, ahead: 0, behind: 0 } });
+const unstagedPatch = "diff --git a/both.txt b/both.txt\n--- a/both.txt\n+++ b/both.txt\n@@ -1,2 +1,2 @@\n-index\n+worktree\n keep\n";
+const stagedPatch = "diff --git a/both.txt b/both.txt\n--- a/both.txt\n+++ b/both.txt\n@@ -1 +1 @@\n-head\n+index\n";
 function setup() {
   let state!: ChangesState, notify!: (event: GitDirectoryChangeEvent) => void;
   const remove = jest.fn();
@@ -10,6 +12,7 @@ function setup() {
     resolveRoot: jest.fn(async (_options: GitReadOptions) => "/repo"),
     watchLocations: jest.fn(async () => ({ root: "/repo", gitDir: "/repo/.git/worktrees/linked", commonDir: "/repo/.git", ignoredPaths: ["ignored/"] })),
     status: jest.fn(async () => status()), stageFile: jest.fn(async () => {}), unstageFile: jest.fn(async () => {}),
+    fileDiff: jest.fn(async (_file: { path: string }, staged: boolean) => staged ? stagedPatch : unstagedPatch), applyPatch: jest.fn(async (_patch: string, _options: GitReadOptions & { reverse?: boolean }) => {}),
   };
   const watch = jest.fn((_paths: string[], listener: typeof notify) => { notify = listener; return { remove }; });
   const serviceFor = jest.fn((_path: string) => git as unknown as GitService);
@@ -89,4 +92,39 @@ it("coalesces watcher bursts, ignores irrelevant changes, and stops registration
     await jest.advanceTimersByTimeAsync(1000); expect(t.git.status).toHaveBeenCalledTimes(3);
     t.controller.dispose(); expect(t.remove).toHaveBeenCalledTimes(2);
   } finally { t.controller.dispose(); jest.useRealTimers(); }
+});
+
+it("loads the selected side's patch, applies line selections forward or reversed, and re-reads status and patch after each write", async () => {
+  const t = setup(); await t.controller.open("/repo");
+  expect(t.git.fileDiff).not.toHaveBeenCalled();
+  await t.controller.select({ section: "unstaged", path: "both.txt" });
+  expect(t.git.fileDiff).toHaveBeenLastCalledWith({ path: "both.txt", originalPath: undefined, untracked: false }, false, expect.anything());
+  expect(t.state().patch).toMatchObject({ section: "unstaged", path: "both.txt", text: unstagedPatch, file: { newPath: "both.txt" } });
+  const statusReads = t.git.status.mock.calls.length;
+  await t.controller.changeLines(new Set(["+1"]), "stale patch");
+  expect(t.git.applyPatch).not.toHaveBeenCalled();
+  expect(t.state().error).toContain("The diff changed");
+  await t.controller.changeLines(new Set(["+1"]), unstagedPatch);
+  expect(t.git.applyPatch).toHaveBeenLastCalledWith("diff --git a/both.txt b/both.txt\n--- a/both.txt\n+++ b/both.txt\n@@ -1,2 +1,3 @@\n index\n+worktree\n keep\n", expect.objectContaining({ reverse: false }));
+  expect(t.git.status.mock.calls.length).toBe(statusReads + 1);
+  expect(t.git.fileDiff).toHaveBeenCalledTimes(2);
+  await t.controller.select({ section: "staged", path: "both.txt" });
+  expect(t.state().patch).toMatchObject({ section: "staged", text: stagedPatch });
+  await t.controller.changeLines(new Set(["-1", "+1"]), stagedPatch);
+  expect(t.git.applyPatch).toHaveBeenLastCalledWith(expect.stringContaining("@@ -1,1 +1,1 @@"), expect.objectContaining({ reverse: true }));
+  t.git.status.mockResolvedValue(status(".M"));
+  await t.controller.refresh();
+  expect(t.state()).toMatchObject({ selection: null, patch: null });
+  t.controller.dispose();
+});
+
+it("reports a failed patch write and still refreshes from authoritative status", async () => {
+  const t = setup(); await t.controller.open("/repo");
+  await t.controller.select({ section: "unstaged", path: "both.txt" });
+  t.git.applyPatch.mockRejectedValueOnce(new GitIndexLockedError("/repo/.git/index.lock"));
+  const reads = t.git.status.mock.calls.length;
+  await t.controller.changeLines(new Set(["+1"]), unstagedPatch);
+  expect(t.state()).toMatchObject({ writing: false, error: expect.stringContaining("index is locked") });
+  expect(t.git.status.mock.calls.length).toBe(reads + 1);
+  t.controller.dispose();
 });

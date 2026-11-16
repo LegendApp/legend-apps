@@ -14,8 +14,9 @@ jest.mock("@legend-apps/git-core", () => ({ ...jest.requireActual("@legend-apps/
 jest.mock("react-native", () => ({
   PlatformColor: (name: string) => name,
   StyleSheet: { create: (styles: unknown) => styles },
-  Text: "Text", View: "View",
+  Text: "Text", View: "View", Pressable: "Pressable", FlatList: "FlatList", useColorScheme: () => "light",
 }));
+jest.mock("@legend-apps/diff-parser", () => ({ DiffNativeRow: "DiffNativeRow", DiffNativeRowConfig: "DiffNativeRowConfig", getDiffRowPalette: () => ({}), loadUnifiedDiff: jest.fn() }));
 jest.mock("@legend-apps/file-system-watcher", () => ({ watchDirectories: jest.fn(() => ({ remove: jest.fn() })) }));
 jest.mock("@legendapp/spark/ui", () => ({ Button: "Button" }));
 jest.mock("@legendapp/spark/dialogs", () => ({ openFileDialog: jest.fn(async () => ({ canceled: true })) }));
