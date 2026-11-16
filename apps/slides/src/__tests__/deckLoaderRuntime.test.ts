@@ -74,7 +74,7 @@ function deferred() {
 
 test("launching without a deck does not discover or download a compiler", async () => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-  let discoveries = 0, downloads = 0, decks = 0;
+  let discoveries = 0, downloads = 0, decks = 0, updates = 0;
   discover = async () => { discoveries++; return null; };
   install = async () => { downloads++; throw new Error("offline"); };
   const appMocks = {
@@ -87,6 +87,7 @@ test("launching without a deck does not discover or download a compiler", async 
     "./slidesStore": { getSlidesState: () => ({ status: "idle" }) },
     "./deckLoader": { getLastDeckPath: () => undefined, loadDeck: async () => { decks++; } },
     "./compilerRuntime": compilerRuntime,
+    "./slidesUpdates": { installSlidesUpdates: () => { updates++; return () => { updates--; }; } },
   };
   const appModule = { exports: {} };
   const appCode = transformSync(readFileSync(new URL("../App.tsx", import.meta.url), "utf8"), { loader: "tsx", format: "cjs" }).code;
@@ -96,10 +97,12 @@ test("launching without a deck does not discover or download a compiler", async 
   try {
     await act(() => { renderer = create(React.createElement(App)); });
     await turn();
+    expect(updates).toBe(1);
     expect(discoveries).toBe(0);
     expect(downloads).toBe(0);
     expect(decks).toBe(0);
   } finally { if (renderer) await act(() => renderer.unmount()); }
+  expect(updates).toBe(0);
 });
 
 test("opening B clears A's missing-runtime retry before compilation and later detection preserves B", async () => {

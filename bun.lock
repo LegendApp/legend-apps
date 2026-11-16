@@ -228,7 +228,7 @@
     },
     "apps/slides": {
       "name": "@legend-apps/app-slides",
-      "version": "0.0.1",
+      "version": "0.1.0",
       "dependencies": {
         "@legend-apps/design-system": "0.0.0",
         "@legend-apps/presentation": "0.0.0",

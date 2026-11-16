@@ -26,7 +26,7 @@ async function main() {
 
 Interactive macOS ${action === "package" ? "packaging" : "GitHub release"} wizard. Omit the app to choose it.
 Package: choose architectures, build from source, sign, notarize, and generate update feeds.
-Slides packaging supports only the current Bun process architecture.
+Slides supports Apple Silicon only; package it on an Apple Silicon Mac.
 Release: choose architectures to publish/verify, with optional release notes. Publishing asks for
 confirmation after all release checks pass, then commits and pushes release metadata automatically.
 

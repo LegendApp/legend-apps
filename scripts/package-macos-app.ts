@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { assertDistributionArchitecture } from "./lib/distributionArchitectures";
 import { sparkWorkspace } from "./lib/sparkWorkspaces";
 import { signSlidesCompiler } from "./lib/slidesCompiler";
 import { spawnSync } from "node:child_process";
@@ -344,14 +345,18 @@ function generateArchitectureAppcast(
 
 async function main() {
   const [appId, ...args] = process.argv.slice(2);
+  if (appId === "--help" || appId === "-h" || args.includes("--help") || args.includes("-h")) {
+    console.log("Usage: bun run package:macos <app> [arm|x86|all] [--skip-build] [--skip-sign] [--skip-notarize] [--skip-smoke] [--skip-appcast]\nSlides supports arm only and must be packaged on Apple Silicon.");
+    return;
+  }
   if (!appId) {
     throw new Error("Usage: bun scripts/package-macos-app.ts <app> [arm|x86|all] [--skip-build] [--skip-sign] [--skip-notarize] [--skip-smoke]");
   }
 
+  const options = parseOptions(args);
+  assertDistributionArchitecture(appId, "package", options.arch, process.arch);
   loadEnvFile(path.join(rootDir, ".env"));
   loadEnvFile(path.join(rootDir, ".env.local"));
-
-  const options = parseOptions(args);
   const manifest = await loadAppManifest(appId);
   assertSupportedPlatform(manifest, "macos");
 
