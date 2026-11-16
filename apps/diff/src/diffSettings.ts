@@ -18,6 +18,7 @@ import { useValue } from "@legendapp/state/react";
 
 export type DiffSettingsFile = {
   adaptiveLightModeEnabled?: boolean;
+  autoRefresh?: boolean;
   fontFamily?: DiffFontFamilySetting;
   fontSize?: number;
   highlightChangedCharacters?: boolean;
@@ -80,6 +81,10 @@ export function isDiffViewMode(viewMode: unknown): viewMode is DiffViewMode {
 
 const diffSettings = createObservableSettings({
   fields: {
+    autoRefresh: {
+      defaultValue: true,
+      normalize: (value) => normalizeBooleanSetting(value, true),
+    },
     adaptiveLightModeEnabled: {
       defaultValue: defaultDiffAdaptiveLightModeEnabled,
       normalize: (value) => normalizeBooleanSetting(value, defaultDiffAdaptiveLightModeEnabled),
@@ -149,6 +154,10 @@ const showStatisticsPanelSetting = diffSettings.field("showStatisticsPanel");
 const sidebarWidthSetting = diffSettings.field("sidebarWidth");
 const viewModeSetting = diffSettings.field("viewMode");
 export const diffSettings$ = diffSettings.settings$;
+
+export function useDiffAutoRefreshSetting(): boolean {
+  return normalizeBooleanSetting(useValue(diffSettings$.autoRefresh), true);
+}
 
 export function getDiffAdaptiveLightModeEnabledSetting(): boolean {
   return adaptiveLightModeEnabledSetting.get();

@@ -1,6 +1,5 @@
-import { decodeProcessText } from "@legend-apps/runtime-utils";
-import { runCommand } from "@legendapp/spark/processes";
-import { getFilename, type DiffFolderCompareBase, type DiffOpenSource } from "./diffFiles";
+import { getGitService, GitServiceError } from "./git/GitService";
+import { getFilename, isDiffGitSource, type DiffFolderCompareBase, type DiffOpenSource } from "./diffFiles";
 
 export const diffCompareToolbarTargetHead = "head";
 export const diffCompareToolbarTargetChooseRef = "choose-ref";
@@ -66,7 +65,7 @@ function getLocalRepoPath(source: DiffOpenSource | null | undefined) {
   if (source?.kind === "folder") {
     return source.value;
   }
-  if (source?.kind === "git") {
+  if (source && isDiffGitSource(source)) {
     return source.cwd;
   }
   return null;
@@ -80,6 +79,7 @@ export function getDiffFolderCompareBaseLabel(compareBase: DiffFolderCompareBase
 }
 
 function getActiveSelection(source: DiffOpenSource | null | undefined) {
+  if (source?.kind === "range") return refSelection(source.range);
   if (source?.kind === "folder") {
     return source.compareBase?.kind === "ref"
       ? refSelection(source.compareBase.ref)
@@ -92,6 +92,7 @@ function getActiveSelection(source: DiffOpenSource | null | undefined) {
 }
 
 function getActiveLabel(source: DiffOpenSource | null | undefined) {
+  if (source?.kind === "range") return source.range;
   if (source?.kind === "folder") {
     return getDiffFolderCompareBaseLabel(source.compareBase);
   }
@@ -279,15 +280,15 @@ export function parseDiffCompareRepoRefs(value: string | null) {
 }
 
 export async function loadDiffCompareRepoState(repoPath: string): Promise<DiffCompareRepoState> {
-  const commands = [
-    { args: ["for-each-ref", `--format=${gitRefFormat}`, "refs/heads", "refs/remotes"], target: { type: "command", name: "git" }, cwd: repoPath, timeoutMs: 5_000 },
-    { args: ["remote"], target: { type: "command", name: "git" }, cwd: repoPath, timeoutMs: 5_000 },
-  ];
-  const [refsResult, remotesResult] = await Promise.all(commands.map(command => runCommand({ ...command, target: { type: "command", name: "git" } })));
-  const refsValue = (refsResult.exit.type === "exited" ? refsResult.exit.code : -1) === 0 ? decodeProcessText(refsResult.stdout).trim() || null : null;
-  const remoteNames = (remotesResult.exit.type === "exited" ? remotesResult.exit.code : -1) === 0
-    ? decodeProcessText(remotesResult.stdout).split("\n").map((line) => line.trim()).filter(Boolean)
-    : [];
+  const git = getGitService(repoPath);
+  const [refsValue, remotesValue] = await Promise.all([
+    git.refs(gitRefFormat),
+    git.remotes(),
+  ].map((read) => read.catch((error: unknown) => {
+    if (error instanceof GitServiceError && (error.code === "command-failed" || error.code === "timed-out")) return "";
+    throw error;
+  })));
+  const remoteNames = remotesValue.split("\n").map((line) => line.trim()).filter(Boolean);
   const refs = parseDiffCompareRepoRefs(refsValue);
 
   return {

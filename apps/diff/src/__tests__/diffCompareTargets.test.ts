@@ -250,3 +250,9 @@ describe("diffCompareTargets", () => {
     });
   });
 });
+
+
+it("keeps compare controls and the active label for a typed range source", () => {
+  const source: DiffOpenSource = { kind: "range", cwd: "/tmp/repo", range: "main...topic", value: "main...topic", label: "main...topic" };
+  expect(getDiffCompareToolbarModel(source, repoState)).toMatchObject({ repoPath: "/tmp/repo", activeLabel: "main...topic", activeSelection: "ref:main...topic" });
+});

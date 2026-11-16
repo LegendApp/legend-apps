@@ -15,6 +15,7 @@
         "@legend-apps/design-system": "workspace:*",
         "@legend-apps/diff-parser": "workspace:*",
         "@legend-apps/document-scanner": "workspace:*",
+        "@legend-apps/file-system-watcher": "workspace:*",
         "@legend-apps/markdown-block-editor": "workspace:*",
         "@legend-apps/markdown-document": "workspace:*",
         "@legend-apps/markdown-parser": "workspace:*",
@@ -125,6 +126,7 @@
       "dependencies": {
         "@legend-apps/design-system": "workspace:*",
         "@legend-apps/diff-parser": "workspace:*",
+        "@legend-apps/file-system-watcher": "workspace:*",
         "@legend-apps/runtime-utils": "0.0.0",
         "@legend-apps/source-viewer": "workspace:*",
         "@legend-apps/storage": "0.0.0",

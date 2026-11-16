@@ -1,5 +1,4 @@
 import type { DiffDocument } from "@legend-apps/diff-parser";
-import { watch } from "@legendapp/spark/files";
 import { useRoutedHotkeys, type HotkeyScope } from "@legendapp/spark/shortcuts/commands";
 import { ownRegistration, type MenuState } from "@legend-apps/runtime-utils";
 import { diffMenuState$, diffActiveMenuWindow$ } from "../diffMenuState";
@@ -13,7 +12,7 @@ import { type RefObject, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import type { TextInput } from "react-native";
 import { diffMenuOwnerId } from "../appConstants";
 import { diffCompareToolbarTargetChooseRef, type DiffCompareRepoState } from "../diffCompareTargets";
-import { getDiffSourceLabel, normalizeDiffOpenSource, type DiffOpenSource } from "../diffFiles";
+import { normalizeDiffOpenSource, type DiffOpenSource } from "../diffFiles";
 import {
   diffHotkeyDefinitions,
   diffHotkeyRouter,
@@ -44,7 +43,6 @@ import {
   type DiffLoadTrace,
 } from "./diffViewerModel";
 import {
-  createRefreshError,
   diffToolbarModelsEqual,
   getDiffWindowToolbarModel,
   getErrorMessage,
@@ -532,59 +530,6 @@ export function DiffLaunchController({
     source,
     urlInputRef,
   ]);
-
-  return null;
-}
-
-export function DiffFileWatcherController({
-  loadSource,
-  suppressReloadUntilRef,
-}: {
-  loadSource: (nextSource: DiffOpenSource, options?: DiffLoadSourceOptions) => Promise<void>;
-  suppressReloadUntilRef?: RefObject<number>;
-}) {
-  const {
-    setDocumentErrorValue,
-    state$,
-  } = useDiffViewerModel();
-
-  useObserveEffect(() => {
-    const currentState = state$.get();
-    const currentVisibleSource = currentState.source;
-    const currentVisibleFolderSource = currentVisibleSource?.kind === "folder" ? currentVisibleSource : null;
-    if (!currentVisibleFolderSource) {
-      return undefined;
-    }
-
-    let reloadTimeout: ReturnType<typeof setTimeout> | undefined;
-    const subscription = ownRegistration(watch(currentVisibleFolderSource.value, () => {
-      if (reloadTimeout) {
-        clearTimeout(reloadTimeout);
-      }
-      if ((suppressReloadUntilRef?.current ?? 0) > Date.now()) {
-        return;
-      }
-      reloadTimeout = setTimeout(() => {
-        if ((suppressReloadUntilRef?.current ?? 0) <= Date.now()) {
-          loadSource({
-            ...(currentVisibleFolderSource.compareBase ? { compareBase: currentVisibleFolderSource.compareBase } : {}),
-            kind: "folder",
-            label: getDiffSourceLabel(currentVisibleFolderSource),
-            value: currentVisibleFolderSource.value,
-          }, { force: true, reason: "watch" }).catch((error: unknown) => {
-            setDocumentErrorValue(createRefreshError(currentVisibleFolderSource, getErrorMessage(error)));
-          });
-        }
-      }, 250);
-    }, { recursive: true }));
-
-    return () => {
-      if (reloadTimeout) {
-        clearTimeout(reloadTimeout);
-      }
-      void subscription.remove().catch(console.error);
-    };
-  });
 
   return null;
 }

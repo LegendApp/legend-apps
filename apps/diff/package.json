@@ -6,6 +6,7 @@
   "dependencies": {
     "@legend-apps/design-system": "workspace:*",
     "@legend-apps/diff-parser": "workspace:*",
+    "@legend-apps/file-system-watcher": "workspace:*",
     "@legend-apps/source-viewer": "workspace:*",
     "@legend-apps/syntax-parser": "workspace:*",
     "@legend-apps/syntax-settings": "workspace:*",

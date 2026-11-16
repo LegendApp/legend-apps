@@ -82,3 +82,17 @@ it("tracks closed sessions without subscribing to frame changes", async () => {
     await restoration.remove();
     expect((await jest.mocked(addAppListener).mock.results[0]!.value).remove).toHaveBeenCalledTimes(1);
 });
+
+it.each([
+    { kind: "index-vs-workdir" as const },
+    { kind: "head-vs-index" as const },
+    { kind: "commit" as const, sha: "abc123" },
+    { kind: "range" as const, range: "main...topic" },
+])("restores the complete $kind comparison without losing its repo or target", async (comparison) => {
+    const { createDiffGitSource } = require("../diffFiles") as typeof import("../diffFiles");
+    const source = createDiffGitSource("/tmp/repo", comparison);
+    const saved = JSON.parse(JSON.stringify({ id: "diff-viewer-git", lastOpenedAt: 1, source }));
+    jest.mocked(getSavedDiffWindows).mockReturnValue([saved]);
+    expect(await restoreSavedDiffWindows()).toBe(1);
+    expect(openDiffViewerWindow).toHaveBeenCalledWith(source, { frame: undefined, freshWindow: false, windowIdentifier: saved.id });
+});

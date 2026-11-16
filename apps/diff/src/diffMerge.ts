@@ -1,5 +1,6 @@
 import { decodeProcessText } from "@legend-apps/runtime-utils";
 import { runCommand } from "@legendapp/spark/processes";
+import { getGitService, GitService } from "./git/GitService";
 type DiffMergeCommands = Pick<typeof import("@legendapp/spark/processes"), "runCommand">;
 
 export type DiffMergeConflictStage = {
@@ -1114,20 +1115,8 @@ export async function loadDiffMergeState(
   runner: DiffMergeCommands = { runCommand },
 ): Promise<DiffMergeState> {
   try {
-    const unmergedResult = await runner.runCommand({
-      args: ["ls-files", "-u", "-z"],
-      target: { type: "command", name: "git" },
-      cwd: folderPath,
-      timeoutMs: 10_000,
-    });
-    if ((unmergedResult.exit.type === "exited" ? unmergedResult.exit.code : -1) !== 0) {
-      return {
-        status: "error",
-        message: decodeProcessText(unmergedResult.stderr) || "Unable to read Git merge conflicts.",
-      };
-    }
-
-    const conflictFiles = parseGitUnmergedEntries(decodeProcessText(unmergedResult.stdout));
+    const git = runner.runCommand === runCommand ? getGitService(folderPath) : new GitService(folderPath, runner.runCommand);
+    const conflictFiles = parseGitUnmergedEntries(await git.unmerged());
     if (conflictFiles.length === 0) {
       return createReadyMergeState([]);
     }
