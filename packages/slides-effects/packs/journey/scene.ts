@@ -10,13 +10,21 @@ import { journeyEffect, type JourneyEffectStage, type JourneyEffectUse } from ".
 import { d } from "typegpu";
 import { floatLayout } from "./layout";
 
-/** `delay` staggers a step keyframe. `loop` repeats local `at` frames every N seconds, starting from `value`. */
-export type Keyframe<T> = { step?: number; at?: number; value: T; duration?: number; ease?: Ease; delay?: number; loop?: { every: number; frames: Keyframe<T>[] } };
+/** `delay` staggers a step keyframe. `loop` repeats local `at` frames every N seconds, starting from `value`.
+ * Vec3 frames can bow their segment: `arc` lifts its middle by that many world units (a hop), `via` passes through a point at the halfway mark. */
+export type Keyframe<T> = { step?: number; at?: number; value: T; duration?: number; ease?: Ease; delay?: number; loop?: { every: number; frames: Keyframe<T>[] };
+  arc?: number; via?: Vec3 };
 export type Animated<T> = T | Record<number, T> | Keyframe<T>[];
 export type PrimitiveKind = "sphere" | "box" | "tube" | "ring";
 /** `steps` (set when every frame is a step keyframe in ascending step order) lets sampling skip frames of later steps by binary search. */
 export type Track<T> = { initial: T; frames: Keyframe<T>[]; steps?: number[] };
-export type MaterialOptions = { id?: string; albedo?: Animated<string>; emissive?: Animated<number>; roughness?: Animated<number>; metal?: Animated<number>; rim?: Animated<number> };
+/** `shading`: "lit" (default) is physically lit; "flat" draws the exact display color of `albedo`, like a flat Card; "toon" lights it in three hard bands. */
+export type Shading = "lit" | "flat" | "toon";
+/** Written to each instance's `detail` field for world geometry passes. */
+const shadingCode: Record<Shading, number> = { lit: 0, flat: 1, toon: 2 };
+export type MaterialOptions = { id?: string; albedo?: Animated<string>; emissive?: Animated<number>; roughness?: Animated<number>; metal?: Animated<number>; rim?: Animated<number>; shading?: Shading;
+  /** Image texture (data, file or web URI) multiplied into `albedo` on each face of a Box. */
+  map?: string };
 export type LightOptions = { kind?: "point" | "spot"; position?: Animated<Vec3>; target?: Animated<Vec3>; color?: Animated<string>; intensity?: Animated<number>; range?: Animated<number>; angle?: Animated<number> };
 /** Endless motion on the slide clock, each as `[amplitude, period in seconds]`: `bob` rises and falls, `orbit` circles in the ground plane,
  * `pulse` scales glow by 1 ± amplitude. `lag` delays all three by seconds. */
@@ -55,6 +63,8 @@ export type PrimitiveOptions = {
   id?: string; sharp?: Animated<boolean>; position?: Animated<Vec3>; size?: Animated<number>; color?: Animated<string>;
   emissive?: Animated<number>; scale?: Animated<Vec3>; rotation?: Animated<Vec3>; end?: Vec3; curve?: number; thickness?: number;
   material?: string | MaterialOptions;
+  /** Full width, height and depth in world units; replaces `size` and `scale`. */
+  extent?: Animated<Vec3>;
 };
 export type Instance = {
   id?: string; sharp?: Track<number>; kind: PrimitiveKind; position: Track<Vec3>; size: Track<number>; color: Track<Vec3>;
@@ -67,6 +77,10 @@ export type Instance = {
   endpoints?: [string, string];
   stages?: StageMotion[]; material?: string | MaterialOptions;
   materialTracks?: { albedo: Track<Vec3>; roughness: Track<number>; metal: Track<number>; rim: Track<number> };
+  /** Image texture URI, set by Sprite `source`; a material `map` applies otherwise. */
+  map?: string;
+  /** Set by prepareJourneyScene: shading code plus 4 × (map index + 1), written to the `detail` field of world geometry. */
+  surface?: number;
   pulse?: { options: PulseOptions; anchors: Instance[]; curves: number[]; tail: boolean };
   spray?: { options: SprayOptions; source?: Instance; phase: number };
   rows?: { options: RowsOptions; slot: number; logical?: number; flashColor: Vec3; scroll?: Track<number>; recycleColor?: Vec3; ghost?: number };
@@ -116,6 +130,10 @@ export type JourneyScene = {
   keyLight?: KeyLightOptions; environment?: EnvironmentOptions;
   postOrder?: ("fog" | "dof" | "bloom")[];
   counter?: { source: string; position?: [number, number]; size?: number; color?: string };
+  /** Duration of keyframes that set none, in seconds (default 0.65). */
+  keyframeDuration?: number;
+  /** "cartoon" turns off vignette, grain and the default rim, toon-shades every shape and softens key shadows. */
+  look?: "cartoon";
 };
 
 export function colorVector(color: string): Vec3 {
@@ -170,17 +188,27 @@ function sampleTrackFrames<T extends number | Vec3>(track: Track<T>, clock: Cloc
   if (progress >= 1 - 1e-6) return frame.value;
   const value = sampleTrackFrames(track, clockAtTime(clock, origin), index);
   const t = easeProgress(progress, frame.ease);
-  return (typeof value === "number" ? value + ((frame.value as number) - value) * t : mixVector(value, frame.value as Vec3, t)) as T;
+  if (typeof value === "number") return (value + ((frame.value as number) - value) * t) as T;
+  const to = frame.value as Vec3, point = mixVector(value, to, t);
+  if (frame.via) {
+    // A quadratic Bézier through `via` at its middle.
+    for (let axis = 0; axis < 3; axis++) point[axis] += 4 * t * (1 - t) * (frame.via[axis] - (value[axis] + to[axis]) / 2);
+  }
+  if (frame.arc) point[1] += 4 * t * (1 - t) * frame.arc;
+  return point as T;
 }
 export function sampleTrack<T extends number | Vec3>(track: Track<T>, clock: ClockSample): T {
   "worklet";
   const count = track.frames.length;
   return count ? sampleTrackFrames(track, clock, count) : track.initial;
 }
+/** Without a material, shapes glow (`emissive` 1.5); with one, they are matte unless `emissive` is set on the shape or the material. */
 export function primitive(kind: PrimitiveKind, options: PrimitiveOptions = {}): Instance {
-  return { id: options.id, sharp: options.sharp === undefined ? undefined : compileTrack(options.sharp, Number), kind, position: compileTrack<Vec3>(options.position ?? [0, 0, 0]), size: compileTrack(options.size ?? 0.5),
-    color: compileTrack(options.color ?? "#22d3ee", colorVector), emissive: compileTrack(options.emissive ?? 1.5),
-    scale: compileTrack<Vec3>(options.scale ?? [1, 1, 1]), rotation: options.rotation === undefined ? undefined : compileTrack<Vec3>(options.rotation, r => r.map(d => d * Math.PI / 180) as Vec3), end: options.end ?? [0, 2, 0], curve: options.curve ?? 0,
+  const extent = options.extent;
+  return { id: options.id, sharp: options.sharp === undefined ? undefined : compileTrack(options.sharp, Number), kind, position: compileTrack<Vec3>(options.position ?? [0, 0, 0]),
+    size: compileTrack(extent ? 0.5 : options.size ?? 0.5),
+    color: compileTrack(options.color ?? "#22d3ee", colorVector), emissive: compileTrack(options.emissive ?? (options.material ? 0 : 1.5)),
+    scale: compileTrack<Vec3>(extent ?? options.scale ?? [1, 1, 1]), rotation: options.rotation === undefined ? undefined : compileTrack<Vec3>(options.rotation, r => r.map(d => d * Math.PI / 180) as Vec3), end: options.end ?? [0, 2, 0], curve: options.curve ?? 0,
     thickness: options.thickness ?? (kind === "ring" ? 0.04 : 0.025), material: options.material };
 }
 export function graphInstances(options: GraphOptions): Instance[] {
@@ -260,7 +288,8 @@ export function cardInstances(options: CardOptions): Instance[] {
   const { title, subtitle, meta, mono = false, textColor = "#e8f4ff", subtleColor = "#7f9bb3", textEmissive = 1, opacity, titleOpacity } = options;
   const style = cardStyle({ avatar: title ? 0.62 : 0, ...options });
   if (!options.id && (title || subtitle || meta)) throw new Error("A Journey card with text needs an id");
-  const card = { ...primitive("box", { ...options, size: options.size ?? 0.5, scale: options.scale ?? [4, 0.62, 0.18] }), card: { ...style, opacity: compileTrack(opacity ?? 1), ...options.flat ? { flat: true } : {} } };
+  // Card emission sets the panel's brightness in its own shader, so a material does not change its default.
+  const card = { ...primitive("box", { ...options, emissive: options.emissive ?? 1.5, size: options.size ?? 0.5, scale: options.scale ?? [4, 0.62, 0.18] }), card: { ...style, opacity: compileTrack(opacity ?? 1), ...options.flat ? { flat: true } : {} } };
   const [width, height, depth] = largestScale(options.scale ?? [4, 0.62, 0.18]).map(value => value * (typeof options.size === "number" ? options.size : 0.5) * 2) as Vec3;
   const z = depth / 2 + 0.01, left = -width / 2 + (style.avatar > 0 ? height * (0.5 + style.avatar * 0.5) + height * 0.22 : height * 0.3);
   const label = (key: string, text: string, position: Vec3, size: number, color: string, emissive: number, extra: Partial<LabelOptions> = {}) =>
@@ -797,7 +826,11 @@ export function settledKey(settle: NonNullable<Instance["settle"]>, clock: Clock
     if (step > clock.stepIndex) break;
     settledStep = step;
     const origin = clock.stepOrigins[step];
-    if (origin === undefined && step < clock.stepIndex) { finished++; continue; }
+    if (origin === undefined && step < clock.stepIndex) {
+      // A loop never settles, even after its step has passed.
+      if (settle.last[k] === Infinity) return NaN;
+      finished++; continue;
+    }
     const elapsed = clock.slideTime - (origin ?? clock.slideTime - clock.stepTime);
     if (elapsed >= settle.last[k]) finished++;
     else if (elapsed >= settle.first[k]) return NaN;
@@ -853,6 +886,14 @@ export function sampleJourneyLight(light: PreparedJourneyScene["lightTracks"][nu
   values[base + 11] = light.spot ? Math.cos(sampleTrack(light.angle, clock)) : -1;
 }
 
+/** With `follow: "camera"`, key light position and target are offsets from the camera target, so the shadow box travels with the view. */
+export function followKeyLight(scene: PreparedJourneyScene | JourneySampleScene, clock: ClockSample, values: number[] | Float32Array) {
+  "worklet";
+  for (const field of scene.colorTracks) if (field.index === 112 || field.index === 120) {
+    const offset = sampleTrack(field.track, clock);
+    for (let axis = 0; axis < 3; axis++) values[field.index + axis] = offset[axis] + values[4 + axis];
+  }
+}
 export function sampleJourneyUniforms(scene: PreparedJourneyScene | JourneySampleScene, clock: ClockSample, previous?: CameraPose | null, enterDuration = 1, renderScale = 1, reuse = false): number[] | Float32Array<ArrayBuffer> {
   "worklet";
   const count = scene.instances.length;
@@ -885,6 +926,7 @@ export function sampleJourneyUniforms(scene: PreparedJourneyScene | JourneySampl
     const color = sampleTrack(field.track, clock);
     values[field.index] = color[0]; values[field.index + 1] = color[1]; values[field.index + 2] = color[2];
   }
+  if (scene.keyLight?.follow === "camera") followKeyLight(scene, clock, values);
   const lightIds = scene.declaredLightIds;
   values[journeyLightCountSlot] = lightIds.length;
   values[journeyLightOffsetSlot] = scene.lightTracks.length ? scene.lightOffset : 0;
@@ -989,6 +1031,7 @@ export function sampleJourneyUniforms(scene: PreparedJourneyScene | JourneySampl
       curve = chord > 0 ? length * pulse.curves[range.segment] * Math.pow(range.head - range.tail, 2) / chord : 0;
     }
     values[index + I.curve] = curve; values[index + I.thickness] = instance.thickness;
+    if (instance.surface) values[index + I.detail] = instance.surface;
     if (instance.card) { values[index + 11] = instance.card.radius; values[index + 16] = instance.card.glow; values[index + 17] = instance.card.edge; values[index + 18] = instance.card.avatar; values[index + I.thickness] = instance.card.fill; values[index + 15] = instance.card.line; }
     values[index + I.opacity] = instanceOpacity(instance, clock) * stageOpacity(instance.stages, clock);
     const material = instance.materialTracks!;
@@ -1020,7 +1063,7 @@ export function sampleJourneyUniforms(scene: PreparedJourneyScene | JourneySampl
   return values;
 }
 
-export type PreparedJourneyScene = JourneyScene & { exposureTrack: Track<number>; fogTrack: Track<Vec3>; backgroundVector: Vec3;
+export type PreparedJourneyScene = JourneyScene & { exposureTrack: Track<number>; maps: string[]; fogTrack: Track<Vec3>; backgroundVector: Vec3;
   uniformInputs: UniformInputs;
   lightOffset: number; lightIds: string[]; declaredLightIds: string[];
   postTracks: { index: number; track: Track<number> }[]; colorTracks: { index: number; track: Track<Vec3> }[];
@@ -1054,8 +1097,9 @@ export function prepareJourneySample(scene: PreparedJourneyScene): JourneySample
   samples.set(scene, sample);
   return sample;
 }
-function keyLightFields({ keyLight: key, environment }: JourneyScene): [number, Animated<number>][] {
-  return [[115, key ? key.intensity ?? 2.2 : 0], [119, key?.shadowSize ?? 20], [123, key?.softness ?? 2], [124, environment ? environment.intensity ?? 1 : 0], [125, key?.shadowStrength ?? 0.85]];
+function keyLightFields({ keyLight: key, environment, look }: JourneyScene): [number, Animated<number>][] {
+  const cartoon = look === "cartoon";
+  return [[115, key ? key.intensity ?? 2.2 : 0], [119, key?.shadowSize ?? 20], [123, key?.softness ?? (cartoon ? 3 : 2)], [124, environment ? environment.intensity ?? 1 : 0], [125, key?.shadowStrength ?? (cartoon ? 0.45 : 0.85)]];
 }
 /** Key position and target share the color-track sampler: both are plain vectors. */
 function keyLightVectors({ keyLight: key }: JourneyScene): { index: number; track: Track<Vec3> }[] {
@@ -1087,16 +1131,30 @@ export function prepareJourneyScene(scene: JourneyScene): PreparedJourneyScene {
     constants.set(key, track);
     return track;
   }
+  const keyframeDuration = scene.keyframeDuration, cartoon = scene.look === "cartoon";
+  const maps: string[] = [];
+  function surfaceCode(shading: number, map: string | undefined) {
+    if (!map) return shading || undefined;
+    let index = maps.indexOf(map);
+    if (index < 0) { index = maps.length; maps.push(map); }
+    if (maps.length > 8) throw new Error("A Journey scene supports up to eight image maps");
+    return shading + 4 * (index + 1);
+  }
+  if (keyframeDuration !== undefined && !(keyframeDuration >= 0 && Number.isFinite(keyframeDuration))) throw new Error("Journey keyframeDuration must be nonnegative");
+  function timed<T>(track: Track<T>): Track<T> {
+    return keyframeDuration === undefined || !track.frames.some(frame => frame.duration === undefined && !frame.loop) ? track
+      : { ...track, frames: track.frames.map(frame => frame.duration === undefined && !frame.loop ? { ...frame, duration: keyframeDuration } : frame) };
+  }
   const instances: Instance[] = scene.instances.map(instance => {
     const material = typeof instance.material === "string" ? scene.materials?.[instance.material] : instance.material;
     if (typeof instance.material === "string" && !material) throw new Error(`Unknown Journey material: ${instance.material}`);
-    const color = constant(instance.color);
-    return { ...instance, position: constant(instance.position), size: constant(instance.size), color, scale: constant(instance.scale),
-      rotation: instance.rotation && constant(instance.rotation), sharp: instance.sharp && constant(instance.sharp),
-      emissive: constant(material?.emissive === undefined ? instance.emissive : compileTrack(material.emissive)), materialTracks: {
+    const color = constant(timed(instance.color));
+    return { ...instance, position: constant(timed(instance.position)), size: constant(timed(instance.size)), color, scale: constant(timed(instance.scale)),
+      rotation: instance.rotation && constant(timed(instance.rotation)), sharp: instance.sharp && constant(instance.sharp),
+      emissive: constant(timed(material?.emissive === undefined ? instance.emissive : compileTrack(material.emissive))), materialTracks: {
       albedo: material?.albedo === undefined ? color : constant(compileTrack(material.albedo, colorVector)), roughness: constant(compileTrack(material?.roughness ?? 0.5)),
-      metal: constant(compileTrack(material?.metal ?? 0)), rim: constant(compileTrack(material?.rim ?? 1)),
-    } };
+      metal: constant(compileTrack(material?.metal ?? 0)), rim: constant(compileTrack(material?.rim ?? (material || cartoon ? 0 : 1))),
+    }, surface: surfaceCode(shadingCode[material?.shading ?? (cartoon ? "toon" : "lit")], instance.map ?? material?.map) };
   });
   const byId = new Map(instances.filter(instance => instance.id).map(instance => [instance.id!, instance]));
   for (const instance of instances) {
@@ -1167,7 +1225,7 @@ export function prepareJourneyScene(scene: JourneyScene): PreparedJourneyScene {
     }
   }
   const fields: [number, Animated<number>][] = [[18, scene.emissiveScale ?? 1], [19, scene.floor?.emissive ?? 0], [9, scene.bloom?.intensity ?? 0], [10, scene.bloom?.threshold ?? 1], [11, scene.bloom?.radius ?? 0.8],
-    [12, scene.fog?.density ?? 0], [13, scene.fog?.height ?? 0], [14, scene.fog?.falloff ?? 0.15], [15, scene.vignette ?? 0.25], [16, scene.grain ?? 0.015],
+    [12, scene.fog?.density ?? 0], [13, scene.fog?.height ?? 0], [14, scene.fog?.falloff ?? 0.15], [15, scene.vignette ?? (cartoon ? 0 : 0.25)], [16, scene.grain ?? (cartoon ? 0 : 0.015)],
     [54, scene.dof?.focusRange ?? 0], [33, scene.dof ? scene.dof.aperture ?? 0.6 : 0], [34, scene.dof?.maxBlur ?? 12], [36, scene.floor?.y ?? -5], [37, scene.floor?.roughness ?? 0.06],
     [39, scene.floor?.size ?? 40], [43, scene.floor?.metal ?? 0.8], [44, scene.chromatic ?? 0],
     [45, scene.shafts?.intensity ?? 0], [46, scene.shafts?.density ?? 0.03], [47, scene.shafts?.anisotropy ?? 0.3], [51, scene.rim ? scene.rim.intensity ?? 0.8 : 0], [52, scene.ambient ?? 0.12],
@@ -1192,7 +1250,7 @@ export function prepareJourneyScene(scene: JourneyScene): PreparedJourneyScene {
     lightOccurrences.set(key, occurrence + 1);
     return `light:${key}:${occurrence}`;
   });
-  const prepared = { ...scene, instances, lightOffset, lightIds, declaredLightIds: lightIds, exposureTrack: compileTrack(scene.exposure ?? 1), fogTrack: compileTrack(scene.fog?.color ?? scene.backgroundColor ?? "#05060a", colorVector),
+  const prepared = { ...scene, instances, maps, lightOffset, lightIds, declaredLightIds: lightIds, exposureTrack: compileTrack(scene.exposure ?? 1), fogTrack: compileTrack(scene.fog?.color ?? scene.backgroundColor ?? "#05060a", colorVector),
     backgroundVector: colorVector(scene.backgroundColor ?? "#05060a"), postTracks: fields.map(([index, value]) => ({ index, track: compileTrack(value) })),
     focusTrack: scene.dof?.focus === undefined ? undefined : compileTrack<number | string>(scene.dof.focus),
     colorTracks, effectUses, uniformCount,

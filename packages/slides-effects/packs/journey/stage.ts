@@ -113,7 +113,7 @@ export function pillarInstances(options: PillarOptions): Instance[] {
   const track = compileTrack([{ step: 0, value: from, duration: 0 }, { step: options.step ?? 0, at: options.at, value, delay: options.delay,
     duration: options.duration ?? 1.6, ease: options.ease ?? "smoothstep" }]);
   const pillar = { value: track, maximum, height };
-  const body = primitive("box", { id, position, scale: [width, 1, depth], color, emissive: options.emissive ?? 1.2, material: options.material ?? { metal: 0.35, roughness: 0.22 } });
+  const body = primitive("box", { id, position, scale: [width, 1, depth], color, emissive: options.emissive ?? 1.2, material: options.material ?? { metal: 0.35, roughness: 0.22, rim: 1 } });
   body.pillar = { ...pillar, role: "body" };
   const instances = [body];
   if (options.radius !== undefined) body.custom = roundedBoxGeometry(options.radius, 0.6, options.gradient);

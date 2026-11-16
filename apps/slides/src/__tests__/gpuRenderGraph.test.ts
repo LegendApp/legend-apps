@@ -352,3 +352,21 @@ test("cold shader parsing lets queued navigation run before the whole graph is p
   expect(navigationAfter).toBeLessThan(definition.passes.length);
   expect(parsed).toBe(definition.passes.length);
 });
+
+test("images load once through the host, bind like read-only targets, and survive resizes", async () => {
+  const g = gpu(), loaded: string[] = [];
+  const image = { width: 16, height: 8, createView: view => ({ image: true, view }), destroy() {} };
+  const graph = { targets: [{ id: "hdr", format: "rgba16float" }], images: [{ id: "map0", source: "data:image/png;base64,AA" }],
+    passes: [{ kind: "render", id: "scene", code: "", vertex: "vertex", fragment: "fragment", color: ["hdr"], vertexCount: 6, reads: ["map0"] }] };
+  const r = await prepareRenderGraph(g.device, graph, "bgra8unorm", {}, {}, async source => { loaded.push(source); return image; });
+  expect(loaded).toEqual(["data:image/png;base64,AA"]);
+  expect(g.pipelines[0].layout.bindGroupLayouts[0].entries[3].texture.sampleType).toBe("float");
+  const screen = { width: 100, height: 50, createView: () => "screen" };
+  encodeRenderGraph(r, g.device, g.encoder, screen);
+  encodeRenderGraph(r, g.device, g.encoder, { ...screen, width: 200 });
+  expect(r.textures.map0).toBe(image);
+  expect(g.groups.at(-1).entries[3].resource.image).toBe(true);
+  await expect(prepareRenderGraph(gpu().device, graph, "bgra8unorm", {}, {})).rejects.toThrow("host image loader");
+  await expect(prepareRenderGraph(gpu().device, { ...graph, passes: [{ kind: "compute", id: "write", code: "", entry: "main", writes: ["map0"], workgroups: [1] }] },
+    "bgra8unorm", {}, {}, async () => image)).rejects.toThrow("read-only");
+});

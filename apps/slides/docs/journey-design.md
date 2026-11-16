@@ -38,7 +38,8 @@ curve. Jumps scale travel time by the number of crossed stations. Steps can morp
 without allocating another camera station or resetting an ongoing flight.
 
 `track` is a small per-slide declaration. Use one `spacing` throughout a Journey
-(default 48, or 32 with `frame: "world"`). `duration` defaults to 1.7 seconds. Camera `position` and `target`
+(default 48, or 32 with `frame: "world"`). `duration` defaults to 1.7 seconds. Stations advance
+along `advance` (default `[0, 0, -1]`, forward; `[1, 0, 0]` pans sideways). Camera `position` and `target`
 are local to that slide's station. `via` and `viaTarget` are quadratic control
 points for the incoming segment, also local to its destination station. They
 shape the curve without requiring a central camera timeline:
@@ -77,7 +78,7 @@ when that surface is reset. It is bounded by the ids visited in that Journey.
 
 ## One shared scene
 
-Replacing the declaration on each slide suits small scenes. With thousands of parts it rebuilds pipelines and re-sends the scene on every key press. `track.frame: "world"` instead lets slides pass one identical `children` array: tracks hold a pose per running beat (`stepOffset`), and `track.carry` flies each changed id between poses on a bowed path, with Previous as its exact mirror. Uniforms stay cached; only parts in flight are written, into a separate output. See the [Journey pack README](../../../packages/slides-effects/packs/journey/README.md).
+Replacing the declaration on each slide suits small scenes. With thousands of parts it rebuilds pipelines and re-sends the scene on every key press. `track.frame: "world"` instead lets slides pass one identical `children` array: tracks hold a pose per running beat (`stepOffset`, or `"auto"` to count earlier stops' steps from the deck), and `track.carry` flies each changed id between poses on a bowed path, with Previous as its exact mirror. Uniforms stay cached; only parts in flight are written, into a separate output. See the [Journey pack README](../../../packages/slides-effects/packs/journey/README.md).
 
 ## Default motion
 

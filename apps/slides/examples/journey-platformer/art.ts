@@ -1,0 +1,3 @@
+// Original 16×16 pixel art as PNG data URIs: a braced plank crate, and two wing beats of a butterfly side by side.
+export const CRATE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAZElEQVR42mPItpf/TwlmABEnu7zJwigGdIVo/L+5II4oDFKLYQBMghjNIBqrAYQMQZbDMGBnpT0cgxQi83GJYXUBNtuwuQqnF9ANweUl2htAshdIDUTqRyPFCYnipExRZqIEAwAnU2+G7fdRqwAAAABJRU5ErkJggg==";
+export const BUTTERFLY = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAICAYAAADwdn+XAAAAUElEQVR42mP4H7/oPwgzoAFc4gy4FCIrxiaG34AHaWDFVsoOYIwshs01KHx02+AGoOMHaQgLoIZjGAIzAJ+tyBbgDTR0BdgsYCAHwAygGgAAGPqWZJ12Qw4AAAAASUVORK5CYII=";

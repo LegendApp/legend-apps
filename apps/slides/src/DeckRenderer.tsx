@@ -103,6 +103,7 @@ function Deck({ children, configJson }: CompiledDeckProps) {
     }
   }, [config, slides]);
 
+  const slideStepCounts = useMemo(() => slides.map(slide => normalizeStepCount(slide.metadata.steps)), [slides]);
   const liveRuntime = useRef<PresentationRuntime | null>(null);
   const runtime$ = useRuntimeProjection(() => {
     if (isOutgoing && !isPreparing && liveRuntime.current) {
@@ -121,14 +122,14 @@ function Deck({ children, configJson }: CompiledDeckProps) {
       isPreview: Boolean(isPreview), isPreparing,
       playbackPhase: isPreparing ? "preparing" : isOutgoing ? "outgoing" : isPreview ? "preview" : slideIndex === currentSlide ? "playing" : "paused",
       next: nextSlide, previous: previousSlide,
-      slideCount: count, slideIndex, stepCount,
+      slideCount: count, slideIndex, stepCount, slideStepCounts,
       stepIndex: Math.max(0, Math.min(targetStep ?? (slideIndex === currentSlide ? currentStep : 0), stepCount - 1)),
       startedAt: isPreview || isOutgoing ? undefined : slidesState$.slideStartedAt.get(),
       stepStartedAt: isPreview || isOutgoing ? undefined : slidesState$.stepStartedAt.get(),
       stepEpochs: isPreview || isOutgoing ? undefined : slidesState$.stepEpochs.get(),
       direction: isPreview || isOutgoing ? undefined : slidesState$.direction.get(),
     };
-  }, [isPreview, isPreparing, isOutgoing, targetIndex, targetStep]);
+  }, [isPreview, isPreparing, isOutgoing, targetIndex, targetStep, slideStepCounts]);
   useLayoutEffect(() => {
     const retain = () => {
       const runtime = runtime$.peek();

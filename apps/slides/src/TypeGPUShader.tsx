@@ -158,7 +158,8 @@ function startShaderCanvas({ readable, canvas, surfaceContext, code, particles, 
         if (renderGraph) {
           const clock = device.createBuffer({ size: 32, usage: 64 | 8 });
           const frameData = device.createBuffer({ size: Math.max(16, frameDataSize * 4), usage: 128 | 8 });
-          const graph = await prepareRenderGraph(device, renderGraph, format, clock, frameData);
+          const gpu = device;
+          const graph = await prepareRenderGraph(gpu, renderGraph, format, clock, frameData, source => loadImageTexture(gpu, source));
           await transfer({ device, context, format, clock, frameData, graph, states: [], groups: [] });
           return;
         }

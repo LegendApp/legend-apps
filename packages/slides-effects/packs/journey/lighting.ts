@@ -1,9 +1,10 @@
 import type { Vec3 } from "./camera";
 import { colorVector, type Animated } from "./scene";
 
-/** A directional key light. `position` and `target` set its direction; the shadow box is centred on `target`. */
+/** A directional key light. `position` and `target` set its direction; the shadow box is centred on `target`.
+ * `follow: "camera"` makes both offsets from the camera target, so the light and its shadow box travel with the view. */
 export type KeyLightOptions = {
-  position?: Animated<Vec3>; target?: Animated<Vec3>; color?: Animated<string>; intensity?: Animated<number>;
+  position?: Animated<Vec3>; target?: Animated<Vec3>; color?: Animated<string>; intensity?: Animated<number>; follow?: "camera";
   /** "map" renders a shadow map, "contact" a cheaper screen-space contact shadow; false lights without shadows. */
   shadow?: "map" | "contact" | false;
   /** Half-width of the square shadow box in world units. */
