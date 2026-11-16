@@ -6,6 +6,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { prepareCompilerHelper } from "../compilerHelperCore";
 import { writeSlidesCompilerBundle } from "../../../../scripts/lib/slidesCompiler";
+import { signMacOSAppInsideOut } from "../../../../scripts/lib/macosCodeSign";
 import { sparkSdkRoot } from "../../../../scripts/lib/sparkSdk";
 import { sparkConfig } from "../../../../scripts/lib/sparkWorkspaces";
 import { loadAppManifest } from "../../../../scripts/lib/apps";
@@ -85,4 +86,22 @@ test("invalid preparation output and missing extracted entries are never execute
     await expect(prepareCompilerHelper(host, async () => ({ code: 0, stdout, stderr: "" }), () => {})).rejects.toThrow("incomplete");
   }
   await expect(prepareCompilerHelper(host, async () => ({ code: 0, timedOut: true, stdout: "", stderr: "" }), () => {})).rejects.toThrow("built-in");
+});
+
+test.skipIf(process.platform !== "darwin")("the copied helper signs with Spark's ad-hoc pass and inside-out", async () => {
+  const f = await fixture();
+  try {
+    await fs.mkdir(path.join(f.app, "Contents/MacOS"), { recursive: true });
+    await fs.copyFile("/usr/bin/true", path.join(f.app, "Contents/MacOS/Slides"));
+    await fs.writeFile(path.join(f.app, "Contents/Info.plist"), '<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleExecutable</key><string>Slides</string><key>CFBundleIdentifier</key><string>so.legend.slides.signing-test</string><key>CFBundlePackageType</key><string>APPL</string></dict></plist>');
+    const codesign = (...args) => {
+      const result = Bun.spawnSync(["codesign", ...args, f.app]);
+      expect(result.stderr.toString()).not.toContain("bundle format unrecognized");
+      expect(result.exitCode).toBe(0);
+    };
+    codesign("--force", "--deep", "--sign", "-");
+    codesign("--verify", "--deep", "--strict");
+    signMacOSAppInsideOut(f.app, "-");
+    codesign("--verify", "--deep", "--strict");
+  } finally { await f.cleanup(); }
 });
