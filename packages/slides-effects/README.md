@@ -24,7 +24,7 @@ Each `slides:<id>/...` import resolves from the first of:
 
 1. `<deck folder>/effects/<id>/pack.json` or the deck lockfile's `path` entry, from source.
    Edits recompile the deck. The lockfile records it as `{ "path": "effects/<id>" }` rather
-   than a checksum; point that path elsewhere, as `apps/slides/examples/3d` does for `world`.
+   than a checksum; point that path elsewhere, as `apps/slides/examples/3d` does for `journey`.
 2. This `packs/<id>` directory, when the compiler runs from a source checkout (development
    builds and `scripts/compile-slides.ts`). No install or setup is needed, and it takes
    precedence over a lockfile's pinned version without changing the lockfile. The packaged

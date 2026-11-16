@@ -1,5 +1,5 @@
 ---
-title: World stage
+title: Journey stage
 width: 1920
 height: 1080
 transition: none
@@ -8,11 +8,11 @@ theme:
   color: "#e8eef6"
 ---
 
-import { World, Camera, RenderTree, Pillar, Label, Floor, Bloom, Fog, PointLight, RimLight, tree } from "slides:world/World"
+import { Journey, Camera, RenderTree, Pillar, Label, Floor, Bloom, Fog, PointLight, RimLight, tree } from "slides:journey/Journey"
 
 export const network = tree("Workspace", [["Model", ["Store", "Cache"]], ["View", ["Canvas", "Inspector"]]])
 
-<Steps count={4}>{() => <Background><World id="stage" background quality="high" renderScale={1} previewTime={3}>
+<Steps count={4}>{() => <Background><Journey id="stage" background quality="high" renderScale={1} previewTime={3}>
   <Camera shots={[
     { step: 0, position: [-6, 1, 18], target: [0, 0, 0], fov: 42 },
     { step: 1, position: [0, 1.5, 15.5], target: [0, 0, 0], via: [[-5, 5, 18], [3, 4, 17]], duration: 1.8, idle: { position: [0.14, 0.06, 0.08], speed: 0.2 } },
@@ -28,11 +28,11 @@ export const network = tree("Workspace", [["Model", ["Store", "Cache"]], ["View"
   <PointLight position={[-5, 7, 6]} intensity={160} color="#b6d8ff" />
   <RimLight intensity={0.25} color="#63cfff" />
   <Bloom intensity={0.45} threshold={1.5} radius={0.6} /><Fog density={0.009} color="#05060a" />
-</World></Background>}</Steps>
+</Journey></Background>}</Steps>
 
 ---
 
-<Steps count={2}>{() => <Background><World id="stage" enter={{ from: "previous", duration: 1.6 }} background quality="high" renderScale={1} previewTime={3}>
+<Steps count={2}>{() => <Background><Journey id="stage" enter={{ from: "previous", duration: 1.6 }} background quality="high" renderScale={1} previewTime={3}>
   <Camera shots={[
     { step: 0, position: [0, 1.4, 17], target: [0, -0.4, 0], idle: { position: [0.14, 0.05, 0.08] } },
     { step: 1, position: [1, 2.1, 16], target: [0, -0.3, 0], crane: { height: 2, pullback: 2 }, duration: 1.6, idle: { position: [0.12, 0.04, 0.08] } },
@@ -44,4 +44,4 @@ export const network = tree("Workspace", [["Model", ["Store", "Cache"]], ["View"
   <Floor y={-4.2} size={45} roughness={0.18} color="#101827" />
   <PointLight position={[-5, 7, 6]} intensity={160} color="#b6d8ff" />
   <Bloom intensity={0.45} threshold={1.5} radius={0.6} /><Fog density={0.009} color="#05060a" />
-</World></Background>}</Steps>
+</Journey></Background>}</Steps>

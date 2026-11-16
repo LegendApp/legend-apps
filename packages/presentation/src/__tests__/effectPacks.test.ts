@@ -94,8 +94,8 @@ test("deck-local packs resolve before installed packs and lock as relative paths
 
 test("installing catalog packs preserves local lock entries without consulting the catalog", () => {
   const catalog = { schemaVersion: 1, packs: {}, effects: [] };
-  const local = { schemaVersion: 1, packs: { world: { path: "effects/world" } } };
-  expect(resolveInstallation(catalog, ["world"], local).lock).toEqual(local);
+  const local = { schemaVersion: 1, packs: { journey: { path: "effects/journey" } } };
+  expect(resolveInstallation(catalog, ["journey"], local).lock).toEqual(local);
 });
 
 test("manifests reject missing, incompatible, unexported and escaping entries", () => {

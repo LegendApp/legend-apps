@@ -126,7 +126,7 @@ export async function renderSlides(args: string[]) {
       encoder = Bun.spawn([options.ffmpeg, "-hide_banner", "-loglevel", "error", "-n", "-f", "image2pipe", "-framerate", String(options.fps), "-vcodec", "png", "-i", "pipe:0", "-an", "-c:v", "libx264", "-threads", "2", "-pix_fmt", "yuv420p", "-movflags", "+faststart", options.video], { stdin: "pipe", stdout: "ignore", stderr: "pipe" });
     } else await fs.mkdir(options.out, { recursive: true });
     for (const { slide, steps } of selections) {
-      // Replay preceding states too: retained World tracks and particle simulations need their history.
+      // Replay preceding states too: retained Journey tracks and particle simulations need their history.
       await evaluate(`globalThis.__legendSlides.goTo(${slide},0)`);
       await ready();
       for (let step = 0; step <= steps.at(-1)!; step++) {

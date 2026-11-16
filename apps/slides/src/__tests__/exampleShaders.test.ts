@@ -11,12 +11,12 @@ import { transformSync } from "@babel/core";
 import { cloudProgram } from "../../examples/components/CloudProgram";
 import { compileDeck } from "../../../../packages/presentation/src/compiler";
 import { hostModules } from "../../../../packages/presentation/src/compiler/compileDeck";
-import { buildWorldGraph } from "../../../../packages/slides-effects/packs/world/render";
-import { cardInstances, customInstances, prepareWorldScene, primitive, sdfInstance } from "../../../../packages/slides-effects/packs/world/scene";
-import { defineWorldEffect } from "../../../../packages/slides-effects/packs/world/effects";
+import { buildJourneyGraph } from "../../../../packages/slides-effects/packs/journey/render";
+import { cardInstances, customInstances, prepareJourneyScene, primitive, sdfInstance } from "../../../../packages/slides-effects/packs/journey/scene";
+import { defineJourneyEffect } from "../../../../packages/slides-effects/packs/journey/effects";
 import { d } from "typegpu";
 
-const shaderTint = defineWorldEffect({ name: "shader-tint", params: { gain: d.f32, tint: d.vec3f }, defaults: { gain: 1, tint: "#ffffff" },
+const shaderTint = defineJourneyEffect({ name: "shader-tint", params: { gain: d.f32, tint: d.vec3f }, defaults: { gain: 1, tint: "#ffffff" },
   build: ({ input, id }) => ({ targets: [{ id: id("half"), scale: .5 }], passes: [
     { id: id("half"), fragment: "half", reads: { source: input }, output: id("half"), wgsl: "@fragment fn half(@location(0) uv:vec2f)->@location(0) vec4f { return textureSampleLevel(source,linearSampler,uv,0.); }" },
     { id: id(), fragment: "tint", reads: { source: input, half: id("half"), depth: "depth" }, output: id(),
@@ -29,10 +29,10 @@ import { boidsProgram } from "../../examples/components/TypeGPUBoids";
 const require = createRequire(import.meta.url);
 const programs = { cloudProgram, gameOfLifeShader, boidsProgram };
 const root = path.resolve(import.meta.dir, "../../../..");
-const worldDecks = ["world-tour", "data-flow", "cinematic-title", "lighting", "world-effects"];
+const journeyDecks = ["journey-tour", "data-flow", "cinematic-title", "lighting", "journey-effects"];
 const compiledDecks = new Map();
 
-function compileWorldDeck(name) {
+function compileJourneyDeck(name) {
   const file = path.join(root, "apps/slides/examples", name === "lighting" ? "" : "3d", `${name}.mdx`);
   if (!compiledDecks.has(name)) compiledDecks.set(name, compileDeck(file, {
     source: fs.readFileSync(file, "utf8"), effectPacksDirectory: path.join(root, "packages/slides-effects/packs"),
@@ -62,9 +62,9 @@ function validateShaders(shaders) {
   } finally { fs.rmSync(temporary, { recursive: true, force: true }); }
 }
 
-// Renders every slide of the real compiled deck, including Background content, and keeps each World graph pass.
-async function worldPasses(name) {
-  const compiled = await compileWorldDeck(name);
+// Renders every slide of the real compiled deck, including Background content, and keeps each Journey graph pass.
+async function journeyPasses(name) {
+  const compiled = await compileJourneyDeck(name);
   const playback = { value: { phase: "preparing", slideKey: "", stepKey: "", slideTime: 0, stepTime: 0, stepIndex: 0, stepOrigins: { 0: 0 } } };
   const presentation = require("@legend-apps/presentation");
   const module = { exports: {} }, passes = [];
@@ -89,9 +89,9 @@ async function worldPasses(name) {
   return passes;
 }
 
-test("World decks compile to Hermes-ready modules that require only host packages", async () => {
-  for (const name of worldDecks) {
-    const { code } = await compileWorldDeck(name);
+test("Journey decks compile to Hermes-ready modules that require only host packages", async () => {
+  for (const name of journeyDecks) {
+    const { code } = await compileJourneyDeck(name);
     const requires = new Set();
     let classes = 0;
     transformSync(code, { babelrc: false, configFile: false, code: false, sourceType: "script", plugins: [() => ({ visitor: {
@@ -107,16 +107,16 @@ test("World decks compile to Hermes-ready modules that require only host package
 const hermesPath = ["debug-host", "slides"].map(host => path.resolve(import.meta.dirname,
   `../../../../shell/.legend/spark/${host}/macos/Pods/hermes-engine/destroot/bin/hermes`)).find(file => fs.existsSync(file));
 
-test.skipIf(process.platform !== "darwin" || !hermesPath)("World decks evaluate in Hermes with strict host modules", async () => {
-  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "slides-world-hermes-"));
+test.skipIf(process.platform !== "darwin" || !hermesPath)("Journey decks evaluate in Hermes with strict host modules", async () => {
+  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "slides-journey-hermes-"));
   try {
-    for (const name of worldDecks) {
+    for (const name of journeyDecks) {
       const probePath = path.join(temporary, `${name}.js`);
       fs.writeFileSync(probePath, [
         `var hosts = ${JSON.stringify([...hostModules])};`,
         "function host() { return new Proxy(function() {}, { get: function(_, key) { return key === Symbol.iterator ? [][Symbol.iterator] : key === Symbol.toPrimitive ? function() { return 0; } : host(); }, apply: host, construct: host }); }",
         "var module = { exports: {} };",
-        `Function("require", "module", "exports", "global", ${JSON.stringify((await compileWorldDeck(name)).code)})(function(id) {`,
+        `Function("require", "module", "exports", "global", ${JSON.stringify((await compileJourneyDeck(name)).code)})(function(id) {`,
         '  if (hosts.indexOf(id) < 0) throw new Error("Deck requested unavailable host module " + id);',
         "  return host();",
         "}, module, module.exports, globalThis);",
@@ -131,17 +131,17 @@ test.skipIf(process.platform !== "darwin" || !hermesPath)("World decks evaluate 
   } finally { fs.rmSync(temporary, { recursive: true, force: true }); }
 }, 60_000);
 
-test("World decks render their real graphs on every slide", async () => {
-  const passes = Object.fromEntries(await Promise.all(worldDecks.map(async name => [name, await worldPasses(name)])));
-  for (const name of worldDecks) expect(passes[name].length, name).toBeGreaterThan(0);
+test("Journey decks render their real graphs on every slide", async () => {
+  const passes = Object.fromEntries(await Promise.all(journeyDecks.map(async name => [name, await journeyPasses(name)])));
+  for (const name of journeyDecks) expect(passes[name].length, name).toBeGreaterThan(0);
   const ids = name => new Set(passes[name].map(pass => pass.id));
-  for (const id of ["scene-custom-0", "scene-sdf-0", "custom-post-0", "dof-gather", "shafts", "floor"]) expect(ids("world-tour")).toContain(id);
+  for (const id of ["scene-custom-0", "scene-sdf-0", "custom-post-0", "dof-gather", "shafts", "floor"]) expect(ids("journey-tour")).toContain(id);
   const shafts = name => new Set(passes[name].filter(pass => pass.id === "shafts").map(pass => pass.code));
   expect(shafts("cinematic-title").size).toBeGreaterThan(0);
-  expect([...shafts("cinematic-title")].some(code => !shafts("world-tour").has(code))).toBe(true);
+  expect([...shafts("cinematic-title")].some(code => !shafts("journey-tour").has(code))).toBe(true);
 }, 60_000);
 
-const qualityGraphs = () => ["low", "medium", "high", "auto"].flatMap(quality => buildWorldGraph(prepareWorldScene({ quality,
+const qualityGraphs = () => ["low", "medium", "high", "auto"].flatMap(quality => buildJourneyGraph(prepareJourneyScene({ quality,
   instances: [primitive("sphere"), primitive("box"), primitive("ring"), primitive("tube"),
     ...customInstances({ wgsl: "fn shape(id:u32,vid:u32,ctx:ShapeContext)->ShapeVertex { return ShapeVertex(vec3f(f32(vid)),vec3f(0.,0.,1.)); }\nfn shade(id:u32,world:vec3f,normal:vec3f,ctx:ShapeContext)->Material { return Material(vec3f(.5),vec3f(0.),.5,0.); }", vertexCount: 3 }),
     sdfInstance({ wgsl: "fn sdf(p:vec3f)->f32 { return length(p)-1.; }", bounds: [[-2, -2, -2], [2, 2, 2]] }),
@@ -151,14 +151,14 @@ const qualityGraphs = () => ["low", "medium", "high", "auto"].flatMap(quality =>
   effects: [{ use: shaderTint({ gain: { 0: 0, 1: 1 } }), after: "dof" }, { use: shaderTint(), after: "tonemap" }],
 })).passes.map(pass => ({ ...pass, label: `quality-${quality}-${pass.id}` })));
 
-test.skipIf(process.platform !== "darwin")("example and World programs compile with the app's native WebGPU shader compiler", async () => {
-  const world = [...(await Promise.all(worldDecks.map(worldPasses))).flat(), ...qualityGraphs()];
+test.skipIf(process.platform !== "darwin")("example and Journey programs compile with the app's native WebGPU shader compiler", async () => {
+  const world = [...(await Promise.all(journeyDecks.map(journeyPasses))).flat(), ...qualityGraphs()];
   const unique = new Map(world.map(pass => [pass.code, pass.label]));
   const result = validateShaders({ ...programs, ...Object.fromEntries([...unique].map(([code, label]) => [label, code])) });
   expect(result.stderr).toBe("");
   expect(result.status).toBe(0);
   expect(result.stdout.trim().split("\n")).toHaveLength(Object.keys(programs).length + unique.size);
-  const [code, label] = [...unique].find(([, label]) => label.startsWith("world-tour-") && label.endsWith("scene-custom-0"));
+  const [code, label] = [...unique].find(([, label]) => label.startsWith("journey-tour-") && label.endsWith("scene-custom-0"));
   const invalid = validateShaders({ [label]: code.replace("fn shape(", "fn shape(undeclared_token ") });
   expect(invalid.status).toBe(1);
   expect(invalid.stderr).toMatch(/error|expected/i);

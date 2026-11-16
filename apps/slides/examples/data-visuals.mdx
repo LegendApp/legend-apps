@@ -13,7 +13,7 @@ import { RenderTree } from "slides:charts/RenderTree"
 import { AnimatedNumber, NumberCard } from "slides:charts/AnimatedNumber"
 import { BarChart } from "slides:charts/BarChart"
 import { LineChart } from "slides:charts/LineChart"
-import { World, Camera, Material, RenderTree as WorldRenderTree, RimLight, Bloom, Fog, Vignette, Grain, Label, tree } from "slides:world/World"
+import { Journey, Camera, Material, RenderTree as JourneyRenderTree, RimLight, Bloom, Fog, Vignette, Grain, Label, tree } from "slides:journey/Journey"
 
 export const nodes = [
   { id: "app", label: "App" },
@@ -42,22 +42,22 @@ export const mode = text => <Text style={{ color: "#7b8ba1", fontFamily: "Menlo"
 
 # Render tree in 3D
 
-export const worldTree = tree("app", [["header", ["logo", "search"]], ["feed", ["a", "b", "c"]], ["side", ["profile"]]])
-export const worldLabels = Object.fromEntries(nodes.map(node => [node.id, node.label]))
+export const journeyTree = tree("app", [["header", ["logo", "search"]], ["feed", ["a", "b", "c"]], ["side", ["profile"]]])
+export const journeyLabels = Object.fromEntries(nodes.map(node => [node.id, node.label]))
 
 <Steps count={5}>{step => <View style={{ gap: 20 }}>
   {mode(modes[step])}
-  <World width={1680} height={600} exposure={1.2} backgroundColor="#05060a">
+  <Journey width={1680} height={600} exposure={1.2} backgroundColor="#05060a">
     <Camera shots={[{ step: 0, position: [0.6, -0.1, 10.8], target: [0.6, -0.1, 0], fov: 38 }]} />
     <Material id="glass" albedo="#0e1d33" roughness={0.3} metal={0.3} rim={0.35} />
     <RimLight color="#22d3ee" intensity={0.2} />
-    <WorldRenderTree data={worldTree} labels={worldLabels} flashes={flashes} position={[-1.2, 1.6, 0]} spacing={[2.3, 1.75]}
+    <JourneyRenderTree data={journeyTree} labels={journeyLabels} flashes={flashes} position={[-1.2, 1.6, 0]} spacing={[2.3, 1.75]}
       total={{ position: [8.1, 1.2, 0], size: 1.1 }} />
     <Label text="RENDERS" mono align="right" position={[8.1, 2.2, 0]} size={0.28} color="#7b8ba1" emissive={0.7} />
     <Fog density={0.015} color="#05060a" />
     <Bloom intensity={0.9} threshold={1.4} radius={0.7} />
     <Vignette amount={0.25} /><Grain amount={0.01} />
-  </World>
+  </Journey>
 </View>}</Steps>
 
 ---

@@ -10,7 +10,7 @@ theme:
 
 import { Background } from "@legend-apps/presentation"
 import { Text } from "react-native"
-import { World, Camera, Graph, tree, wave, subset, PathPulse, Spray, Orbs, Rows, Voxels, WorldCounter, Stage, flyTo, Box, Ring, Floor, PointLight, RimLight, Bloom, Fog, DOF, Vignette, Grain } from "slides:world/World"
+import { Journey, Camera, Graph, tree, wave, subset, PathPulse, Spray, Orbs, Rows, Voxels, JourneyCounter, Stage, flyTo, Box, Ring, Floor, PointLight, RimLight, Bloom, Fog, DOF, Vignette, Grain } from "slides:journey/Journey"
 
 export const network = tree("root", [
   ["north", [["n1", ["n11", "n12", "n13"]], ["n2", ["n21", "n22", "n23"]], ["n3", ["n31", "n32", "n33"]]]],
@@ -28,7 +28,7 @@ export const atmosphere = <>
 </>
 
 <Background>
-  <World background quality="auto" exposure={1.3} scrim={0.08}>
+  <Journey background quality="auto" exposure={1.3} scrim={0.08}>
     <Camera duration={1.8} shots={[
       { step: 0, position: [8, 1.8, 13], target: [0, 0.6, 0], fov: 44 },
       { step: 2, follow: "node:e2", dolly: 10, focus: "node:e2" },
@@ -43,7 +43,7 @@ export const atmosphere = <>
     <PointLight position={[4, 6, 10]} color="#d6e7ff" intensity={220} range={40} />
     <DOF focus={{ 0: "node:n2", 2: "node:e2" }} aperture={0.45} maxBlur={10} />
     {atmosphere}
-  </World>
+  </Journey>
 </Background>
 
 <View className="flex-1 justify-end items-start">
@@ -55,7 +55,7 @@ export const atmosphere = <>
 ---
 
 <Background>
-  <World background quality="auto" exposure={1.3} scrim={0.08}>
+  <Journey background quality="auto" exposure={1.3} scrim={0.08}>
     <Camera duration={1.5} shots={[
       { step: 0, position: [8, 1.8, 13], target: [0, 0.6, 0], fov: 44 },
       { step: 1, follow: "pulse", dolly: 7, focus: "pulse", fov: 48 },
@@ -67,7 +67,7 @@ export const atmosphere = <>
     <PointLight position={[4, 6, 10]} color="#d6e7ff" intensity={220} range={40} />
     <DOF focus={{ 0: "node:n2", 1: "pulse" }} aperture={0.65} maxBlur={12} />
     {atmosphere}
-  </World>
+  </Journey>
 </Background>
 
 <View className="flex-1 justify-end items-start">
@@ -79,7 +79,7 @@ export const atmosphere = <>
 ---
 
 <Background>
-  <World background quality="auto" exposure={1.3} scrim={0.08}>
+  <Journey background quality="auto" exposure={1.3} scrim={0.08}>
     <Camera shots={[{ step: 0, position: [4, -3, 7], target: [0, 1, 0], fov: 46 }]} />
     <Rows id="rows" count={15} position={[0, 0, 0]} spacing={1} speed={0.3} width={4} depth={0.7} changes={[{ row: 7, step: 1 }, { row: 9, step: 2 }]} flashDuration={2.4} color="#607b96" flashColor="#ff36c8" />
     <DOF focus={{ 0: "rows:row:7", 2: "rows:row:9" }} aperture={0.8} maxBlur={14} />
@@ -87,7 +87,7 @@ export const atmosphere = <>
     <Orbs count={48} colors={["#22d3ee", "#ff36c8"]} radius={0.025} spread={[12, 16, 8]} seed={12} drift={0.15} emissive={3} />
     <Floor y={-8} color="#101827" roughness={0.12} size={40} />
     {atmosphere}
-  </World>
+  </Journey>
 </Background>
 
 <View className="flex-1 justify-end items-start">
@@ -99,7 +99,7 @@ export const atmosphere = <>
 ---
 
 <Background>
-  <World background quality="auto" exposure={1.3} scrim={0.08}>
+  <Journey background quality="auto" exposure={1.3} scrim={0.08}>
     <Camera shots={[
       flyTo("a", { step: 0, offset: [2, 2.5, 10], fov: 46, focus: "stage:a" }),
       flyTo("b", { step: 1, arc: 3, duration: 1.8, offset: [2, 2.5, 10], focus: "stage:b" }),
@@ -125,7 +125,7 @@ export const atmosphere = <>
     <RimLight color="#f59e0b" intensity={0.5} />
     <DOF aperture={0.45} maxBlur={10} />
     {atmosphere}
-  </World>
+  </Journey>
 </Background>
 
 <View className="flex-1 justify-end items-start">
@@ -137,19 +137,19 @@ export const atmosphere = <>
 ---
 
 <Background>
-  <World background quality="auto" exposure={1.3} scrim={0.08}>
+  <Journey background quality="auto" exposure={1.3} scrim={0.08}>
     <Camera duration={2.4} shots={[
       { step: 0, position: [7, 3.5, 10], target: [0, 0, 0], fov: 42 },
       { step: 1, position: [4.5, 2, 7], target: [0, 0, 0], focus: 8.5 },
     ]} />
     <Voxels id="voxels" grid={[10, 10, 10]} spacing={0.45} size={0.17} color="#22d3ee" emissive={3} collapse={{ step: 1, to: 0.2, duration: 2.4 }} />
-    <WorldCounter source="voxels" position={[0.82, 0.19]} size={0.065} color="#ffffff" />
+    <JourneyCounter source="voxels" position={[0.82, 0.19]} size={0.065} color="#ffffff" />
     <Ring position={[0, -2.8, 0]} radius={4} thickness={0.025} color="#f59e0b" emissive={2.5} />
     <Floor y={-3} color="#101827" roughness={0.08} size={40} />
     <RimLight color="#f59e0b" intensity={0.5} />
     <DOF aperture={0.3} maxBlur={8} />
     {atmosphere}
-  </World>
+  </Journey>
 </Background>
 
 <View className="flex-1 justify-end items-start">

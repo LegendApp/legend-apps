@@ -11,7 +11,7 @@ test("offscreen exports preserve deck files without retaining debug maps", async
     const source = path.join(temporary, "source");
     await fs.mkdir(source);
     const deck = path.join(source, "sample.mdx");
-    const content = 'import { World, Box } from "slides:world/World"\n\n<World width={640} height={360}><Box /></World>';
+    const content = 'import { Journey, Box } from "slides:journey/Journey"\n\n<Journey width={640} height={360}><Box /></Journey>';
     await fs.writeFile(deck, content);
     const before = await fs.stat(deck);
     await exportWebsite(deck, output, { offscreen: true });
