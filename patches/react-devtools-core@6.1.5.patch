@@ -58,7 +58,7 @@ diff --git a/dist/backend.js b/dist/backend.js
            for (_iterator.s(); !(_step = _iterator.n()).done;) {
              var firstInstance = _step.value;
 -            publicInstanceToDevToolsInstanceMap.set(firstInstance, nearestInstance);
-+            getPublicInstanceMap(firstInstance).set(firstInstance, nearestInstance);
++            getPublicInstanceMap(publicInstance).set(publicInstance, firstInstance);
              break;
            }
          } catch (err) {
