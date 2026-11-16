@@ -745,7 +745,7 @@ export function sampleFocus(scene: PreparedJourneyScene | JourneySampleScene, cl
   return sampleTrack({ initial: focusDepth(track.initial, scene, clock, camera),
     frames: focusFrames(track.frames, scene, clock, camera), steps: track.steps }, clock);
 }
-type UniformCache = { values: Float32Array<ArrayBuffer>; keys: Float64Array; labels: Float64Array;
+type UniformCache = { scene: object; values: Float32Array<ArrayBuffer>; keys: Float64Array; labels: Float64Array;
   inputs: Float64Array; trackKeys: Float64Array; changed: Uint8Array };
 type UniformInputs = { initial: Float32Array<ArrayBuffer>; inputs: number[];
   tracks: { track: Track<number | Vec3>; at: number; span: NonNullable<Instance["settle"]> }[];
@@ -894,17 +894,19 @@ export function followKeyLight(scene: PreparedJourneyScene | JourneySampleScene,
     for (let axis = 0; axis < 3; axis++) values[field.index + axis] = offset[axis] + values[4 + axis];
   }
 }
-export function sampleJourneyUniforms(scene: PreparedJourneyScene | JourneySampleScene, clock: ClockSample, previous?: CameraPose | null, enterDuration = 1, renderScale = 1, reuse = false): number[] | Float32Array<ArrayBuffer> {
+/** `reuse` may be an owner object: surfaces sharing one scene then keep separate output buffers. */
+export function sampleJourneyUniforms(scene: PreparedJourneyScene | JourneySampleScene, clock: ClockSample, previous?: CameraPose | null, enterDuration = 1, renderScale = 1, reuse: boolean | object = false): number[] | Float32Array<ArrayBuffer> {
   "worklet";
   const count = scene.instances.length;
   let cache: UniformCache | undefined;
   if (reuse || "lookupInstances" in scene) {
-    const caches = (globalThis as { __journeyUniforms?: WeakMap<PreparedJourneyScene | JourneySampleScene, UniformCache> }).__journeyUniforms ??= new WeakMap();
-    cache = caches.get(scene);
-    if (!cache) {
-      cache = { values: new Float32Array(scene.uniformInputs.initial), keys: new Float64Array(count).fill(NaN), labels: new Float64Array(count).fill(NaN),
+    const caches = (globalThis as { __journeyUniforms?: WeakMap<object, UniformCache> }).__journeyUniforms ??= new WeakMap();
+    const owner = typeof reuse === "object" ? reuse : scene;
+    cache = caches.get(owner);
+    if (cache?.scene !== scene) {
+      cache = { scene, values: new Float32Array(scene.uniformInputs.initial), keys: new Float64Array(count).fill(NaN), labels: new Float64Array(count).fill(NaN),
         inputs: Float64Array.from(scene.uniformInputs.inputs), trackKeys: new Float64Array(scene.uniformInputs.tracks.length).fill(NaN), changed: new Uint8Array(scene.uniformInputs.inputs.length) };
-      caches.set(scene, cache);
+      caches.set(owner, cache);
     }
   }
   const values = cache?.values ?? new Array<number>(scene.uniformCount).fill(0);
