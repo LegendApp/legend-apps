@@ -2,10 +2,12 @@
   "schemaVersion": 1,
   "packs": {
     "charts": {
-      "path": "../../../packages/slides-effects/packs/charts"
+      "version": "1.1.0",
+      "sha256": "910b1209f6fbcda87457533ce071052c72ac046cddfe7d86bcf5a2c67eb6ef1f"
     },
     "journey": {
-      "path": "../../../packages/slides-effects/packs/journey"
+      "version": "1.0.0",
+      "sha256": "a01dc3e1f790b5ef3911988eae4a6ef502c8f57002e6f48ee207df47e30741ab"
     }
   }
 }

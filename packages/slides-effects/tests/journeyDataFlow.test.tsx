@@ -29,9 +29,7 @@ beforeAll(async () => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   const root = path.resolve(import.meta.dirname, "../../..");
   const deckPath = path.join(root, "apps/slides/examples/3d/data-flow.mdx");
-  const compiled = await compileDeck(deckPath, {
-    source: readFileSync(deckPath, "utf8"), effectPacksDirectory: path.join(root, "packages/slides-effects/packs"),
-  });
+  const compiled = await compileDeck(deckPath, { source: readFileSync(deckPath, "utf8") });
   if (!compiled.success) throw new Error(compiled.errors.join("\n"));
   const require = createRequire(import.meta.url), module = { exports: {} };
   Function("require", "module", "exports", compiled.code)(name => {

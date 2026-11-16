@@ -10,7 +10,7 @@ function Frame({ children, curve }: { children: ReactNode; curve?: JourneyTrack 
     {children}
     <KeyLight intensity={2} />
     <Floor y={-3.4} color="#101827" roughness={0.14} size={600}
-      grid={{ spacing: 3 }} lines={[{ x: 7, color: "#22d3ee", intensity: 0.5, width: 0.06 }]} />
+      grid={{ spacing: 3 }} />
     <Bloom intensity={0.8} />
     <Fog density={0.018} />
     <Vignette amount={0.25} />

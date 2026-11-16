@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "packs": {
     "journey": {
-      "path": "../../../../packages/slides-effects/packs/journey"
+      "path": "../../packs/journey"
     }
   }
 }

@@ -242,7 +242,7 @@ test("omitted objects fade at their last pose, then return only when declared", 
 });
 
 test("the generic MDX deck compiles three local slide components against the installed Journey API", async () => {
-  const file = fileURLToPath(new URL("../../../apps/slides/examples/3d/journey-continuity.mdx", import.meta.url));
+  const file = fileURLToPath(new URL("./fixtures/journey-continuity.mdx", import.meta.url));
   const result = await compileDeck(file);
   if (!result.success) throw new Error(result.errors.join("\n"));
   expect(result.noteTargets).toHaveLength(3);

@@ -33,10 +33,9 @@ const journeyDecks = ["journey-tour", "data-flow", "cinematic-title", "lighting"
 const compiledDecks = new Map();
 
 function compileJourneyDeck(name) {
-  const file = path.join(root, "apps/slides/examples", name === "lighting" ? "" : "3d", `${name}.mdx`);
-  if (!compiledDecks.has(name)) compiledDecks.set(name, compileDeck(file, {
-    source: fs.readFileSync(file, "utf8"), effectPacksDirectory: path.join(root, "packages/slides-effects/packs"),
-  }).then(result => {
+  const file = name === "data-flow" ? path.join(root, "apps/slides/examples/3d/data-flow.mdx")
+    : path.join(root, "packages/slides-effects/tests/fixtures", `${name}.mdx`);
+  if (!compiledDecks.has(name)) compiledDecks.set(name, compileDeck(file, { source: fs.readFileSync(file, "utf8") }).then(result => {
     if (!result.success) throw new Error(`${name}: ${result.errors.join("\n")}`);
     return result;
   }));

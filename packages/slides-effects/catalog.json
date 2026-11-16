@@ -882,6 +882,38 @@
           "3.6:4.2"
         ]
       }
+    },
+    {
+      "slug": "journey",
+      "title": "Journey",
+      "pack": "journey",
+      "entry": "Journey",
+      "symbol": "Journey",
+      "description": "A WebGPU 3D scene with camera shots, lit primitives, graphs and post effects.",
+      "tags": [
+        "3d",
+        "webgpu"
+      ],
+      "props": [
+        {
+          "name": "quality",
+          "description": "Choose low, medium, high or auto rendering quality."
+        },
+        {
+          "name": "Camera shots",
+          "description": "Place, orbit or fly the camera per step."
+        },
+        {
+          "name": "Bloom / Fog",
+          "description": "Add post effects in declaration order."
+        }
+      ],
+      "snippet": "---\ntitle: Journey\nwidth: 1920\nheight: 1080\ntheme:\n  backgroundColor: \"#050811\"\n  color: \"#f8fafc\"\n---\n\nimport { Journey, Camera, Orbs, Graph, tree, wave, subset, Bloom, Fog } from \"slides:journey/Journey\"\n\nexport const branches = tree(\"root\", [[\"a\", [[\"a1\", [\"a11\", \"a12\"]], [\"a2\", [\"a21\", \"a22\"]]]], [\"b\", [[\"b1\", [\"b11\", \"b12\"]], [\"b2\", [\"b21\", \"b22\"]]]], [\"c\", [[\"c1\", [\"c11\", \"c12\"]], [\"c2\", [\"c21\", \"c22\"]]]]])\n\n# A field of light\n\n<Journey width={1696} height={650} quality=\"medium\">\n  <Camera shots={[{ at: 0, orbit: { center: [0, 0, 0], radius: 18, height: 4, speed: 0.08 } }]} />\n  <Orbs count={48} colors={[\"#22d3ee\", \"#f59e0b\"]} />\n  <Bloom intensity={1.4} /><Fog density={0.03} />\n</Journey>\n\n---\nsteps: 3\n---\n\n# A selective cascade\n\n<Journey width={1696} height={650} quality=\"medium\">\n  <Camera shots={[{ step: 0, position: [0, 6, 22], target: [0, 0, 0] }]} />\n  <Graph data={branches} node={{ color: \"#22d3ee\", size: 0.3 }} activate={[wave({ from: \"root\", step: 1 }), subset({ branches: [\"b\"], step: 2 })]} />\n  <Bloom intensity={1.4} /><Fog density={0.02} />\n</Journey>\n",
+      "recording": {
+        "motion": [
+          "0.1:0.5"
+        ]
+      }
     }
   ]
 }

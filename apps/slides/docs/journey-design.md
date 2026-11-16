@@ -38,7 +38,7 @@ curve. Jumps scale travel time by the number of crossed stations. Steps can morp
 without allocating another camera station or resetting an ongoing flight.
 
 `track` is a small per-slide declaration. Use one `spacing` throughout a Journey
-(default 32). `duration` defaults to 1.7 seconds. Camera `position` and `target`
+(default 48, or 32 with `frame: "world"`). `duration` defaults to 1.7 seconds. Camera `position` and `target`
 are local to that slide's station. `via` and `viaTarget` are quadratic control
 points for the incoming segment, also local to its destination station. They
 shape the curve without requiring a central camera timeline:
@@ -77,29 +77,16 @@ when that surface is reset. It is bounded by the ids visited in that Journey.
 
 ## One shared scene
 
-Replacing the declaration on each slide suits small scenes. With thousands of parts it rebuilds pipelines and re-sends the scene on every key press. `track.frame: "world"` instead lets slides pass one identical `children` array: tracks hold a pose per running beat (`stepOffset`), and `track.carry` flies each changed id between poses on a bowed path, with Previous as its exact mirror. Uniforms stay cached; only parts in flight are written, into a separate output. See the Journey README.
+Replacing the declaration on each slide suits small scenes. With thousands of parts it rebuilds pipelines and re-sends the scene on every key press. `track.frame: "world"` instead lets slides pass one identical `children` array: tracks hold a pose per running beat (`stepOffset`), and `track.carry` flies each changed id between poses on a bowed path, with Previous as its exact mirror. Uniforms stay cached; only parts in flight are written, into a separate output. See the [Journey pack README](../../../packages/slides-effects/packs/journey/README.md).
 
-## Motion matched from reference
+## Default motion
 
-The source's main station-to-station moves last **1.7 seconds**, with **32 units**
-between content stations. They use cubic ease-in/out:
-`4t³` below 0.5, otherwise `1 - (-2t + 2)³ / 2`. Position and look target follow
-separate quadratic curves. Main flights use **40° vertical FOV**, **0 radians
-roll**, and no banking. Their forward displacement is approximately **29.5–30.6
-units**, averaging **17.4–18.0 units/second** before accounting for the side and
-vertical arc. The eased parameter reaches 0.0625, 0.5 and 0.9375 at 25%, 50% and
-75% of the duration; its peak rate is 3 / 1.7 = **1.765 per second**.
-
-The generic defaults use the same duration, easing, FOV and zero roll, a 32-unit
-station spacing, and quadratic controls `[2.5, 5.5, 22]` for the camera and
-`[0, 0, 10]` for its look target. At 0.85 seconds the default camera is
-`[1.25, 4.55, -6]`, looking at `[0, 0, -19]`. The showcase's second authored
-curve switches the lateral bend using `[-3.5, 6.5, 20]`. Height and aim are
-adapted to its generic panels and columns. The opening uses a 2.0-second
-cubic-out settle, widening FOV from 38° to 40°.
-The following between-beat drift uses sine easing over 2.2 or 3.7 seconds, with
-at most 0.0245 units of per-axis camera jitter. Those ambient motions are omitted
-to meet the stationary-hold decision. Reverse navigation samples these same stored curves in decreasing order.
+Station-to-station moves last 1.7 seconds with 48 units between stations by default. They
+use cubic ease-in/out (`4t³` below 0.5, otherwise `1 - (-2t + 2)³ / 2`). Position
+and look target follow separate quadratic curves, with default controls
+`[2.5, 5.5, 22]` for the camera and `[0, 0, 10]` for its target. Field of view is
+40 degrees, with zero roll and no banking. Reverse navigation samples the same
+stored curves in decreasing order.
 
 ## Three slides: before
 
@@ -133,8 +120,7 @@ import { Panels, OnTrack, Columns } from "./journey-continuity"
 <Columns />
 ```
 
-The generic example lives in `apps/slides/examples/3d/journey-continuity.mdx`.
-Its three local components declare the same three Card ids, with their own
-per-slide poses. The dark background, cyan/amber accents, floor and bloom use
-the existing Journey renderer and appearance controls. A fourth Card is declared
-only on the first slide to demonstrate omitted-object retention.
+Each local component declares the same three Card ids with its own per-slide
+pose. The dark background, accents, floor and bloom use the existing Journey
+renderer and appearance controls. A component can also declare a Card only on
+the first slide; it stays in place, as described under the object contract.

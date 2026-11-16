@@ -1,4 +1,4 @@
-name: Slides Journey
+name: Slides
 
 on:
   pull_request:
@@ -12,11 +12,11 @@ on:
       - scripts/compile-slides.ts
       - package.json
       - bun.lock
-      - .github/workflows/slides-journey.yml
+      - .github/workflows/slides.yml
   workflow_dispatch:
 
 jobs:
-  # Compiles the real Journey decks and runs the mocked host tests. Darwin-only
+  # Compiles the example and Journey decks and runs the mocked host tests. Darwin-only
   # Hermes and Dawn tests are skipped here, not validated.
   portable:
     runs-on: ubuntu-latest
