@@ -106,10 +106,10 @@ function Toggle({ label, value, disabled, onChange }: { label: string; value: bo
 
 const field = { fontSize: 13, color: PlatformColor("labelColor"), backgroundColor: PlatformColor("textBackgroundColor"), borderWidth: StyleSheet.hairlineWidth, borderColor: PlatformColor("separatorColor"), borderRadius: 5, paddingHorizontal: 6 } as const;
 const styles = StyleSheet.create({
-  root: { gap: 8, padding: 12, borderTopWidth: StyleSheet.hairlineWidth, borderColor: PlatformColor("separatorColor") },
-  subject: { ...field, height: 24 },
-  body: { ...field, height: 72, paddingVertical: 4 },
-  options: { flexDirection: "row", alignItems: "center", gap: 16 },
+  root: { gap: 10, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16, borderTopWidth: StyleSheet.hairlineWidth, borderColor: PlatformColor("separatorColor"), backgroundColor: PlatformColor("windowBackgroundColor") },
+  subject: { ...field, height: 22 },
+  body: { ...field, height: 64, paddingVertical: 3 },
+  options: { flexDirection: "row", alignItems: "center", gap: 20 },
   toggle: { flexDirection: "row", alignItems: "center", gap: 6 },
   toggleLabel: { fontSize: 13, color: PlatformColor("labelColor") },
   disabled: { color: PlatformColor("disabledControlTextColor") },
@@ -117,7 +117,7 @@ const styles = StyleSheet.create({
   spacer: { flex: 1 },
   generate: { width: 96, height: 28 },
   cancel: { width: 72, height: 28 },
-  commit: { width: 128, height: 28 },
+  commit: { width: 120, height: 28 },
   note: { fontSize: 12, color: PlatformColor("secondaryLabelColor") },
   conflict: { color: PlatformColor("systemRedColor") },
 });

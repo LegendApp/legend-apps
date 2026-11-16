@@ -29,6 +29,7 @@ jest.mock("@legendapp/spark/context-menu", () => ({ showContextMenu: jest.fn(asy
 jest.mock("@legendapp/spark/links", () => ({ openURL: jest.fn(async () => true) }));
 jest.mock("@legend-apps/file-system-watcher", () => ({ watchDirectories: jest.fn(() => ({ remove: jest.fn() })) }));
 jest.mock("@legendapp/spark/ui", () => ({ Button: "Button" }));
+jest.mock("@legendapp/spark/ui/symbol", () => ({ SFSymbol: "SFSymbol" }));
 jest.mock("@legendapp/spark/dialogs", () => ({ openFileDialog: jest.fn(async () => ({ canceled: true })), showMessage: jest.fn(async () => ({ buttonId: "confirm" })) }));
 jest.mock("@legendapp/spark/menus", () => ({ useMenu: jest.fn() }));
 jest.mock("@legendapp/spark/ai", () => ({ ...jest.requireActual("@legendapp/spark/ai"), getAICommandAvailability: jest.fn(async () => ({ claude: true, codex: false, preferredTool: "claude" })) }));

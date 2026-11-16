@@ -10,10 +10,13 @@ import { commitGitHubUrl, createGitHistory, emptyHistory } from "./gitHistory";
 import { setStringAsync } from "@legendapp/spark/clipboard";
 import { showContextMenu } from "@legendapp/spark/context-menu";
 import { openURL } from "@legendapp/spark/links";
+import { EmptyState } from "./EmptyState";
+import { FileRow, useSymbolColor } from "./FileRow";
 import { CommitComposer, type CommitMessageGenerator } from "./CommitComposer";
 import { openFileDialog, showMessage } from "@legendapp/spark/dialogs";
 import { useMenu } from "@legendapp/spark/menus";
 import { Sidebar, SidebarItem } from "@legendapp/spark/ui/sidebar";
+import { SFSymbol } from "@legendapp/spark/ui/symbol";
 import { SidebarSplitView } from "@legendapp/spark/ui/split-view";
 import { addWindowListener, setWindowOptions } from "@legendapp/spark/windows";
 import { addMacOSWindowListener } from "@legendapp/spark/windows/macos";
@@ -160,6 +163,8 @@ export function App() {
       title: changes.root ? `${changes.root.split("/").pop()} — Legend Git` : "Legend Git",
       appearance: "system",
       macos: {
+        // Omitted, not null, without a repository: a null URI also clears the window title.
+        ...(changes.root ? { representedUri: `file://${changes.root.split("/").map(encodeURIComponent).join("/")}` } : {}),
         titleBar: { contentLayout: "fullSize", transparent: true, titleVisibility: "visible" },
         toolbar: {
           visible: true,
@@ -233,20 +238,18 @@ export function App() {
             <Text style={styles.section}>{changes.root?.split("/").pop() ?? "Repositories"}</Text>
           </SidebarItem>
           {changes.root ? [
-            <SidebarItem key="changes" id="changes"><Text style={styles.label}>Changes</Text></SidebarItem>,
-            <SidebarItem key="history" id="history"><Text style={styles.label}>History</Text></SidebarItem>,
+            <SidebarItem key="changes" id="changes"><SidebarRow symbol="square.and.pencil" label="Changes" count={changes.status?.entries.length} /></SidebarItem>,
+            <SidebarItem key="history" id="history"><SidebarRow symbol="clock" label="History" /></SidebarItem>,
           ] :
-            <SidebarItem id="empty" selectable={false}><Text style={styles.secondary}>No repository open</Text></SidebarItem>}
+            <SidebarItem id="empty" selectable={false}><Text style={styles.sidebarNote}>No repository open</Text></SidebarItem>}
         </Sidebar>
       }
       content={
         <View style={styles.content}>
-          {changes.error && <Text accessibilityRole="alert" style={styles.error}>{changes.error}</Text>}
-          {changes.root && view === "history" ? <>
-            <Text style={styles.repository} numberOfLines={1}>{changes.root}</Text>
+          {changes.error && <Text accessibilityRole="alert" selectable style={styles.error}>{changes.error}</Text>}
+          {changes.root && view === "history" ? <View style={styles.history}>
             <HistoryView history={history} actions={historyActions} />
-          </> : changes.root ? <>
-            <Text style={styles.repository} numberOfLines={1}>{changes.root}</Text>
+          </View> : changes.root ? <>
             <View style={styles.split}>
               <View style={styles.lists}>
                 <ChangesList title="Unstaged" entries={unstaged} selectedPath={selected?.section === "unstaged" ? selected.path : null}
@@ -265,16 +268,27 @@ export function App() {
               {changes.patch ? <DiffPane patch={changes.patch} disabled={busy} applyRef={applyLines} discardRef={discardLines}
                 onApply={(keys, text) => void controller.current?.changeLines(keys, text)}
                 onDiscard={async (keys, text, what) => { if (await confirmDestructive(`Discard ${what}?`, "Discard")) await controller.current?.discardLines(keys, text); }} />
-                : <View style={styles.placeholder}><Text style={styles.secondary}>{selected ? "Loading diff…" : "Select a file to view its changes"}</Text></View>}
+                : <View style={styles.placeholder}>{selected ? <EmptyState title="Loading Diff…" />
+                  : unstaged.length || staged.length ? <EmptyState title="No Selection" message="Select a file to view its changes." />
+                  : <EmptyState symbol="checkmark.circle" title="Working Tree Clean" message="There are no changes to commit." />}</View>}
             </View>
-          </> : <View style={styles.empty}>
-            <Text style={styles.secondary}>{changes.loading ? "Opening repository…" : "No repository open"}</Text>
-            <Button onPress={() => void chooseRepository()}>Open Repository…</Button>
-          </View>}
+          </> : changes.loading ? <EmptyState title="Opening Repository…" />
+            : <EmptyState symbol="folder" title="No Repository Open" message="Open a Git repository to see its changes and commit them.">
+              <Button style={styles.open} onPress={() => void chooseRepository()}>Open Repository…</Button>
+            </EmptyState>}
         </View>
       }
     />
   );
+}
+
+function SidebarRow({ symbol, label, count }: { symbol: string; label: string; count?: number }) {
+  const color = useSymbolColor("blue");
+  return <View style={styles.sidebarRow} accessible accessibilityLabel={count ? `${label}, ${count}` : label}>
+    <View style={styles.sidebarIcon}><SFSymbol name={symbol} color={color} size={15} /></View>
+    <Text style={styles.label} numberOfLines={1}>{label}</Text>
+    {count ? <Text style={styles.count}>{count}</Text> : null}
+  </View>;
 }
 
 /** A native warning sheet on the main window; resolves true when the user picks the action. */
@@ -290,48 +304,41 @@ function ChangesList({ title, entries, selectedPath, onSelect, action, disabled,
   action: string; disabled: boolean; onAction: (path: string) => void;
   secondaryAction?: string; secondaryDisabled?: boolean; onSecondaryAction?: () => void;
 }) {
-  return <View style={styles.listSection}>
+  return <View style={[styles.listSection, title === "Staged" && styles.separated]}>
     <View style={styles.heading}>
-      <Text style={styles.headingLabel}>{title} ({entries.length})</Text>
-      {secondaryAction ? <Button style={styles.action} disabled={secondaryDisabled} onPress={() => onSecondaryAction?.()}>{secondaryAction}</Button> : null}
+      <Text style={styles.headingLabel} accessibilityRole="header">{title} ({entries.length})</Text>
+      {secondaryAction ? <Button style={styles.discard} disabled={secondaryDisabled} onPress={() => onSecondaryAction?.()}>{secondaryAction}</Button> : null}
       <Button style={styles.action} disabled={disabled || selectedPath === null} onPress={() => { if (selectedPath !== null) onAction(selectedPath); }}>{action}</Button>
     </View>
-    {entries.length ? <Sidebar style={styles.root} selectedId={selectedPath} onSelectionChange={event => onSelect(event.id)} defaultRowHeight={30}>
-      {entries.map(entry => <SidebarItem key={entry.path} id={entry.path}>
-        {entry.kind === "unmerged" ? <View style={styles.row} accessibilityLabel={`${entry.path}, conflicted`}>
-          <Text style={[styles.status, styles.conflict]}>{entry.indexStatus + entry.worktreeStatus}</Text>
-          <Text style={styles.file} numberOfLines={1}>{entry.path}</Text>
-          <Text style={styles.conflictLabel}>Conflict</Text>
-        </View> : <View style={styles.row}>
-          <Text style={styles.status}>{title === "Staged" ? entry.indexStatus : entry.worktreeStatus}</Text>
-          <Text style={styles.file} numberOfLines={1}>{entry.originalPath ? `${entry.originalPath} → ${entry.path}` : entry.path}</Text>
-        </View>}
-      </SidebarItem>)}
-    </Sidebar> : <Text style={styles.secondary}>No {title.toLowerCase()} changes</Text>}
+    {entries.length ? <Sidebar style={styles.root} selectedId={selectedPath} onSelectionChange={event => onSelect(event.id)} defaultRowHeight={24}>
+      {entries.map(entry => <SidebarItem key={entry.path} id={entry.path}><FileRow entry={entry} staged={title === "Staged"} /></SidebarItem>)}
+    </Sidebar> : <View style={styles.emptyList}><Text style={styles.emptyListText}>No {title.toLowerCase()} changes</Text></View>}
   </View>;
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  content: { flex: 1, paddingTop: 58, backgroundColor: PlatformColor("windowBackgroundColor") },
-  empty: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
-  split: { flex: 1, flexDirection: "row" },
-  lists: { width: 340 },
-  placeholder: { flex: 1, alignItems: "center", justifyContent: "center", borderLeftWidth: StyleSheet.hairlineWidth, borderColor: PlatformColor("separatorColor") },
-  listSection: { flex: 1, borderTopWidth: StyleSheet.hairlineWidth, borderColor: PlatformColor("separatorColor") },
-  heading: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingVertical: 8 },
-  headingLabel: { flex: 1, fontSize: 13, fontWeight: "600", color: PlatformColor("labelColor") },
-  action: { width: 88, height: 28 },
-  repository: { fontSize: 12, paddingHorizontal: 16, paddingBottom: 12, color: PlatformColor("secondaryLabelColor") },
-  section: { paddingHorizontal: 12, paddingVertical: 6, fontSize: 12, fontWeight: "600", color: PlatformColor("secondaryLabelColor") },
-  label: { paddingHorizontal: 12, paddingVertical: 6, fontSize: 13, color: PlatformColor("labelColor") },
-  secondary: { paddingHorizontal: 12, paddingVertical: 6, fontSize: 13, color: PlatformColor("secondaryLabelColor") },
-  error: { padding: 12, fontSize: 13, color: PlatformColor("systemRedColor") },
-  row: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 8 },
-  status: { width: 20, fontSize: 12, color: PlatformColor("secondaryLabelColor") },
-  conflict: { color: PlatformColor("systemRedColor"), fontWeight: "600" },
-  conflictLabel: { fontSize: 11, fontWeight: "600", color: PlatformColor("systemRedColor") },
-  file: { flex: 1, fontSize: 13, color: PlatformColor("labelColor") },
+  content: { flex: 1, paddingTop: 52, backgroundColor: PlatformColor("windowBackgroundColor") },
+  history: { flex: 1, borderTopWidth: StyleSheet.hairlineWidth, borderColor: PlatformColor("separatorColor") },
+  split: { flex: 1, flexDirection: "row", borderTopWidth: StyleSheet.hairlineWidth, borderColor: PlatformColor("separatorColor") },
+  lists: { width: 340, backgroundColor: PlatformColor("controlBackgroundColor") },
+  placeholder: { flex: 1, borderLeftWidth: StyleSheet.hairlineWidth, borderColor: PlatformColor("separatorColor"), backgroundColor: PlatformColor("textBackgroundColor") },
+  open: { width: 150, height: 28 },
+  listSection: { flex: 1 },
+  separated: { borderTopWidth: StyleSheet.hairlineWidth, borderColor: PlatformColor("separatorColor") },
+  heading: { flexDirection: "row", alignItems: "center", gap: 8, height: 36, paddingLeft: 16, paddingRight: 12 },
+  headingLabel: { flex: 1, fontSize: 11, fontWeight: "600", color: PlatformColor("secondaryLabelColor") },
+  action: { width: 72, height: 24 },
+  discard: { width: 80, height: 24 },
+  emptyList: { flex: 1, alignItems: "center", justifyContent: "center", paddingBottom: 24 },
+  emptyListText: { fontSize: 12, color: PlatformColor("tertiaryLabelColor") },
+  section: { paddingHorizontal: 10, paddingTop: 10, paddingBottom: 4, fontSize: 11, fontWeight: "700", color: PlatformColor("tertiaryLabelColor") },
+  sidebarRow: { height: 28, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 8 },
+  sidebarIcon: { width: 18, height: 18, alignItems: "center", justifyContent: "center" },
+  label: { flex: 1, fontSize: 13, color: PlatformColor("labelColor") },
+  count: { fontSize: 12, color: PlatformColor("secondaryLabelColor"), fontVariant: ["tabular-nums"] },
+  sidebarNote: { paddingHorizontal: 10, paddingVertical: 6, fontSize: 13, color: PlatformColor("secondaryLabelColor") },
+  error: { paddingHorizontal: 16, paddingVertical: 8, fontSize: 12, color: PlatformColor("systemRedColor") },
 });
 
 export default App;

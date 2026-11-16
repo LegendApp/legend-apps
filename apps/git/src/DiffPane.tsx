@@ -4,6 +4,7 @@ import { DiffNativeRow, DiffNativeRowConfig, diffUnifiedChangeBarWidth, diffUnif
 import { unifiedPatchHunkKeys, unifiedPatchLineKey } from "@legend-apps/diff-parser/src/unifiedPatch";
 import { Button } from "@legendapp/spark/ui";
 import type { ChangesState } from "./gitChanges";
+import { pathParts } from "./FileRow";
 
 const rowHeight = 20;
 const fontFamily = "Menlo";
@@ -15,6 +16,11 @@ export const rowKey = (row: DiffRenderRow) => {
   const kind = changeTypeKind[row.changeType];
   return kind ? unifiedPatchLineKey({ kind, oldLine: row.oldLineNumber, newLine: row.newLineNumber }) : null;
 };
+
+const hunkRange = (start: number, count: number) => count === 1 ? `${start}` : `${start},${count}`;
+/** The hunk's own `@@ -a,b +c,d @@ section` line, as Git prints it (a count of 1 is omitted). */
+export const hunkTitle = (hunk: { oldStart: number; oldCount: number; newStart: number; newCount: number; section: string }) =>
+  `@@ -${hunkRange(hunk.oldStart, hunk.oldCount)} +${hunkRange(hunk.newStart, hunk.newCount)} @@${hunk.section}`;
 
 export function diffPaneItems(rows: readonly DiffRenderRow[]): DiffPaneItem[] {
   const items: DiffPaneItem[] = [];
@@ -97,9 +103,10 @@ export function DiffPane({ patch, disabled, readOnly = false, onApply, applyRef,
     : !patch.file.hunks.length ? readOnly ? "No content changes (mode or rename only)." : `No content changes. ${verb} the whole file to include mode or rename changes.`
     : error;
 
+  const { name, folder } = pathParts(patch.path);
   return <View style={styles.root}>
     <View style={styles.header}>
-      <Text style={styles.path} numberOfLines={1}>{patch.path}</Text>
+      <Text style={styles.path} numberOfLines={1} accessibilityRole="header">{name}{folder ? <Text style={styles.folder}>{`  ${folder}`}</Text> : null}</Text>
       {discard ? <Button style={styles.action} disabled={disabled || !selected.size || !!message} onPress={() => discard(selected, patch.text, linesLabel(selected.size))}>Discard Lines…</Button> : null}
       {readOnly ? null : <Button style={styles.action} disabled={disabled || !selected.size} onPress={() => onApply(selected, patch.text)}>{`${verb} Lines`}</Button>}
     </View>
@@ -117,7 +124,7 @@ export function DiffPane({ patch, disabled, readOnly = false, onApply, applyRef,
         data={items}
         keyExtractor={(item, index) => item.type === "hunk" ? `hunk:${item.hunkIndex}` : `row:${item.row.index}:${index}`}
         renderItem={({ item, index }) => item.type === "hunk" ? <View style={styles.hunk}>
-          <Text style={[styles.hunkTitle, { fontFamily }]}>Hunk {item.hunkIndex + 1}</Text>
+          <Text style={[styles.hunkTitle, { fontFamily }]} numberOfLines={1} accessibilityLabel={`Hunk ${item.hunkIndex + 1}`}>{hunkTitle(patch.file!.hunks[item.hunkIndex]!)}</Text>
           {discard ? <Button style={styles.action} disabled={disabled} onPress={() => discard(new Set(unifiedPatchHunkKeys(patch.file!.hunks[item.hunkIndex]!)), patch.text, `hunk ${item.hunkIndex + 1} of “${patch.path}”`)}>Discard Hunk…</Button> : null}
           {readOnly ? null : <Button style={styles.action} disabled={disabled} onPress={() => onApply(new Set(unifiedPatchHunkKeys(patch.file!.hunks[item.hunkIndex]!)), patch.text)}>{`${verb} Hunk`}</Button>}
         </View> : readOnly ? <DiffNativeRow adaptiveRender="normal" configId={configId} itemId={item.row.index} rowIndex={item.row.index} style={styles.row} /> : <Pressable
@@ -140,13 +147,14 @@ export function DiffPane({ patch, disabled, readOnly = false, onApply, applyRef,
 
 const styles = StyleSheet.create({
   root: { flex: 1, borderLeftWidth: StyleSheet.hairlineWidth, borderColor: PlatformColor("separatorColor"), backgroundColor: PlatformColor("textBackgroundColor") },
-  header: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: PlatformColor("separatorColor") },
+  header: { flexDirection: "row", alignItems: "center", gap: 8, height: 36, paddingLeft: 16, paddingRight: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: PlatformColor("separatorColor"), backgroundColor: PlatformColor("windowBackgroundColor") },
   path: { flex: 1, fontSize: 13, fontWeight: "600", color: PlatformColor("labelColor") },
-  action: { width: 110, height: 24 },
-  message: { padding: 16, fontSize: 13, color: PlatformColor("secondaryLabelColor") },
+  folder: { fontSize: 11, fontWeight: "400", color: PlatformColor("secondaryLabelColor") },
+  action: { width: 104, height: 24 },
+  message: { paddingHorizontal: 16, paddingVertical: 20, fontSize: 13, color: PlatformColor("secondaryLabelColor") },
   config: { width: 0, height: 0, overflow: "hidden" },
-  hunk: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, height: 32, backgroundColor: PlatformColor("underPageBackgroundColor") },
-  hunkTitle: { flex: 1, fontSize: 12, color: PlatformColor("secondaryLabelColor") },
+  hunk: { flexDirection: "row", alignItems: "center", gap: 8, paddingLeft: 16, paddingRight: 12, height: 32, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: PlatformColor("separatorColor"), backgroundColor: PlatformColor("controlBackgroundColor") },
+  hunkTitle: { flex: 1, fontSize: 11, color: PlatformColor("secondaryLabelColor") },
   row: { width: "100%", height: rowHeight },
   hitTarget: { ...StyleSheet.absoluteFillObject },
   selected: { backgroundColor: PlatformColor("selectedContentBackgroundColor"), opacity: 0.28 },

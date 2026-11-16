@@ -3,6 +3,7 @@ import { diffPaneItems, nextLineSelection } from "../DiffPane";
 
 jest.mock("@legend-apps/diff-parser", () => ({}));
 jest.mock("@legendapp/spark/ui", () => ({ Button: "Button" }));
+jest.mock("@legendapp/spark/ui/symbol", () => ({ SFSymbol: "SFSymbol" }));
 jest.mock("react-native", () => ({ PlatformColor: (name: string) => name, StyleSheet: { create: (styles: unknown) => styles, hairlineWidth: 1, absoluteFillObject: {} } }));
 
 const row = (index: number, hunkIndex: number, changeType: number, oldLineNumber: number, newLineNumber: number) =>
