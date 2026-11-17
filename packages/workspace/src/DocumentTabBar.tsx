@@ -1,89 +1,186 @@
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { SFSymbol } from "@legendapp/spark/ui/symbol";
+import { useEffect, useRef, useState } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from "react-native";
 import { getPathName } from "./fileTree";
+import { SidebarToggle, trafficLightsWidth, withAlpha } from "./titleBar";
 import type { WorkspaceColors } from "./WorkspaceSidebar";
+
+const gap = 6;
+const tabGap = 2;
+const toggleWidth = 32;
+const dragSpaceWidth = 36;
+const minTabWidth = 110;
+const maxTabWidth = 220;
 
 export type DocumentTabBarProps = {
   activePath: string | null;
   colors: WorkspaceColors;
   onClose: (path: string) => void;
   onSelect: (path: string) => void;
-  onToggleSidebar: () => void;
+  /** Shows the sidebar toggle first in the bar; leave it out when the sidebar shows its own. */
+  onToggleSidebar?: () => void;
   sidebarOpen: boolean;
   paths: readonly string[];
+  style?: StyleProp<ViewStyle>;
 };
 
-export function DocumentTabBar({ activePath, colors, onClose, onSelect, onToggleSidebar, sidebarOpen, paths }: DocumentTabBarProps) {
+export function DocumentTabBar({ activePath, colors, onClose, onSelect, onToggleSidebar, sidebarOpen, paths, style }: DocumentTabBarProps) {
+  const scroll = useRef<ScrollView>(null);
+  const frames = useRef(new Map<string, { width: number; x: number }>());
+  const [scrollWidth, setScrollWidth] = useState(0);
+  const [barWidth, setBarWidth] = useState(0);
+  const leadingInset = sidebarOpen ? 8 : trafficLightsWidth;
+  // Tabs share the bar equally, as in Safari, and scroll once they reach their minimum width.
+  const available = barWidth - leadingInset - (onToggleSidebar ? toggleWidth + gap : 0) - dragSpaceWidth - gap;
+  const tabWidth = Math.round(Math.min(maxTabWidth, Math.max(minTabWidth, (available - tabGap * (paths.length - 1)) / Math.max(1, paths.length))));
+  const offset = useRef(0);
+
+  // Keeps the active tab in view when it changes, lays out, or the bar resizes.
+  const reveal = () => {
+    const frame = activePath ? frames.current.get(activePath) : undefined;
+    if (!frame || !scrollWidth) return;
+    const inset = 8;
+    if (frame.x - inset < offset.current) scroll.current?.scrollTo({ animated: true, x: Math.max(0, frame.x - inset) });
+    else if (frame.x + frame.width + inset > offset.current + scrollWidth) scroll.current?.scrollTo({ animated: true, x: frame.x + frame.width + inset - scrollWidth });
+  };
+  const revealRef = useRef(reveal);
+  revealRef.current = reveal;
+  useEffect(() => revealRef.current(), [activePath, paths, scrollWidth]);
+
   return (
     // The title bar is transparent, so leave room for the traffic lights while the sidebar is hidden.
-    <View style={[styles.root, { borderColor: colors.border, paddingLeft: sidebarOpen ? 8 : 78 }]}>
-      <Pressable
-        accessibilityLabel={sidebarOpen ? "Hide Sidebar" : "Show Sidebar"}
-        accessibilityRole="button"
-        onPress={onToggleSidebar}
-        style={styles.toggle}
+    <View onLayout={event => setBarWidth(event.nativeEvent.layout.width)} style={[styles.root, { borderColor: colors.border, paddingLeft: leadingInset }, style]}>
+      {onToggleSidebar ? <SidebarToggle colors={colors} label={sidebarOpen ? "Hide Sidebar" : "Show Sidebar"} onPress={onToggleSidebar} /> : null}
+      <ScrollView
+        contentContainerStyle={styles.tabs}
+        horizontal
+        onLayout={(event: LayoutChangeEvent) => setScrollWidth(event.nativeEvent.layout.width)}
+        onScroll={event => { offset.current = event.nativeEvent.contentOffset.x; }}
+        ref={scroll}
+        scrollEventThrottle={32}
+        showsHorizontalScrollIndicator={false}
+        showsVerticalScrollIndicator={false}
+        style={styles.scroll}
       >
-        <Text style={[styles.toggleText, { color: colors.muted }]}>☰</Text>
-      </Pressable>
-      <ScrollView horizontal showsVerticalScrollIndicator={false} style={styles.scroll} contentContainerStyle={styles.tabs}>
-        {paths.map(path => {
-          const title = getPathName(path), active = path === activePath;
-          return (
-            <View key={path} style={[styles.tab, { borderColor: colors.border }, active && { backgroundColor: colors.selection }]}>
-              <Pressable accessibilityLabel={title} accessibilityRole="tab" accessibilityState={{ selected: active }} onPress={() => onSelect(path)}>
-                <Text numberOfLines={1} style={[styles.title, { color: active ? colors.foreground : colors.muted }]}>{title}</Text>
-              </Pressable>
-              <Pressable accessibilityLabel={`Close ${title}`} accessibilityRole="button" hitSlop={4} onPress={() => onClose(path)}>
-                <Text style={[styles.close, { color: colors.muted }]}>×</Text>
-              </Pressable>
-            </View>
-          );
-        })}
+        {paths.map((path, index) => (
+          <DocumentTab
+            active={path === activePath}
+            // A hairline separates neighbouring inactive tabs, as in Safari; the active tab needs none.
+            separated={index > 0 && path !== activePath && paths[index - 1] !== activePath}
+            colors={colors}
+            key={path}
+            onClose={() => onClose(path)}
+            onLayout={event => {
+              frames.current.set(path, event.nativeEvent.layout);
+              if (path === activePath) revealRef.current();
+            }}
+            onSelect={() => onSelect(path)}
+            title={getPathName(path)}
+            width={tabWidth}
+          />
+        ))}
       </ScrollView>
       <View style={styles.dragSpace} />
     </View>
   );
 }
 
+function DocumentTab({ active, colors, onClose, onLayout, onSelect, separated, title, width }: {
+  active: boolean;
+  separated: boolean;
+  colors: WorkspaceColors;
+  onClose: () => void;
+  onLayout: (event: LayoutChangeEvent) => void;
+  onSelect: () => void;
+  title: string;
+  width: number;
+}) {
+  const [hovered, setHovered] = useState(false);
+  const [closeHovered, setCloseHovered] = useState(false);
+  const fill = active ? withAlpha(colors.foreground, 0.09) : hovered ? withAlpha(colors.foreground, 0.05) : undefined;
+  return (
+    <Pressable
+      accessibilityLabel={title}
+      accessibilityRole="tab"
+      accessibilityState={{ selected: active }}
+      onHoverIn={() => setHovered(true)}
+      onHoverOut={() => setHovered(false)}
+      onLayout={onLayout}
+      onPress={onSelect}
+      style={[styles.tab, { width }, fill !== undefined && { backgroundColor: fill }]}
+    >
+      {separated && !hovered ? <View style={[styles.separator, { backgroundColor: colors.border }]} /> : null}
+      <Text numberOfLines={1} style={[styles.title, { color: active ? colors.foreground : colors.muted }, active && styles.activeTitle]}>{title}</Text>
+      {/* The close button overlays the leading padding, so titles never shift; it shows on the active and hovered tabs. */}
+      <Pressable
+        accessibilityLabel={`Close ${title}`}
+        accessibilityRole="button"
+        hitSlop={4}
+        onHoverIn={() => setCloseHovered(true)}
+        onHoverOut={() => setCloseHovered(false)}
+        onPress={onClose}
+        pointerEvents={active || hovered ? "auto" : "none"}
+        style={[styles.close, closeHovered && { backgroundColor: withAlpha(colors.foreground, 0.1) }, !(active || hovered) && styles.hidden]}
+      >
+        <SFSymbol color={colors.muted} name="xmark" size={9} />
+      </Pressable>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
+  activeTitle: {
+    fontWeight: "500",
+  },
+  close: {
+    left: 4,
+    position: "absolute",
+    alignItems: "center",
+    borderRadius: 4,
+    height: 16,
+    justifyContent: "center",
+    width: 16,
+  },
   dragSpace: {
     alignSelf: "stretch",
     flex: 1,
-    minWidth: 36,
+    minWidth: dragSpaceWidth,
   },
-  scroll: {
-    flexGrow: 0,
-    flexShrink: 1,
-  },
-  close: {
-    fontSize: 13,
-    paddingHorizontal: 2,
+  hidden: {
+    opacity: 0,
   },
   root: {
     alignItems: "center",
     borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
+    gap,
     height: 36,
+  },
+  scroll: {
+    flexGrow: 0,
+    flexShrink: 1,
+  },
+  separator: {
+    height: 16,
+    left: -1,
+    position: "absolute",
+    width: StyleSheet.hairlineWidth,
   },
   tab: {
     alignItems: "center",
-    borderRightWidth: StyleSheet.hairlineWidth,
+    borderRadius: 7,
     flexDirection: "row",
-    gap: 6,
-    height: 36,
-    maxWidth: 220,
-    paddingHorizontal: 10,
+    height: 28,
+    paddingHorizontal: 20,
   },
   tabs: {
     alignItems: "center",
+    gap: tabGap,
   },
   title: {
+    flexGrow: 1,
+    flexShrink: 1,
     fontSize: 12,
-  },
-  toggle: {
-    paddingHorizontal: 6,
-    paddingVertical: 4,
-  },
-  toggleText: {
-    fontSize: 14,
+    textAlign: "center",
   },
 });

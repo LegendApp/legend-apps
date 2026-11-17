@@ -260,21 +260,23 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
   });
 
   it("switches and closes file tabs through the dirty-document flow", async () => {
+    // The sidebar lists the same files, so tabs are found by role.
+    const tab = (view: Awaited<ReturnType<typeof render>>, label: string) => view.queryAllByLabelText(label).find(node => node.props.accessibilityRole === "tab");
     mockSessionState$.assign({ documentSource: "file", filename: "/docs/a.md" });
     const view = await render(<MarkdownEditorWindow files={["/docs/a.md", "/docs/b.md"]} />);
     // Single-file windows start with the sidebar hidden even though the setting is open.
     expect(view.getByLabelText("Show Sidebar")).toBeTruthy();
 
-    await act(async () => fireEvent.press(view.getByLabelText("b.md")));
+    await act(async () => fireEvent.press(tab(view, "b.md")!));
     expect(mockSession.prepareCurrentDocumentForClose).toHaveBeenLastCalledWith({ autosaveEnabled: true, reason: "open" });
     expect(mockSession.openSelectedFile).toHaveBeenLastCalledWith("/docs/b.md");
 
     mockSession.prepareCurrentDocumentForClose.mockResolvedValueOnce(false);
     await act(async () => fireEvent.press(view.getByLabelText("Close a.md")));
-    expect(view.getByLabelText("a.md")).toBeTruthy();
+    expect(tab(view, "a.md")).toBeTruthy();
     await act(async () => fireEvent.press(view.getByLabelText("Close a.md")));
     expect(mockSession.prepareCurrentDocumentForClose).toHaveBeenLastCalledWith({ autosaveEnabled: true, reason: "close" });
-    expect(view.queryByLabelText("a.md")).toBeNull();
+    expect(tab(view, "a.md")).toBeUndefined();
     expect(mockSession.openSelectedFile).toHaveBeenLastCalledWith("/docs/b.md");
 
     await act(async () => fireEvent.press(view.getByLabelText("Show Sidebar")));

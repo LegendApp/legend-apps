@@ -1,9 +1,12 @@
-import { LegendList } from "@legendapp/list/react-native";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Sidebar, SidebarItem } from "@legendapp/spark/ui/sidebar";
+import { SFSymbol } from "@legendapp/spark/ui/symbol";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { flattenWorkspaceTree, getPathName, listWorkspaceDirectory, type DirectoryListing, type WorkspaceTreeRow } from "./fileTree";
+import { SidebarToggle, titleBarHeight, trafficLightsWidth, withAlpha } from "./titleBar";
 
-export type WorkspaceColors = { border: string; foreground: string; muted: string; selection: string };
+/** Concrete colors: SF Symbols do not take PlatformColor. `primary` tints folder symbols. */
+export type WorkspaceColors = { border: string; foreground: string; muted: string; primary?: string; selection: string };
 
 export type WorkspaceSidebarProps = {
   activePath: string | null;
@@ -17,11 +20,14 @@ export type WorkspaceSidebarProps = {
   onAddFolder: () => void;
   onError: (error: unknown) => void;
   onOpenFile: (path: string) => void;
+  /** Shows the sidebar toggle beside the traffic lights, where the title bar's toggle sits while the sidebar is hidden. */
+  onToggleSidebar?: () => void;
 };
 
-const rowHeight = 24;
+const rowHeight = 26;
+const indentation = 16;
 
-export function WorkspaceSidebar({ activePath, colors, files, folders, isDocumentPath, onAddFile, onAddFolder, onError, onOpenFile }: WorkspaceSidebarProps) {
+export function WorkspaceSidebar({ activePath, colors, files, folders, isDocumentPath, onAddFile, onAddFolder, onError, onOpenFile, onToggleSidebar }: WorkspaceSidebarProps) {
   const [listings, setListings] = useState<ReadonlyMap<string, DirectoryListing>>(new Map());
   // Root folders start expanded and other directories collapsed; a toggle flips that.
   const [toggled, setToggled] = useState<ReadonlySet<string>>(new Set());
@@ -47,69 +53,132 @@ export function WorkspaceSidebar({ activePath, colors, files, folders, isDocumen
     }
   }, [listings, onError, rows]);
 
-  const renderItem = useCallback(({ item }: { item: WorkspaceTreeRow }) => {
-    const openable = item.isDirectory || !isDocumentPath || isDocumentPath(item.path);
-    const onPress = item.isDirectory
-      ? () => setToggled(current => { const next = new Set(current); if (!next.delete(item.path)) next.add(item.path); return next; })
-      : () => onOpenFile(item.path);
-    return (
-      <Pressable
-        accessibilityLabel={item.name}
-        accessibilityRole="button"
-        disabled={!openable}
-        onPress={onPress}
-        style={[styles.row, { paddingLeft: 8 + item.depth * 14 }, item.path === activePath && { backgroundColor: colors.selection }]}
-      >
-        <Text style={[styles.disclosure, { color: colors.muted }]}>{item.isDirectory ? (item.expanded ? "▾" : "▸") : ""}</Text>
-        <Text numberOfLines={1} style={[styles.name, { color: openable ? colors.foreground : colors.muted }]}>{item.name}</Text>
-      </Pressable>
-    );
-  }, [activePath, colors, isDocumentPath, onOpenFile]);
+  const toggle = (path: string) => setToggled(current => { const next = new Set(current); if (!next.delete(path)) next.add(path); return next; });
+  const openable = (row: WorkspaceTreeRow) => row.isDirectory || !isDocumentPath || isDocumentPath(row.path);
+  // The native list selects only file rows it can open; the open document is selected when it is in the tree.
+  const selectedId = rows.some(row => row.path === activePath && !row.isDirectory && openable(row)) ? activePath : null;
 
   return (
     <View style={styles.root}>
-      <View style={[styles.actions, { borderColor: colors.border }]}>
-        <Pressable accessibilityLabel="Add File" accessibilityRole="button" onPress={() => { void onAddFile().then(paths => { if (paths[0]) onOpenFile(paths[0]); }); }} style={styles.action}>
-          <Text style={[styles.actionText, { color: colors.foreground }]}>Add File</Text>
-        </Pressable>
-        <Pressable accessibilityLabel="Add Folder" accessibilityRole="button" onPress={onAddFolder} style={styles.action}>
-          <Text style={[styles.actionText, { color: colors.foreground }]}>Add Folder</Text>
-        </Pressable>
+      <View style={styles.header}>
+        {onToggleSidebar ? <SidebarToggle colors={colors} label="Hide Sidebar" onPress={onToggleSidebar} /> : null}
       </View>
-      <LegendList
-        data={rows}
-        estimatedItemSize={rowHeight}
-        extraData={renderItem}
-        keyExtractor={(row: WorkspaceTreeRow) => row.path}
-        recycleItems
-        renderItem={renderItem}
+      <Sidebar
+        defaultRowHeight={rowHeight}
+        onSelectionChange={({ id }) => { if (id && id !== activePath) onOpenFile(id); }}
+        selectedId={selectedId}
         style={styles.list}
-      />
+      >
+        {rows.map(row => {
+          const header = row.depth === 0 && row.isDirectory && folders.includes(row.path);
+          return (
+            <SidebarItem id={row.path} key={row.path} rowHeight={header ? 28 : rowHeight} selectable={!row.isDirectory && openable(row)}>
+              {header
+                ? <SectionHeader colors={colors} row={row} onPress={() => toggle(row.path)} />
+                : <TreeRow colors={colors} openable={openable(row)} row={row} onToggle={() => toggle(row.path)} />}
+            </SidebarItem>
+          );
+        })}
+      </Sidebar>
+      <View style={styles.footer}>
+        <FooterButton colors={colors} label="Add File" symbol="doc.badge.plus" onPress={() => { void onAddFile().then(paths => { if (paths[0]) onOpenFile(paths[0]); }); }} />
+        <FooterButton colors={colors} label="Add Folder" symbol="folder.badge.plus" onPress={onAddFolder} />
+      </View>
     </View>
   );
 }
 
+/** A root folder, as a sidebar section whose chevron shows on hover or while collapsed. */
+function SectionHeader({ colors, onPress, row }: { colors: WorkspaceColors; onPress: () => void; row: WorkspaceTreeRow }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <Pressable
+      accessibilityLabel={row.name}
+      accessibilityRole="button"
+      accessibilityState={{ expanded: row.expanded }}
+      onHoverIn={() => setHovered(true)}
+      onHoverOut={() => setHovered(false)}
+      onPress={onPress}
+      style={styles.section}
+    >
+      <Text numberOfLines={1} style={[styles.sectionTitle, { color: colors.muted }]}>{row.name}</Text>
+      {hovered || !row.expanded ? <SFSymbol color={colors.muted} name={row.expanded ? "chevron.down" : "chevron.right"} size={10} /> : null}
+    </Pressable>
+  );
+}
+
+function TreeRow({ colors, onToggle, openable, row }: { colors: WorkspaceColors; onToggle: () => void; openable: boolean; row: WorkspaceTreeRow }) {
+  const content = (
+    <>
+      <View style={styles.disclosure}>
+        {row.isDirectory ? <SFSymbol color={colors.muted} name={row.expanded ? "chevron.down" : "chevron.right"} size={10} /> : null}
+      </View>
+      <View style={styles.icon}>
+        <SFSymbol
+          color={row.isDirectory ? colors.primary ?? colors.muted : withAlpha(colors.muted, openable ? 1 : 0.6)}
+          name={row.isDirectory ? "folder" : openable ? "doc.text" : "doc"}
+          size={14}
+        />
+      </View>
+      <Text numberOfLines={1} style={[styles.name, { color: openable ? colors.foreground : colors.muted }]}>{row.name}</Text>
+    </>
+  );
+  // Roots of a folder section sit at depth 1; loose files sit at depth 0 beside them.
+  const style = [styles.row, { paddingLeft: 4 + Math.max(0, row.depth - 1) * indentation }];
+  return row.isDirectory
+    ? <Pressable accessibilityLabel={row.name} accessibilityRole="button" accessibilityState={{ expanded: row.expanded }} onPress={onToggle} style={style}>{content}</Pressable>
+    : <View accessibilityLabel={row.name} accessibilityState={{ disabled: !openable }} accessible style={style}>{content}</View>;
+}
+
+function FooterButton({ colors, label, onPress, symbol }: { colors: WorkspaceColors; label: string; onPress: () => void; symbol: string }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <Pressable
+      accessibilityLabel={label}
+      accessibilityRole="button"
+      onHoverIn={() => setHovered(true)}
+      onHoverOut={() => setHovered(false)}
+      onPress={onPress}
+      style={({ pressed }) => [styles.footerButton, (hovered || pressed) && { backgroundColor: withAlpha(colors.foreground, pressed ? 0.12 : 0.07) }]}
+    >
+      <SFSymbol color={colors.muted} name={symbol} size={15} />
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
-  action: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  actionText: {
-    fontSize: 12,
-    fontWeight: "500",
-  },
-  actions: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    flexDirection: "row",
-    gap: 4,
-    // Clears the traffic lights over the full-size title bar.
-    paddingBottom: 6,
-    paddingHorizontal: 8,
-    paddingTop: 40,
-  },
   disclosure: {
-    fontSize: 10,
-    width: 14,
+    alignItems: "center",
+    height: rowHeight,
+    justifyContent: "center",
+    width: 16,
+  },
+  footer: {
+    flexDirection: "row",
+    gap: 2,
+    paddingBottom: 8,
+    paddingHorizontal: 10,
+    paddingTop: 4,
+  },
+  footerButton: {
+    alignItems: "center",
+    borderRadius: 6,
+    height: 26,
+    justifyContent: "center",
+    width: 30,
+  },
+  header: {
+    flexDirection: "row",
+    height: titleBarHeight,
+    alignItems: "center",
+    paddingLeft: trafficLightsWidth,
+  },
+  icon: {
+    alignItems: "center",
+    height: rowHeight,
+    justifyContent: "center",
+    marginRight: 6,
+    width: 18,
   },
   list: {
     flex: 1,
@@ -126,5 +195,19 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     height: rowHeight,
     paddingRight: 8,
+  },
+  section: {
+    alignItems: "center",
+    flexDirection: "row",
+    height: 28,
+    justifyContent: "space-between",
+    paddingLeft: 8,
+    paddingRight: 10,
+    paddingTop: 6,
+  },
+  sectionTitle: {
+    flexShrink: 1,
+    fontSize: 11,
+    fontWeight: "600",
   },
 });
