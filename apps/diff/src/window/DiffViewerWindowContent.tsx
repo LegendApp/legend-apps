@@ -83,6 +83,7 @@ export function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, so
     const storyController = useDiffStory(windowIdentifier, state$);
     const storyPaneRef = useRef<StoryPaneRef | null>(null);
     const [pendingStoryHunk, setPendingStoryHunk] = useState<StoryHunk | null>(null);
+    const [pendingSidebarFile, setPendingSidebarFile] = useState<DiffFileSummary | null>(null);
     const state = useValue(state$);
     const documentError = useValue(documentError$);
     const loadingSource = useValue(loadingSource$);
@@ -567,6 +568,14 @@ export function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, so
         state$,
         collapsedFileIndexes$,
     });
+    const documentErrorHeight = documentError
+        ? documentError.kind === "permission"
+            ? diffDocumentPermissionErrorHeight
+            : diffDocumentErrorHeight
+        : 0;
+    const diffTopChromeContentHeight = documentErrorHeight + (repoStateBanner ? 28 : 0);
+    const diffTopChromeHeight = diffTopChromeContentHeight > 0 ? diffTitlebarTopInset + diffTopChromeContentHeight : 0;
+    const listTopInset = diffTopChromeHeight > 0 ? 0 : diffTitlebarTopInset;
     const { navigateToNextHunk, navigateToPreviousHunk, scrollToFile, handleInlineListIndexesChanged, handleSearchChange, handleSearchSubmit, advanceSearchResult } = useDiffViewerNavigation({
         loadedDocument,
         viewMode,
@@ -574,7 +583,7 @@ export function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, so
         getVisibleListIndex,
         sideBySideHunkHeaderIndexes,
         listRef,
-        documentError,
+        listTopInset,
         sideBySideListIndexByRowIndex,
         inlineListIndexByFileIndexRef,
         collapsedFileIndexList,
@@ -616,18 +625,27 @@ export function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, so
         if (index === undefined) return;
         const frame = requestAnimationFrame(() => {
             activeFileIndex$.set(pendingStoryHunk.fileIndex);
-            void listRef.current?.scrollToIndex({ index, animated: false, viewOffset: diffTitlebarTopInset });
+            void listRef.current?.scrollToIndex({ index, animated: false, viewOffset: listTopInset });
             setPendingStoryHunk(null);
         });
         return () => cancelAnimationFrame(frame);
-    }, [pendingStoryHunk, storyController.tab, viewMode, getVisibleListIndex, sideBySideDataSource, activeFileIndex$]);
+    }, [pendingStoryHunk, storyController.tab, viewMode, getVisibleListIndex, sideBySideDataSource, activeFileIndex$, listTopInset]);
     const nextReviewItem = useCallback(() => storyController.tab === "story" ? storyPaneRef.current?.navigate(1) ?? false : navigateToNextHunk(), [storyController.tab, navigateToNextHunk]);
     const previousReviewItem = useCallback(() => storyController.tab === "story" ? storyPaneRef.current?.navigate(-1) ?? false : navigateToPreviousHunk(), [storyController.tab, navigateToPreviousHunk]);
     const handleSidebarFilePress = useCallback((file: DiffFileSummary) => {
         storyController.setTab("files");
         activeFileIndex$.set(file.index);
-        scrollToFile(file);
-    }, [activeFileIndex$, scrollToFile, storyController.setTab]);
+        // In Story mode the Files list is hidden, and a hidden list doesn't keep a scroll, so scroll once it shows.
+        setPendingSidebarFile(file);
+    }, [activeFileIndex$, storyController.setTab]);
+    useEffect(() => {
+        if (!pendingSidebarFile || storyController.tab !== "files") return;
+        const frame = requestAnimationFrame(() => {
+            scrollToFile(pendingSidebarFile);
+            setPendingSidebarFile(null);
+        });
+        return () => cancelAnimationFrame(frame);
+    }, [pendingSidebarFile, scrollToFile, storyController.tab]);
     const toggleSidebarFolder = useCallback((title: string) => {
         setCollapsedSidebarFolders((currentFolders) => {
             const nextFolders = new Set(currentFolders);
@@ -721,13 +739,6 @@ export function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, so
         const sourceListIndex = sideBySideDataSource?.getItemLocation(index).listIndex ?? index;
         return (<DiffSideBySideRow adaptiveRender={adaptiveRender} collapsedFileIndexes$={collapsedFileIndexes$} index={index} itemMetadata={itemMetadata} listIndex={sourceListIndex} nativeConfigId={nativeSideBySideRowConfig.configId} nativeRowHeight={rowHeight} onToggleFileCollapsed={toggleFileCollapsed} rowRender$={rowRender$} row={row}/>);
     }, [collapsedFileIndexes$, nativeSideBySideRowConfig.configId, rowHeight, rowRender$, sideBySideDataSource, toggleFileCollapsed]);
-    const documentErrorHeight = documentError
-        ? documentError.kind === "permission"
-            ? diffDocumentPermissionErrorHeight
-            : diffDocumentErrorHeight
-        : 0;
-    const diffTopChromeContentHeight = documentErrorHeight + (repoStateBanner ? 28 : 0);
-    const diffTopChromeHeight = diffTopChromeContentHeight > 0 ? diffTitlebarTopInset + diffTopChromeContentHeight : 0;
     const activeItemCount = renderViewMode === "unified"
         ? visibleItemIndexes.length
         : sideBySideRowCount;

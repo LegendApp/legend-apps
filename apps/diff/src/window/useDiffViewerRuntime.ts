@@ -97,7 +97,7 @@ export function useDiffViewerRuntime({
         }
         return undefined;
     }, [loadedDocument, state$]);
-    const { getSideBySideRow, handleSideBySideTopItemChanged, handleSideBySideVisibleRowsRequested, requestSideBySideRange, resetSideBySideRuntime, } = useDiffSideBySideRuntime({
+    const { getSideBySideRow, handleSideBySideTopItemChanged: handleSideBySideTopRowChanged, handleSideBySideVisibleRowsRequested, requestSideBySideRange, resetSideBySideRuntime, } = useDiffSideBySideRuntime({
         activeFileIndex$,
         diffPaneHeight$,
         nativeSideBySideRows,
@@ -246,14 +246,28 @@ export function useDiffViewerRuntime({
         maybeExpandItemCountLimitForVisibleRange(start, count, info, "side-by-side");
         handleSideBySideVisibleRowsRequested(start, count, info);
     }, [handleSideBySideVisibleRowsRequested, maybeExpandItemCountLimitForVisibleRange]);
+    // At the end of the list, a selected file shorter than the viewport cannot scroll up to the top,
+    // so the rows above it stay on top. Keep that file selected instead of the one above it.
+    const keepsSelectedFileBelowTop = useCallback((topFileIndex: number | null | undefined) => {
+        const selectedFileIndex = activeFileIndex$.peek();
+        if (selectedFileIndex === null || topFileIndex == null || selectedFileIndex <= topFileIndex) return false;
+        // getState().isAtEnd updates after this callback, so check the scroll extent directly.
+        const listState = listRef.current?.getState();
+        return !!listState && listState.scroll + listState.scrollLength >= listState.contentLength - 1;
+    }, [activeFileIndex$, listRef]);
     const handleTopItemChanged = useCallback((rowIndex: number) => {
         const currentState = state$.peek();
         if (currentState.status === "loaded") {
             const nextFileIndex = findFileIndexForRow(currentState.files, rowIndex);
-            if (activeFileIndex$.peek() !== nextFileIndex) {
+            if (activeFileIndex$.peek() !== nextFileIndex && !keepsSelectedFileBelowTop(nextFileIndex)) {
                 activeFileIndex$.set(nextFileIndex);
             }
         }
-    }, [activeFileIndex$, state$]);
+    }, [activeFileIndex$, keepsSelectedFileBelowTop, state$]);
+    const handleSideBySideTopItemChanged = useCallback((lineIndex: number) => {
+        if (lineIndex < 0 || !keepsSelectedFileBelowTop(sideBySideDataSource?.getItemMetadata(lineIndex).fileIndex)) {
+            handleSideBySideTopRowChanged(lineIndex);
+        }
+    }, [handleSideBySideTopRowChanged, keepsSelectedFileBelowTop, sideBySideDataSource]);
     return { loadedDocument, loadedDocumentId, unifiedHunkRowIndexSet, collapsedFileIndexList, diffRows, fileHeaderRowIndexes, getRow, getVisibleListIndex, sideBySideFileHeaderByListIndex, sideBySideHunkHeaderIndexes, sideBySideDataSource, sideBySideListIndexByRowIndex, sideBySideRowCount, visibleItemIndexes, getSideBySideRow, handleSideBySideTopItemChanged, requestSideBySideRange, handleVisibleRowsRequested, handleLimitedSideBySideVisibleRowsRequested, handleTopItemChanged };
 }

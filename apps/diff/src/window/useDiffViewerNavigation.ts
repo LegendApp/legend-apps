@@ -5,8 +5,7 @@ import { useCallback, useMemo } from "react";
 import { getDiffViewModeSetting } from "../diffSettings";
 import { getAdjacentDiffHunkIndex } from "../viewer/diffHunkNavigation";
 import { type DiffSearchResult, getDiffSearchSubmitIndex } from "../viewer/diffSearch";
-import { diffTitlebarTopInset } from "../viewer/diffViewerConstants";
-import type { DiffRecoverableError, DiffViewerModel } from "../viewer/diffViewerModel";
+import type { DiffViewerModel } from "../viewer/diffViewerModel";
 
 export function useDiffViewerNavigation({
     loadedDocument,
@@ -15,7 +14,7 @@ export function useDiffViewerNavigation({
     getVisibleListIndex,
     sideBySideHunkHeaderIndexes,
     listRef,
-    documentError,
+    listTopInset,
     sideBySideListIndexByRowIndex,
     inlineListIndexByFileIndexRef,
     collapsedFileIndexList,
@@ -36,7 +35,8 @@ export function useDiffViewerNavigation({
     getVisibleListIndex: (rowIndex: number) => number | undefined;
     sideBySideHunkHeaderIndexes: Set<number>;
     listRef: RefObject<VirtualizedFixedDocumentListRef | null>;
-    documentError: DiffRecoverableError | null;
+    /** Distance from the list's top edge to its first unobscured row: the titlebar inset, or 0 when top chrome sits above the list. */
+    listTopInset: number;
     sideBySideListIndexByRowIndex: Map<number, number>;
     inlineListIndexByFileIndexRef: RefObject<ReadonlyMap<number, number>>;
     collapsedFileIndexList: number[];
@@ -69,16 +69,14 @@ export function useDiffViewerNavigation({
     const navigateToHunk = useCallback((direction: -1 | 1) => {
         const list = listRef.current;
         const listState = list?.getState();
-        const currentPosition = listState
-            ? listState.scroll + (documentError ? diffTitlebarTopInset : 0)
-            : 0;
+        const currentPosition = listState?.scroll ?? 0;
         const targetIndex = getAdjacentDiffHunkIndex(hunkListIndexes, currentPosition, direction, listState?.positionAtIndex);
         let didNavigate = false;
         if (list && targetIndex !== null) {
             list.scrollToIndex({
                 animated: true,
                 index: targetIndex,
-                viewOffset: diffTitlebarTopInset,
+                viewOffset: listTopInset,
                 viewPosition: 0,
             }).catch((error: unknown) => {
                 console.error(error instanceof Error ? error.message : String(error));
@@ -86,7 +84,7 @@ export function useDiffViewerNavigation({
             didNavigate = true;
         }
         return didNavigate;
-    }, [documentError, hunkListIndexes]);
+    }, [hunkListIndexes, listTopInset]);
     const navigateToNextHunk = useCallback(() => navigateToHunk(1), [navigateToHunk]);
     const navigateToPreviousHunk = useCallback(() => navigateToHunk(-1), [navigateToHunk]);
     const scrollToFile = useCallback((file: DiffFileSummary) => {
@@ -99,13 +97,13 @@ export function useDiffViewerNavigation({
             listRef.current?.scrollToIndex({
                 animated: false,
                 index: listIndex,
-                viewOffset: diffTitlebarTopInset,
+                viewOffset: listTopInset,
                 viewPosition: 0,
             }).catch((error: unknown) => {
                 console.error(error instanceof Error ? error.message : String(error));
             });
         }
-    }, [getVisibleListIndex, sideBySideListIndexByRowIndex, viewMode]);
+    }, [getVisibleListIndex, listTopInset, sideBySideListIndexByRowIndex, viewMode]);
     const handleInlineListIndexesChanged = useCallback((indexes: ReadonlyMap<number, number>) => {
         inlineListIndexByFileIndexRef.current = indexes;
     }, []);
@@ -113,12 +111,12 @@ export function useDiffViewerNavigation({
         listRef.current?.scrollToIndex({
             animated: true,
             index: listIndex,
-            viewOffset: diffTitlebarTopInset,
+            viewOffset: listTopInset,
             viewPosition: 0.5,
         }).catch((error: unknown) => {
             console.error(error instanceof Error ? error.message : String(error));
         });
-    }, []);
+    }, [listTopInset]);
     const getSearchResultListIndex = useCallback((result: DiffSearchResult) => {
         if (viewMode === "unified") {
             return getVisibleListIndex(result.rowIndex);

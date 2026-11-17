@@ -8,6 +8,7 @@ import { useDiffViewerRuntime } from "../useDiffViewerRuntime";
 
 jest.mock("../../viewer/DiffRows", () => ({ createDiffUnifiedHunkRowIndexSet: () => new Set() }));
 jest.mock("../../viewer/diffLoadedDocumentModel", () => ({
+  findFileIndexForRow: jest.requireActual("../../viewer/diffLoadedDocumentIndexes").findFileIndexForRow,
   useDiffLoadedModel: () => ({}),
   useDiffSideBySideRuntime: () => ({ resetSideBySideRuntime: mockResetSideBySideRuntime }),
   useVisibleDiffFileTokenizationScheduler: () => jest.fn(),
@@ -50,5 +51,23 @@ it("restores selection and scroll after replacement without resetting collapsed 
   expect(setCollapsedFileIndexesValue).not.toHaveBeenCalled();
   expect(setCollapsedSidebarFolders).not.toHaveBeenCalled();
   expect(preserveViewStateRef.current).toBeNull();
+  await hook.unmount();
+});
+
+it.each([[true, 2], [false, 0]])("with the list at its end = %s, a top row in an earlier file leaves file %s selected", async (isAtEnd, expected) => {
+  const loaded = { ...state(1), files: [{ index: 0, path: "a.ts", rowStart: 0, rowCount: 8 }, { index: 2, path: "z.ts", rowStart: 8, rowCount: 2 }] } as unknown as DiffViewerState;
+  const activeFileIndex$ = observable<number | null>(null);
+  const getState = () => ({ scroll: isAtEnd ? 300 : 100, scrollLength: 500, contentLength: 800 });
+  const hook = await renderHook(() => useDiffViewerRuntime({
+    state: loaded, state$: observable(loaded), setCollapsedSidebarFolders: jest.fn(), collapsedFileIndexes: new Set(),
+    fontFamily: "Menlo", fontSize: 12, nativeUnifiedRows: true, rowHeight: 20, renderViewMode: "unified", syntaxHighlightingEnabled: false,
+    loadedCacheRef: { current: new Map() }, activeFileIndex$, diffPaneHeight$: observable(500), nativeSideBySideRows: false,
+    syntaxTokenizationState$: observable({ ranges: "", version: 0 }), preserveViewStateRef: { current: null },
+    listRef: { current: { getState } as unknown as VirtualizedFixedDocumentListRef }, setCollapsedFileIndexesValue: jest.fn(),
+  }));
+  // A click on the last, short file scrolls as far as the list goes; rows of the file above still sit on top.
+  activeFileIndex$.set(2);
+  hook.result.current.handleTopItemChanged(5);
+  expect(activeFileIndex$.peek()).toBe(expected);
   await hook.unmount();
 });
