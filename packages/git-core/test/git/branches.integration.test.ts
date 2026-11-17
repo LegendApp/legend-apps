@@ -55,12 +55,12 @@ it("lists branches, remote branches by remote and peeled tags, with slashes and 
     { name: "up/stream", branches: [{ name: "up/stream/dev", ref: "refs/remotes/up/stream/dev", oid: first, remote: "up/stream", branch: "dev" }] },
   ]);
   expect(list.tags).toEqual([{ name: "light", ref: "refs/tags/light", oid: second }, { name: "v1.0", ref: "refs/tags/v1.0", oid: first }]);
-  expect(list).toEqual(parseRefList(fixtureGit(path, "for-each-ref", "--format=%(refname)%00%(objectname)%00%(*objectname)%00%(HEAD)%00%(upstream:short)%00%(symref)%00%(committerdate:unix)", "refs/heads", "refs/remotes", "refs/tags"), ["origin", "up/stream"]));
+  expect(list).toEqual(parseRefList(fixtureGit(path, "for-each-ref", "--format=%(refname)%00%(objectname)%00%(*objectname)%00%(HEAD)%00%(upstream:short)%00%(symref)%00%(committerdate:unix)%00%(upstream:track,nobracket)", "refs/heads", "refs/remotes", "refs/tags"), ["origin", "up/stream"]));
 });
 
 it("lists no branches on an unborn HEAD and marks none current on a detached HEAD", async () => {
   const { path, git } = repo("unborn");
-  expect(await git.listRefs()).toEqual({ branches: [], remotes: [], tags: [] });
+  expect(await git.listRefs()).toEqual({ branches: [], remotes: [], tags: [], defaultBranch: null });
   commit(path, "a.txt", "1\n", "First");
   fixtureGit(path, "switch", "-q", "--detach");
   expect((await git.listRefs()).branches).toEqual([expect.objectContaining({ name: "main", current: false })]);

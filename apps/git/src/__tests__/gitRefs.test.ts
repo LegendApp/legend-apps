@@ -2,9 +2,9 @@ import type { GitRefList, GitService } from "@legend-apps/git-core";
 import { createGitRefs, findRef, recentBranches, resolveBranchName, type RefsState } from "../gitRefs";
 
 const list = (...names: string[]): GitRefList => ({
-  branches: names.map((name, index) => ({ name, ref: `refs/heads/${name}`, oid: "a".repeat(40), current: index === 0, upstream: null, time: index })),
+  branches: names.map((name, index) => ({ name, ref: `refs/heads/${name}`, oid: "a".repeat(40), current: index === 0, upstream: null, time: index, ahead: 0, behind: 0, gone: false })),
   remotes: [{ name: "origin", branches: [{ name: "origin/fix/x", ref: "refs/remotes/origin/fix/x", oid: "b".repeat(40), remote: "origin", branch: "fix/x" }] }, { name: "up", branches: [{ name: "up/fix/x", ref: "refs/remotes/up/fix/x", oid: "b".repeat(40), remote: "up", branch: "fix/x" }, { name: "up/only", ref: "refs/remotes/up/only", oid: "b".repeat(40), remote: "up", branch: "only" }] }],
-  tags: [{ name: "v1", ref: "refs/tags/v1", oid: "c".repeat(40) }],
+  tags: [{ name: "v1", ref: "refs/tags/v1", oid: "c".repeat(40) }], defaultBranch: null,
 });
 
 it("finds refs by full name and typed branch names, and orders recent branches by commit time", () => {

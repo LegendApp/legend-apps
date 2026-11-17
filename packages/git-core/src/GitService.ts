@@ -39,12 +39,14 @@ export type GitBackupEntry = { path: string; mode: "100644" | "100755" | "120000
 export type GitDiscardBackup = { ref: string; oid: string; entries: GitBackupEntry[] };
 export type GitCommitInput = { message: string; amend?: boolean; signoff?: boolean };
 /** A local branch; `upstream` is the short name of the branch it tracks. */
-export type GitBranch = { name: string; ref: string; oid: string; current: boolean; upstream: string | null; time: number };
+/** `ahead`/`behind` count commits against the upstream (0 without one); `gone` is set when the upstream ref no longer exists. */
+export type GitBranch = { name: string; ref: string; oid: string; current: boolean; upstream: string | null; time: number; ahead: number; behind: number; gone: boolean };
 /** A remote-tracking branch: `name` is "origin/feature", `branch` is "feature". */
 export type GitRemoteBranch = { name: string; ref: string; oid: string; remote: string; branch: string };
 /** A tag; `oid` is the commit it points at (annotated tags are peeled). */
 export type GitTag = { name: string; ref: string; oid: string };
-export type GitRefList = { branches: GitBranch[]; remotes: { name: string; branches: GitRemoteBranch[] }[]; tags: GitTag[] };
+/** `defaultBranch` is the full ref name of the branch new work merges into (see parseRefList), or null. */
+export type GitRefList = { branches: GitBranch[]; remotes: { name: string; branches: GitRemoteBranch[] }[]; tags: GitTag[]; defaultBranch: string | null };
 /** A stash entry: its commit, its current `stash@{n}` index, its reflog subject ("On main: message") and when it was made. */
 export type GitStash = { oid: string; index: number; message: string; time: number };
 export type GitStashPushOptions = GitReadOptions & { includeUntracked?: boolean };
@@ -328,17 +330,25 @@ export function parseRefDecorations(output: string) {
   return decorations;
 }
 
-/** Splits `for-each-ref` output (fields joined by NUL) into branches, remote branches by remote and tags. */
+/**
+ * Splits `for-each-ref` output (fields joined by NUL) into branches, remote branches by remote and tags. The default
+ * branch is the one a remote's HEAD points at (origin's first), else origin's or the local main or master.
+ */
 export function parseRefList(output: string, remoteNames: readonly string[]): GitRefList {
-  const list: GitRefList = { branches: [], remotes: remoteNames.map(name => ({ name, branches: [] })), tags: [] };
+  const list: GitRefList = { branches: [], remotes: remoteNames.map(name => ({ name, branches: [] })), tags: [], defaultBranch: null };
+  const remoteHeads = new Map<string, string>();
   // The longest remote name that prefixes the ref wins, so "a/b" is not split as remote "a".
   const remotes = [...list.remotes].sort((a, b) => b.name.length - a.name.length);
   for (const line of output.split("\n")) {
-    const [ref = "", object = "", peeled = "", head = "", upstream = "", symref = "", time = ""] = line.split("\0");
+    const [ref = "", object = "", peeled = "", head = "", upstream = "", symref = "", time = "", track = ""] = line.split("\0");
+    if (symref && ref.startsWith("refs/remotes/") && ref.endsWith("/HEAD")) remoteHeads.set(ref.slice(13, -5), symref);
     if (!object || symref) continue;
     const oid = peeled || object;
     if (ref.startsWith("refs/heads/")) {
-      list.branches.push({ name: ref.slice(11), ref, oid, current: head === "*", upstream: upstream || null, time: Number(time) || 0 });
+      list.branches.push({
+        name: ref.slice(11), ref, oid, current: head === "*", upstream: upstream || null, time: Number(time) || 0,
+        ahead: Number(/ahead (\d+)/.exec(track)?.[1] ?? 0), behind: Number(/behind (\d+)/.exec(track)?.[1] ?? 0), gone: track === "gone",
+      });
     } else if (ref.startsWith("refs/tags/")) {
       list.tags.push({ name: ref.slice(10), ref, oid });
     } else if (ref.startsWith("refs/remotes/")) {
@@ -347,6 +357,9 @@ export function parseRefList(output: string, remoteNames: readonly string[]): Gi
       if (remote) remote.branches.push({ name, ref, oid, remote: remote.name, branch: name.slice(remote.name.length + 1) });
     }
   }
+  const exists = (ref: string) => list.branches.some(entry => entry.ref === ref) || list.remotes.some(remote => remote.branches.some(entry => entry.ref === ref));
+  list.defaultBranch = [remoteHeads.get("origin"), ...remoteHeads.values(), "refs/remotes/origin/main", "refs/remotes/origin/master", "refs/heads/main", "refs/heads/master"]
+    .find(ref => ref && exists(ref)) ?? null;
   return list;
 }
 
@@ -897,11 +910,33 @@ export class GitService {
   listRefs(options: GitReadOptions = {}) {
     return this.enqueue(options, async () => {
       const [output, remotes] = await Promise.all([
-        this.git(["for-each-ref", "--format=%(refname)%00%(objectname)%00%(*objectname)%00%(HEAD)%00%(upstream:short)%00%(symref)%00%(committerdate:unix)", "refs/heads", "refs/remotes", "refs/tags"], options, 10_000),
+        this.git(["for-each-ref", "--format=%(refname)%00%(objectname)%00%(*objectname)%00%(HEAD)%00%(upstream:short)%00%(symref)%00%(committerdate:unix)%00%(upstream:track,nobracket)", "refs/heads", "refs/remotes", "refs/tags"], options, 10_000),
         this.git(["remote"], options, 5_000),
       ]);
       return parseRefList(output, remotes.split("\n").filter(Boolean));
     });
+  }
+
+  /** How many commits each local branch has that `base` (a full ref name) doesn't, by full ref name; one `for-each-ref`. */
+  async branchesAhead(base: string, options: GitReadOptions = {}): Promise<Record<string, number>> {
+    if (!/^refs\/[^\0\s()]+$/.test(base)) throw new Error("Expected a full ref name.");
+    const output = await this.read(["for-each-ref", `--format=%(refname)%00%(ahead-behind:${base})`, "refs/heads"], options, 10_000);
+    const counts: Record<string, number> = {};
+    for (const line of output.split("\n")) {
+      const [ref = "", aheadBehind = ""] = line.split("\0");
+      if (ref) counts[ref] = Number(aheadBehind.split(" ")[0]) || 0;
+    }
+    return counts;
+  }
+
+  /** The commits `ref` has that `base` doesn't (`git log base..ref`, both full ref names), newest first, at most `count`. */
+  async logRange(base: string, ref: string, { count = 500, ...options }: GitReadOptions & { count?: number } = {}): Promise<GitHistorySearchPage> {
+    if (![base, ref].every(name => /^refs\/[^\0\s.][^\0\s]*$/.test(name) && !name.includes(".."))) throw new Error("Expected full ref names.");
+    const output = await this.read([
+      "log", "--topo-order", "-z", "--no-show-signature", "--format=%x1e%H%x00%P%x00%an%x00%ae%x00%at%x00%s", `--max-count=${count + 1}`, `${base}..${ref}`, "--",
+    ], options);
+    const commits = parseFileHistory(output, "");
+    return { commits: commits.slice(0, count), done: commits.length <= count };
   }
 
   /** Resolves when `name` is a valid branch name (`git check-ref-format --branch`); rejects with a readable message otherwise. */
@@ -1212,9 +1247,9 @@ export class GitService {
     return Promise.race([pending, aborted]).finally(() => signal.removeEventListener("abort", onAbort));
   }
 
-  /** The remote and branch name the current branch tracks, or null without an upstream. */
-  private async upstream(options: GitReadOptions) {
-    const branch = await this.currentBranch(options);
+  /** The remote and branch name `branch` (the current branch by default) tracks, or null without an upstream. */
+  private async upstream(options: GitReadOptions, name?: string) {
+    const branch = name ?? await this.currentBranch(options);
     if (!branch) return null;
     const [remote = "", merge = ""] = await Promise.all([`branch.${branch}.remote`, `branch.${branch}.merge`].map(key =>
       this.read(["config", "--get", key], options, 5_000, false, [0, 1]).then(value => value.trim())));
@@ -1254,16 +1289,25 @@ export class GitService {
   }
 
   /**
-   * Pushes the branch to its upstream (`git push --progress <remote> refs/heads/<branch>:<upstream branch>`, whatever
-   * push.default says), or for a first push `git push --set-upstream <remote> <branch>`. Never forces. Rejects with
+   * Pushes the current branch; see pushBranch. Rejects when HEAD is detached.
+   */
+  async push(options: GitPushOptions = {}) {
+    const branch = await this.currentBranch(options);
+    if (!branch) throw new Error("Check out a branch to push; HEAD is detached.");
+    return this.pushBranch(branch, options);
+  }
+
+  /**
+   * Pushes local branch `branch`, checked out or not, to its upstream (`git push --progress <remote>
+   * refs/heads/<branch>:<upstream branch>`, whatever push.default says), or for a first push `git push --set-upstream
+   * <remote> refs/heads/<branch>:refs/heads/<branch>`. Never forces; the remote-tracking ref follows. Rejects with
    * GitPushRejectedError when the remote has commits the branch doesn't, and GitNoUpstreamError when there is no upstream.
    */
-  push({ setUpstream, ...options }: GitPushOptions = {}) {
+  pushBranch(branch: string, { setUpstream, ...options }: GitPushOptions = {}) {
     if (setUpstream !== undefined && (!setUpstream || setUpstream.startsWith("-"))) return Promise.reject(new Error(`“${setUpstream}” isn’t a remote name.`));
+    if (!branch || branch.startsWith("-") || /[\0\s:]/.test(branch)) return Promise.reject(new Error(`“${branch}” isn’t a branch name.`));
     return this.network(options, async run => {
-      const branch = await this.currentBranch(options);
-      if (!branch) throw new Error("Check out a branch to push; HEAD is detached.");
-      const upstream = setUpstream ? null : await this.upstream(options);
+      const upstream = setUpstream ? null : await this.upstream(options, branch);
       if (!setUpstream && !upstream) throw new GitNoUpstreamError(`The branch “${branch}” has no upstream branch yet. Publish it to set one.`);
       try {
         await run(["push", "--progress", ...upstream ? [upstream.remote, `refs/heads/${branch}:${upstream.merge}`] : ["--set-upstream", setUpstream!, `refs/heads/${branch}:refs/heads/${branch}`]]);

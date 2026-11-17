@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { PlatformColor, StyleSheet, Text, View } from "react-native";
 import { watchDirectories } from "@legend-apps/file-system-watcher";
 import { GitBranchNotMergedError, GitLocalChangesError, GitPullDivergedError, GitPushRejectedError, GitServiceError, GitStashDropError, type GitRefList, type GitStash, type GitStatusEntry } from "@legend-apps/git-core";
@@ -6,7 +6,8 @@ import { Button } from "@legendapp/spark/ui";
 import { conflictedEntries, createGitChanges, emptyChanges, stagedEntries, unstagedEntries } from "./gitChanges";
 import { DiffPane, type DiffLineTarget } from "./DiffPane";
 import { CommitDetails, HistoryList, type BlameTarget, type HistoryActions } from "./HistoryView";
-import { commandEnabled, commandLabel, commandMenuItem, runCommand, sectionRef, sectionShowsHistory, sectionStash, sectionWorktree, type CommandContext, type CommandId, type Section } from "./commands";
+import { commandEnabled, commandLabel, commandMenuItem, queueEntry, runCommand, sectionRef, sectionReview, sectionShowsHistory, sectionStash, sectionWorktree, type CommandContext, type CommandId, type Section } from "./commands";
+import { queueDetail, queuePushTarget, reviewQueue, type QueueEntry } from "./gitQueue";
 import { createGitRefs, emptyRefs, findRef, recentBranches, resolveBranchName, type WorktreeEntry } from "./gitRefs";
 import { createWorktreePreview, emptyWorktreePreview, worktreeDetail, worktreeName, type WorktreePreviewState } from "./gitWorktrees";
 import { closeMenuWindow, mainWindowId, registerMenuRunner, runMenuAction, useMenuBar, openWorktreePaths, openWorktreeWindow, publishMenu, setMenuWindow, type GitWindowProps } from "./gitWindows";
@@ -60,6 +61,10 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
   const [network, setNetwork] = useState(emptyNetwork);
   const networkController = useRef<ReturnType<typeof createGitNetwork> | null>(null);
   const root = changes.root;
+  const queue = useMemo(() => root ? reviewQueue(refs) : [], [root, refs]);
+  const selectedQueue = queueEntry(queue, section);
+  const queueWorktree = selectedQueue?.kind === "worktree" ? selectedQueue : null;
+  const queueBranch = selectedQueue?.kind === "branch" ? selectedQueue : null;
   const showsHistory = sectionShowsHistory(section);
   const selectedStash = sectionStash(section);
   const selectedWorktree = sectionWorktree(section);
@@ -299,7 +304,7 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
   }
 
   /** Runs a fetch, pull or push; Git's message goes in a warning sheet, a cancelled one says nothing. Changes and History re-read after. */
-  async function runNetwork(operation: NetworkOperation, start: (owner: ReturnType<typeof createGitNetwork>) => Promise<void>) {
+  async function runNetwork(operation: NetworkOperation, start: (owner: ReturnType<typeof createGitNetwork>) => Promise<void>, upstream?: string | null) {
     const owner = networkController.current;
     if (!owner) return;
     const branch = changes.status?.branch;
@@ -308,13 +313,46 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     } catch (error) {
       if (error instanceof GitServiceError && error.code === "aborted") return;
       const text = (error instanceof Error ? error.message : String(error)).replace(/^hint:.*(?:\n|$)/gm, "").trim();
-      if (error instanceof GitPushRejectedError) await reportBranchError(`“${branch?.upstream ?? "The remote"}” Has Commits You Don’t Have`, `Pull first, then push again.\n\n${text}`);
+      if (error instanceof GitPushRejectedError) await reportBranchError(`“${(upstream === undefined ? branch?.upstream : upstream) ?? "The remote"}” Has Commits You Don’t Have`, `Pull first, then push again.\n\n${text}`);
       else if (error instanceof GitPullDivergedError) {
         await reportBranchError("Couldn’t Pull", `${text}\n\n“${branch?.head}” and “${branch?.upstream}” both have new commits. Legend Git pulls only by fast-forward for now; merge or rebase the branch in Terminal.`);
       } else await reportBranchError({ fetch: "Couldn’t Fetch", pull: "Couldn’t Pull", push: "Couldn’t Push", publish: "Couldn’t Publish the Branch" }[operation], text);
     } finally {
       if (networkController.current === owner) { void controller.current?.refresh(); void historyController.current?.refresh(); }
     }
+  }
+
+  /** Pushes a queue entry's branch, or publishes it (after the sheet) when it has no upstream; the queue re-reads after. */
+  async function pushQueueEntry(id: QueueEntry["id"]) {
+    const owner = networkController.current, entry = reviewQueue(refsRef.current).find(item => item.id === id);
+    const target = entry && queuePushTarget(entry);
+    if (!owner || !entry || !target) return;
+    try {
+      if (!target.publish) { await runNetwork("push", current => current.pushBranch(target.branch), entry.upstream); return; }
+      const remote = await owner.publishRemote().catch((error: unknown) => { console.error(error); return null; });
+      if (!remote) { await reportBranchError("There’s No Remote to Publish To", "Add a remote to the repository (git remote add), then publish the branch."); return; }
+      if (networkController.current !== owner || !await confirmPublish(windowId, target.branch, remote)) return;
+      await runNetwork("publish", current => current.publishBranch(target.branch, remote));
+    } finally { void refsController.current?.refresh(); }
+  }
+
+  /** Stages or unstages one file of the selected queued worktree, in that worktree. */
+  async function changeQueueFile(path: string, stage: boolean) {
+    try { await worktreeController.current?.write(stage ? { stage: path } : { unstage: path }); }
+    catch (error) { await reportBranchError(stage ? "Couldn’t Stage the File" : "Couldn’t Unstage the File", error); }
+  }
+
+  /** Asks for a commit message in a sheet, then commits the queued worktree's index there. */
+  async function commitQueueWorktree() {
+    const entry = queueWorktree, owner = worktreeController.current;
+    if (!entry || !owner) return;
+    const result = await showPrompt({
+      windowId, title: `Commit to “${entry.branch ?? entry.name}”`, message: `Commits the staged changes in the worktree “${entry.name}”.`, placeholder: "Summary", confirmLabel: "Commit",
+    }).catch((error: unknown) => { console.error(error); return { canceled: true as const }; });
+    const message = result.canceled ? "" : result.value.trim();
+    if (!message) return;
+    try { await owner.write({ commit: `${message}\n` }); } catch (error) { await reportBranchError("Couldn’t Commit", error); }
+    finally { void refsController.current?.refresh(); }
   }
 
   /** Pushes; a branch without an upstream is published to the default remote after a sheet naming it. */
@@ -348,7 +386,8 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     canRestoreDiscard: !busy && !!lastDiscard,
     generating,
     canGenerate: !!root && section === "changes" && !busy && !!staged.length && !conflicts,
-    canCommit: !!root && section === "changes" && !busy,
+    canCommit: !!root && section === "changes" && !busy
+      || !!queueWorktree && worktreePreview.path === queueWorktree.path && !worktreePreview.writing && worktreePreview.files.some(file => file.kind !== "untracked" && file.indexStatus !== "."),
     refs: root ? refs.refs : null,
     unborn: !root || changes.status?.branch.oid === "(initial)",
     branchBusy: refs.writing,
@@ -360,6 +399,7 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     upstream: root ? changes.status?.branch.upstream ?? null : null,
     hasRemote: !!root && !!refs.refs?.remotes.length,
     network: root ? network.operation : null,
+    queue,
     run: {
       openRepository: () => void chooseRepository(),
       toggleSidebar: () => setSidebarCollapsed(value => !value),
@@ -386,7 +426,7 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
       discardLines: () => discardLines.current?.(),
       restoreDiscard: () => void restoreDiscard(),
       toggleGenerate: () => generator.current?.toggle(),
-      commit: () => commit.current?.(),
+      commit: () => { if (queueWorktree) void commitQueueWorktree(); else commit.current?.(); },
       checkout: ref => void checkout(ref),
       switchBranch: () => void switchBranch(),
       newBranch: start => void newBranch(start),
@@ -405,6 +445,7 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
       pull: () => void runNetwork("pull", owner => owner.pull()),
       push: () => void push(),
       cancelNetwork: () => networkController.current?.cancel(),
+      pushQueueEntry: id => void pushQueueEntry(id),
     },
   };
   const contextRef = useRef(context);
@@ -418,10 +459,10 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
       { type: "submenu", id: "file", label: "File", target: { menu: "file" }, items: [item("open-repository"), item("open-worktree")] },
       { type: "submenu", id: "edit", label: "Edit", target: { menu: "edit" }, items: [item("copy-sha"), { type: "separator" }, item("blame-line")] },
       // AppKit's own View ▸ Show/Hide Sidebar drives the split view, so the menu has no second one.
-      { type: "submenu", id: "view", label: "View", target: { menu: "view" }, items: [item("show-changes"), item("show-history"), { type: "separator" }, item("show-file-history"), item("show-all-history")] },
+      { type: "submenu", id: "view", label: "View", target: { menu: "view" }, items: [item("show-changes"), item("show-history"), item("show-review"), { type: "separator" }, item("show-file-history"), item("show-all-history")] },
       { type: "submenu", id: "repository", label: "Repository", placement: { before: { menu: "window" } }, items: [item("fetch"), item("pull"), item("push"), item("cancel-network"), { type: "separator" }, item("refresh"), { type: "separator" }, item("open-github")] },
       { type: "submenu", id: "branch", label: "Branch", placement: { before: { menu: "window" } }, items: [item("switch-branch"), item("new-branch"), { type: "separator" }, item("rename-branch"), item("delete-branch")] },
-      { type: "submenu", id: "worktree", label: "Worktree", placement: { before: { menu: "window" } }, items: [item("new-worktree"), { type: "separator" }, item("reveal-worktree"), item("remove-worktree")] },
+      { type: "submenu", id: "worktree", label: "Worktree", placement: { before: { menu: "window" } }, items: [item("new-worktree"), item("open-review-worktree"), { type: "separator" }, item("reveal-worktree"), item("remove-worktree")] },
       {
         type: "submenu", id: "changes", label: "Changes", placement: { before: { menu: "window" } },
         items: [
@@ -455,12 +496,31 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
   // Rows are listed only while there are linked worktrees, so a selected main worktree has no row once they are gone.
   const worktreeEntry = selectedWorktree && (refs.worktrees?.length ?? 0) > 1 ? refs.worktrees?.find(entry => entry.path === selectedWorktree) ?? null : null;
   // The selected worktree's files are re-read whenever the worktrees are re-read (any change the watcher sees).
-  useEffect(() => { void worktreeController.current?.show(worktreeEntry ? selectedWorktree : null); }, [selectedWorktree, root, refs.worktrees]); // eslint-disable-line react-hooks/exhaustive-deps -- worktreeEntry follows refs.worktrees
+  // A queued worktree shares the preview (its files can be staged and committed there).
+  const previewPath = worktreeEntry ? selectedWorktree : queueWorktree?.path ?? null;
+  useEffect(() => { void worktreeController.current?.show(previewPath); }, [previewPath, root, refs.worktrees]);
   useEffect(() => {
     if (!sectionShowsHistory(section)) return;
     historyController.current?.setRef(sectionRef(section));
     void historyController.current?.activate();
   }, [section, root]);
+  // A queued branch lists its outgoing commits, re-read when its count changes (a commit or a push).
+  useEffect(() => {
+    if (!queueBranch) return;
+    historyController.current?.setRange(queueBranch.ref, queueBranch.base);
+    void historyController.current?.activate();
+    void historyController.current?.refresh();
+  }, [queueBranch?.ref, queueBranch?.base, queueBranch?.ahead, root]); // eslint-disable-line react-hooks/exhaustive-deps -- the entry's identity and count
+  // A queue entry that left the queue (committed, pushed, removed) gives way to the same branch's entry, else the first one, else Changes.
+  const lastQueued = useRef<QueueEntry | null>(null);
+  if (selectedQueue) lastQueued.current = selectedQueue;
+  useEffect(() => {
+    if (!sectionReview(section) || selectedQueue || !refs.worktrees) return;
+    const last = lastQueued.current;
+    const branch = last && (last.kind === "branch" ? last.name : last.branch);
+    const next = queue.find(entry => entry.kind === "branch" && entry.name === branch) ?? queue[0];
+    setSection(next ? `review:${next.id}` : "changes");
+  }, [queue, section]); // eslint-disable-line react-hooks/exhaustive-deps -- selectedQueue follows queue and section
   // A selected ref that was deleted or renamed elsewhere falls back to History.
   useEffect(() => {
     const ref = sectionRef(section);
@@ -533,6 +593,17 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
       .then(result => { if (!result.canceled) runCommand(result.itemId, contextRef.current, path); }, console.error);
   }
 
+  function showQueueMenu({ entry, position }: { entry: QueueEntry; position: { x: number; y: number } }) {
+    const menuContext = contextRef.current;
+    const push = { ...commandMenuItem("push-review", menuContext, { target: entry.id, shortcut: false }), label: queuePushTarget(entry)?.publish ? "Publish Branch…" : "Push" };
+    const items = entry.kind === "worktree" ? [
+      { ...commandMenuItem("open-worktree", menuContext, { target: entry.path, shortcut: false }), label: "Open in New Window" }, push,
+      { type: "separator" as const }, commandMenuItem("reveal-worktree", menuContext, { target: entry.path, shortcut: false }),
+    ] : [push];
+    showContextMenu({ windowId, position, items })
+      .then(result => { if (!result.canceled) runCommand(result.itemId, contextRef.current, result.itemId === "push-review" ? entry.id : entry.kind === "worktree" ? entry.path : undefined); }, console.error);
+  }
+
   function showRefMenu({ ref, position }: { ref: string; position: { x: number; y: number } }) {
     const menuContext = contextRef.current;
     const entry = findRef(menuContext.refs, ref);
@@ -547,7 +618,8 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
   // A ref deleted or renamed since it was selected has no row; History is shown until the effect above moves there.
   const sidebarSection = sectionRef(section) && !findRef(refs.refs, sectionRef(section)) ? "history"
     : selectedStash && !refs.stashes?.some(entry => entry.oid === selectedStash) ? "changes"
-    : selectedWorktree && !worktreeEntry ? "changes" : section;
+    : selectedWorktree && !worktreeEntry ? "changes"
+    : sectionReview(section) && !selectedQueue ? "changes" : section;
   const branch = changes.status?.branch;
   const branchLabel = !branch?.head ? null : branch.head === "(detached)" ? `${branch.oid?.slice(0, 7) ?? "HEAD"} (detached)` : branch.head;
   const button = (id: CommandId, symbol: string) => {
@@ -703,7 +775,14 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
 
   const worktreeOpenButton = worktreeEntry && commandEnabled("open-worktree", context, worktreeEntry.path)
     ? <Button style={styles.openWindow} onPress={() => runCommand("open-worktree", contextRef.current, worktreeEntry.path)}>Open in New Window</Button> : null;
-  const worktreePatch = worktreePreview.path === selectedWorktree ? worktreePreview.patch : null;
+  const worktreePatch = worktreePreview.path === previewPath ? worktreePreview.patch : null;
+  // The selected file of a queued worktree: Unstage when all its changes are staged, else Stage.
+  const queueFile = queueWorktree && worktreePreview.path === queueWorktree.path ? worktreePreview.files.find(file => file.path === worktreePreview.selectedPath) : undefined;
+  const queueUnstage = !!queueFile && queueFile.kind !== "untracked" && queueFile.worktreeStatus === ".";
+  const queueStageButton = queueWorktree ? <Button style={styles.action} disabled={!queueFile || worktreePreview.writing || queueFile.kind === "unmerged"}
+    onPress={() => { if (queueFile) void changeQueueFile(queueFile.path, !queueUnstage); }}>{queueUnstage ? "Unstage" : "Stage"}</Button> : null;
+  const queuePushButton = selectedQueue ? <Button style={styles.action} disabled={!commandEnabled("push-review", context)} onPress={() => runCommand("push-review", contextRef.current)}>
+    {queuePushTarget(selectedQueue)?.publish ? "Publish…" : "Push"}</Button> : null;
   const worktreeDetailPane = worktreePatch
     ? <DiffPane readOnly disabled patch={{ path: worktreePatch.path, text: worktreePatch.text, file: worktreePatch.file, section: "unstaged", conflicted: false }} onApply={() => {}} />
     : <EmptyState title={worktreePreview.loading ? "Loading Worktree…" : worktreePreview.error ? "Couldn’t Read the Worktree" : worktreePreview.files.length ? "No Selection" : "Working Tree Clean"}
@@ -732,13 +811,17 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
       onSidebarCollapsedChange={setSidebarCollapsed}
       titleBar={{ content: { height: contentInset, material: "titlebar" } }}
       sidebar={
-        <Sidebar style={styles.root} selectedId={root ? sidebarSection : null} onSelectionChange={event => { if (event.id === "changes" || event.id === "history" || event.id?.startsWith("ref:") || event.id?.startsWith("stash:") || event.id?.startsWith("worktree:")) setSection(event.id as Section); }} contentInsetTop={58}>
+        <Sidebar style={styles.root} selectedId={root ? sidebarSection : null} onSelectionChange={event => {
+          if (event.id === "review") runCommand("show-review", contextRef.current);
+          else if (event.id === "changes" || event.id === "history" || event.id?.startsWith("ref:") || event.id?.startsWith("stash:") || event.id?.startsWith("worktree:") || event.id?.startsWith("review:")) setSection(event.id as Section);
+        }} contentInsetTop={58}>
           <SidebarItem id="repositories" selectable={false}>
             <Text style={styles.section}>{root?.split("/").pop() ?? "Repositories"}</Text>
           </SidebarItem>
           {root ? [
             <SidebarItem key="changes" id="changes"><SidebarRow symbol="square.and.pencil" label="Changes" count={changes.status?.entries.length} /></SidebarItem>,
             <SidebarItem key="history" id="history"><SidebarRow symbol="clock" label="History" /></SidebarItem>,
+            ...queueSidebarItems(queue, showQueueMenu),
             ...refSidebarItems(refs.refs, ref => showRefMenu(ref)),
             ...stashSidebarItems(refs.stashes, showStashMenu),
             ...worktreeSidebarItems(refs.worktrees, root, showWorktreeMenu),
@@ -751,11 +834,31 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
         {showsHistory ? <View style={styles.listPane}><HistoryList history={history} actions={historyActions} /></View> : null}
         {stashEntry ? <View style={styles.listPane}><StashFiles stash={stashEntry} preview={stashPreview} filter={filter} onSelect={path => stashController.current?.selectFile(path)} /></View> : null}
         {worktreeEntry ? <View style={styles.listPane}><WorktreeFiles worktree={worktreeEntry} preview={worktreePreview} filter={filter} accessory={worktreeOpenButton} onSelect={path => worktreeController.current?.selectFile(path)} /></View> : null}
+        {queueWorktree ? <View style={styles.listPane}>
+          <WorktreeFiles worktree={queueWorktree} title={queueWorktree.branch ? `${queueWorktree.name} — ${queueWorktree.branch}` : queueWorktree.name} preview={worktreePreview} filter={filter}
+            accessory={queueStageButton} onSelect={path => worktreeController.current?.selectFile(path)} />
+          <View style={styles.queueBar}>
+            {commandEnabled("open-worktree", context, queueWorktree.path) ? <Button style={styles.queueOpen} onPress={() => runCommand("open-worktree", contextRef.current, queueWorktree.path)}>Open Window</Button> : null}
+            <View style={styles.root} />
+            {queuePushButton}
+            <Button style={styles.discard} disabled={!commandEnabled("commit", context)} onPress={() => runCommand("commit", contextRef.current)}>Commit…</Button>
+          </View>
+        </View> : null}
+        {queueBranch ? <View style={styles.listPane}>
+          <View style={[styles.heading, styles.tallHeading]}>
+            <View style={styles.headingStack}>
+              <Text style={[styles.headingLabel, styles.fixed]} accessibilityRole="header" numberOfLines={1}>{queueBranch.name}</Text>
+              <Text style={styles.headingNote} numberOfLines={1}>{`${queueBranch.ahead === 1 ? "1 commit" : `${queueBranch.ahead} commits`} not on ${queueBranch.upstream ?? queueBranch.base.replace(/^refs\/(heads|remotes)\//, "")}`}</Text>
+            </View>
+            {queuePushButton}
+          </View>
+          <View style={[styles.root, styles.separated]}><HistoryList history={history} actions={historyActions} /></View>
+        </View> : null}
       </> : undefined}
       content={
         <View style={styles.content}>
           {changes.error ? <Text accessibilityRole="alert" selectable style={styles.error}>{changes.error}</Text> : null}
-          {root ? <View style={styles.detail}>{showsHistory ? <CommitDetails history={history} actions={historyActions} /> : stashEntry ? stashDetail : worktreeEntry ? worktreeDetailPane : changesDetail}</View>
+          {root ? <View style={styles.detail}>{showsHistory || queueBranch ? <CommitDetails history={history} actions={historyActions} /> : stashEntry ? stashDetail : worktreeEntry || queueWorktree ? worktreeDetailPane : changesDetail}</View>
             : changes.loading ? <EmptyState title="Opening Repository…" />
             : <EmptyState symbol="folder" title="No Repository Open" message="Open a Git repository to see its changes and commit them.">
               <Button style={styles.open} onPress={() => void chooseRepository()}>Open Repository…</Button>
@@ -826,12 +929,23 @@ function worktreeSidebarItems(worktrees: WorktreeEntry[] | null, root: string | 
   ];
 }
 
+/** The Review Queue row (selecting it selects an entry), then one indented row per entry; left out when nothing is pending. */
+function queueSidebarItems(queue: readonly QueueEntry[], onContextMenu: (event: { entry: QueueEntry; position: { x: number; y: number } }) => void) {
+  if (!queue.length) return [];
+  return [
+    <SidebarItem key="review" id="review"><SidebarRow symbol="tray.full" label="Review Queue" count={queue.length} /></SidebarItem>,
+    ...queue.map(entry => <SidebarItem key={`review:${entry.id}`} id={`review:${entry.id}`} onContextMenu={event => onContextMenu({ entry, position: event.windowPosition })}>
+      <SidebarRow symbol={entry.kind === "worktree" ? "folder" : "arrow.triangle.branch"} label={entry.name} detail={queueDetail(entry)} indent />
+    </SidebarItem>),
+  ];
+}
+
 /** The selected worktree's changed files, read-only, with Open in New Window; selecting a file shows its diff. */
-function WorktreeFiles({ worktree, preview, filter, accessory, onSelect }: { worktree: WorktreeEntry; preview: WorktreePreviewState; filter: string; accessory: ReactNode; onSelect: (path: string) => void }) {
+function WorktreeFiles({ worktree, title = worktree.path, preview, filter, accessory, onSelect }: { worktree: { path: string }; title?: string; preview: WorktreePreviewState; filter: string; accessory: ReactNode; onSelect: (path: string) => void }) {
   const files = preview.path === worktree.path ? preview.files.filter(file => !filter || file.path === preview.selectedPath || pathParts(file.path).name.toLowerCase().includes(filter.toLowerCase())) : [];
   return <View style={styles.listSection}>
     <View style={styles.heading}>
-      <Text style={styles.headingLabel} accessibilityRole="header" numberOfLines={1} ellipsizeMode="head">{worktree.path}</Text>
+      <Text style={styles.headingLabel} accessibilityRole="header" numberOfLines={1} ellipsizeMode="head">{title}</Text>
       {accessory}
     </View>
     {files.length ? <Sidebar style={styles.root} selectedId={files.some(file => file.path === preview.selectedPath) ? preview.selectedPath : null} onSelectionChange={event => { if (event.id) onSelect(event.id); }} defaultRowHeight={24}>
@@ -927,6 +1041,12 @@ const styles = StyleSheet.create({
   separated: { borderTopWidth: StyleSheet.hairlineWidth, borderColor: PlatformColor("separatorColor") },
   heading: { flexDirection: "row", alignItems: "center", gap: 8, height: 36, paddingLeft: 16, paddingRight: 12 },
   headingLabel: { flex: 1, fontSize: 11, fontWeight: "600", color: PlatformColor("secondaryLabelColor") },
+  headingNote: { marginTop: 2, fontSize: 11, color: PlatformColor("secondaryLabelColor") },
+  tallHeading: { height: 48 },
+  queueOpen: { width: 110, height: 24 },
+  headingStack: { flex: 1, justifyContent: "center" },
+  fixed: { flex: 0 },
+  queueBar: { flexDirection: "row", alignItems: "center", gap: 6, height: 44, paddingHorizontal: 10, borderTopWidth: StyleSheet.hairlineWidth, borderColor: PlatformColor("separatorColor") },
   action: { width: 72, height: 24 },
   stashButtons: { flexDirection: "row", gap: 8 },
   openWindow: { width: 150, height: 24 },

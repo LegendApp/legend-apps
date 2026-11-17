@@ -6,8 +6,10 @@ export type WorktreePreviewState = {
   path: string | null; files: GitStatusEntry[]; selectedPath: string | null;
   patch: { path: string; text: string; file: UnifiedPatchFile | null } | null;
   loading: boolean; error: string | null;
+  /** A stage, unstage or commit (Review Queue) is running in the worktree. */
+  writing: boolean;
 };
-export const emptyWorktreePreview: WorktreePreviewState = { path: null, files: [], selectedPath: null, patch: null, loading: false, error: null };
+export const emptyWorktreePreview: WorktreePreviewState = { path: null, files: [], selectedPath: null, patch: null, loading: false, error: null, writing: false };
 
 /** The folder name of a worktree path, for its sidebar row and window title. */
 export const worktreeName = (path: string) => path.replace(/\/+$/, "").split("/").pop() || path;
@@ -46,7 +48,7 @@ export function createWorktreePreview(onChange: (state: WorktreePreviewState) =>
     }
   };
 
-  return {
+  const api = {
     setRoot(root: string | null) {
       cancel();
       service = root ? serviceFor(root) : undefined;
@@ -75,6 +77,25 @@ export function createWorktreePreview(onChange: (state: WorktreePreviewState) =>
       if (!git || !worktree || !entry || path === state.selectedPath) return;
       void loadFile(git, worktree, entry);
     },
+    /**
+     * Stages or unstages one file, or commits the index, in the shown worktree through that worktree's own GitService
+     * (its own queue and index.lock check), then re-reads its files; rejects with Git's error.
+     */
+    async write(operation: { stage: string } | { unstage: string } | { commit: string }) {
+      const worktree = state.path;
+      if (!worktree || !service || closed) throw new Error("Select a worktree first.");
+      if (state.writing) throw new Error("Another change in this worktree is still running.");
+      const git = serviceFor(worktree);
+      publish({ writing: true });
+      try {
+        if ("stage" in operation) await git.stageFile(operation.stage);
+        else if ("unstage" in operation) await git.unstageFile(operation.unstage);
+        else await git.commit({ message: operation.commit });
+      } finally {
+        if (state.path === worktree) { publish({ writing: false }); await api.show(worktree); }
+      }
+    },
     dispose() { closed = true; cancel(); service = undefined; },
   };
+  return api;
 }

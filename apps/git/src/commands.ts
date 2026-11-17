@@ -2,12 +2,22 @@ import type { GitRefList, GitStash } from "@legend-apps/git-core";
 import { searchScopes, type SearchScope } from "./gitHistory";
 import { findRef, type WorktreeEntry } from "./gitRefs";
 import { networkVerb, type NetworkOperation } from "./gitNetwork";
+import { canPushQueueEntry, queuePushTarget, type QueueEntry } from "./gitQueue";
 
-/** A sidebar item: Changes, History, a branch, remote branch or tag by its full ref name, a stash by its oid, or a worktree by its path. */
-export type Section = "changes" | "history" | `ref:${string}` | `stash:${string}` | `worktree:${string}`;
+/**
+ * A sidebar item: Changes, History, a branch, remote branch or tag by its full ref name, a stash by its oid, a worktree by
+ * its path, or a Review Queue entry by its id (`review:worktree:<path>`, `review:branch:<ref>`).
+ */
+export type Section = "changes" | "history" | `ref:${string}` | `stash:${string}` | `worktree:${string}` | `review:${QueueEntry["id"]}`;
 export const sectionRef = (section: Section) => section.startsWith("ref:") ? section.slice(4) : null;
 export const sectionStash = (section: Section) => section.startsWith("stash:") ? section.slice(6) : null;
 export const sectionWorktree = (section: Section) => section.startsWith("worktree:") ? section.slice(9) : null;
+export const sectionReview = (section: Section) => section.startsWith("review:") ? section.slice(7) as QueueEntry["id"] : null;
+/** The selected Review Queue entry, if it is still queued. */
+export const queueEntry = (queue: readonly QueueEntry[], section: Section) => {
+  const id = sectionReview(section);
+  return id ? queue.find(entry => entry.id === id) ?? null : null;
+};
 /** History lists commits: HEAD's, or a ref's. */
 export const sectionShowsHistory = (section: Section) => section === "history" || section.startsWith("ref:");
 
@@ -58,6 +68,8 @@ export type CommandContext = {
   hasRemote: boolean;
   /** The running fetch, pull or push. */
   network: NetworkOperation | null;
+  /** The Review Queue: other worktrees with changes and branches with commits to push. */
+  queue: readonly QueueEntry[];
   run: {
     openRepository(): void;
     toggleSidebar(): void;
@@ -96,6 +108,8 @@ export type CommandContext = {
     /** Pushes, or publishes a branch without an upstream. */
     push(): void;
     cancelNetwork(): void;
+    /** Pushes (or publishes) a Review Queue entry's branch. */
+    pushQueueEntry(id: QueueEntry["id"]): void;
   };
 };
 
@@ -123,9 +137,10 @@ const stash = (context: CommandContext, target?: string) => {
   const oid = target ?? sectionStash(context.section);
   return context.stashes?.find(entry => entry.oid === oid) ?? null;
 };
-/** The worktree a worktree command acts on: the context menu's, else the selected one. */
+/** The worktree a worktree command acts on: the context menu's, else the selected one (in Worktrees or the Review Queue). */
 const worktree = (context: CommandContext, target?: string) => {
-  const path = target ?? sectionWorktree(context.section);
+  const queued = queueEntry(context.queue, context.section);
+  const path = target ?? sectionWorktree(context.section) ?? (queued?.kind === "worktree" ? queued.path : null);
   return context.worktrees?.find(entry => entry.path === path) ?? null;
 };
 /** Another worktree whose folder is there to open. */
@@ -133,6 +148,8 @@ const openable = (context: CommandContext, target?: string) => {
   const entry = worktree(context, target);
   return entry && !entry.bare && entry.prunable === null && entry.path !== context.root ? entry : null;
 };
+/** The queue entry a queue command acts on: the context menu's (by id), else the selected one. */
+const queued = (context: CommandContext, target?: string) => target ? context.queue.find(entry => entry.id === target) ?? null : queueEntry(context.queue, context.section);
 const canStash = (context: CommandContext) => canWriteBranch(context) && context.hasChanges && !context.busy;
 
 export const commands = [
@@ -140,6 +157,15 @@ export const commands = [
   { id: "toggle-sidebar", label: context => context.sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar", shortcut: "Cmd+Ctrl+s", enabled: () => true, run: context => context.run.toggleSidebar() },
   { id: "show-changes", label: "Changes", shortcut: "Cmd+1", enabled: context => context.hasRepository, run: context => context.run.showSection("changes") },
   { id: "show-history", label: "History", shortcut: "Cmd+2", enabled: context => context.hasRepository, run: context => context.run.showSection("history") },
+  {
+    id: "show-review", label: "Review Queue", shortcut: "Cmd+3", enabled: context => context.hasRepository && context.queue.length > 0,
+    run: context => context.run.showSection(`review:${(queueEntry(context.queue, context.section) ?? context.queue[0]!).id}`),
+  },
+  {
+    id: "push-review", label: (context: CommandContext) => { const entry = queued(context); return entry && queuePushTarget(entry)?.publish ? "Publish Branch…" : "Push"; },
+    enabled: (context, target) => { const entry = queued(context, target); return context.hasRepository && !!entry && canPushQueueEntry(entry) && (!!entry.upstream || context.hasRemote) && !context.network; },
+    run: (context, target) => context.run.pushQueueEntry(queued(context, target)!.id),
+  },
   { id: "fetch", label: "Fetch", shortcut: "Cmd+Alt+f", enabled: context => context.hasRepository && context.hasRemote && !context.network, run: context => context.run.fetch() },
   // Pull fast-forwards the worktree, so it waits for branch writes like a checkout.
   { id: "pull", label: "Pull", shortcut: "Cmd+Shift+Down", enabled: context => canWriteBranch(context) && !!context.upstream && !context.network, run: context => context.run.pull() },
@@ -184,7 +210,7 @@ export const commands = [
     id: "generate-message", label: context => context.generating ? "Cancel Generating Commit Message" : "Generate Commit Message", shortcut: "Cmd+Alt+g",
     enabled: context => context.generating || context.canGenerate, run: context => context.run.toggleGenerate(),
   },
-  { id: "commit", label: "Commit", shortcut: "Cmd+Enter", enabled: context => context.canCommit, run: context => context.run.commit() },
+  { id: "commit", label: context => sectionReview(context.section) ? "Commit…" : "Commit", shortcut: "Cmd+Enter", enabled: context => context.canCommit, run: context => context.run.commit() },
   {
     id: "checkout-ref", label: "Check Out",
     enabled: (context, target) => { const entry = ref(context, target); return canWriteBranch(context) && (entry?.kind === "remote" || (entry?.kind === "branch" && !entry.ref.current)); },
@@ -221,6 +247,13 @@ export const commands = [
   { id: "pop-stash", label: "Pop Stash", enabled: (context, target) => canWriteBranch(context) && !!stash(context, target), run: (context, target) => context.run.popStash(stash(context, target)!.oid) },
   { id: "drop-stash", label: "Drop Stash…", enabled: (context, target) => context.hasRepository && !context.branchBusy && !!stash(context, target), run: (context, target) => context.run.dropStash(stash(context, target)!.oid) },
   { id: "open-worktree", label: "Open Worktree in New Window", shortcut: "Cmd+Shift+o", enabled: (context, target) => !!openable(context, target), run: (context, target) => context.run.openWorktree(openable(context, target)!.path) },
+  {
+    // ⌘↓ (Finder's Open) in the Review Queue, enabled only while a queued worktree is selected. A plain Return key
+    // equivalent would take Return from the window's text fields, and Spark's sidebar sends no key events (Spark ask).
+    id: "open-review-worktree", label: "Open Queued Worktree", shortcut: "Cmd+Down",
+    enabled: context => { const entry = queueEntry(context.queue, context.section); return entry?.kind === "worktree" && !!openable(context, entry.path); },
+    run: context => { const entry = queueEntry(context.queue, context.section); if (entry?.kind === "worktree") context.run.openWorktree(entry.path); },
+  },
   { id: "new-worktree", label: "New Worktree…", enabled: context => canWriteBranch(context) && !!context.worktrees, run: context => context.run.newWorktree() },
   {
     id: "remove-worktree", label: "Remove Worktree…",

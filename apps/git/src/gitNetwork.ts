@@ -60,6 +60,10 @@ export function createGitNetwork(onChange: (state: NetworkState) => void, servic
     push() { return run("push", (git, options) => git.push(options)); },
     /** The branch's first push: sets its upstream on `remote`. */
     publish(remote: string) { return run("publish", (git, options) => git.push({ ...options, setUpstream: remote })); },
+    /** Pushes local branch `branch` (checked out or not) to its upstream. */
+    pushBranch(branch: string) { return run("push", (git, options) => git.pushBranch(branch, options)); },
+    /** Publishes local branch `branch` to `remote`, setting its upstream. */
+    publishBranch(branch: string, remote: string) { return run("publish", (git, options) => git.pushBranch(branch, { ...options, setUpstream: remote })); },
     /** The remote a first push would go to, or null when there's none. */
     publishRemote() {
       return state.root ? serviceFor(state.root).publishRemote() : Promise.resolve(null);

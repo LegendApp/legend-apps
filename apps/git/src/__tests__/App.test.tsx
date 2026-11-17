@@ -973,7 +973,7 @@ describe("worktrees", () => {
     // Only the main worktree: no Worktrees section, and no count is read.
     expect(items().some(item => item.props.id === "group:worktrees")).toBe(false);
     expect(git.worktreeChangeCount).not.toHaveBeenCalled();
-    expect(lastMenu().items.find(entry => entry.id === "worktree").items.map((entry: any) => entry.id ?? "-")).toEqual(["new-worktree", "-", "reveal-worktree", "remove-worktree"]);
+    expect(lastMenu().items.find(entry => entry.id === "worktree").items.map((entry: any) => entry.id ?? "-")).toEqual(["new-worktree", "open-review-worktree", "-", "reveal-worktree", "remove-worktree"]);
     // Spark refuses a menu bar whose item ids repeat (Open Worktree in New Window lives in File only).
     const ids = lastMenu().items.flatMap(entry => [entry.id, ...(entry.items ?? []).map((child: any) => child.id)]).filter(Boolean);
     expect(new Set(ids).size).toBe(ids.length);
@@ -1211,5 +1211,124 @@ it("fetches, pulls and pushes from the Repository menu with ↓/↑ counts and p
   git.publishRemote.mockResolvedValueOnce(null as unknown as string);
   await act(async () => { lastMenu().onAction({ itemId: "push" }); });
   expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ title: "There’s No Remote to Publish To" }));
+  await act(async () => { renderer.unmount(); });
+});
+
+it("lists the Review Queue, stages and commits in a queued worktree through its own service, shows a branch's outgoing commits and pushes or publishes branches", async () => {
+  jest.clearAllMocks();
+  jest.mocked(watchDirectories).mockReturnValue({ remove: jest.fn() });
+  jest.mocked(loadUnifiedDiff).mockReturnValue(new Promise(() => {}));
+  const head = "a".repeat(40), other = "b".repeat(40);
+  jest.mocked(openGitHistory).mockResolvedValue({ head: { handle: 1, headOid: head, unborn: false, detached: false }, page: jest.fn(async () => ({ offset: 0, commits: [], done: true })), close: jest.fn() });
+  const main = { path: "/repo", head, branch: "main", detached: false, bare: false, locked: null, prunable: null, main: true };
+  const dirty = { path: "/work/dirty", head: other, branch: "feature", detached: false, bare: false, locked: null, prunable: null, main: false };
+  const clean = { path: "/work/clean", head, branch: "clean", detached: false, bare: false, locked: null, prunable: null, main: false };
+  let worktrees: unknown[] = [main, dirty, clean];
+  let counts: Record<string, number> = { [dirty.path]: 2, [clean.path]: 0 };
+  let aheadBranch = 2;
+  let outgoing: Record<string, number> = { "refs/heads/main": 0, "refs/heads/feature": 0, "refs/heads/clean": 0, "refs/heads/fresh": 1, "refs/heads/ahead": 2 };
+  let files = [{ kind: "ordinary" as const, path: "a.txt", indexStatus: ".", worktreeStatus: "M" }, { kind: "untracked" as const, path: "new.txt", indexStatus: "?", worktreeStatus: "?" }];
+  const branch = (name: string, upstream: string | null, ahead = 0, current = false) => ({ name, ref: `refs/heads/${name}`, oid: head, current, upstream, time: 1, ahead, behind: 0, gone: false });
+  const remoteBranch = (name: string) => ({ name: `origin/${name}`, ref: `refs/remotes/origin/${name}`, oid: head, remote: "origin", branch: name });
+  const git = { repoRoot: "/repo", resolveRoot: jest.fn(async () => "/repo"), watchLocations: jest.fn(async () => ({ root: "/repo", gitDir: "/repo/.git", commonDir: "/repo/.git", ignoredPaths: [] })),
+    status: jest.fn(async () => ({ branch: { oid: head, head: "main", upstream: "origin/main", ahead: 0, behind: 0 }, entries: [] })), lastDiscard: jest.fn(async () => null), repoState: jest.fn(async () => ({ merging: false })),
+    listRefs: jest.fn(async () => ({
+      branches: [branch("main", "origin/main", 0, true), branch("feature", null), branch("clean", null), branch("fresh", null), branch("ahead", "origin/ahead", aheadBranch)],
+      remotes: [{ name: "origin", branches: [remoteBranch("main"), remoteBranch("ahead")] }], tags: [], defaultBranch: "refs/remotes/origin/main",
+    })),
+    branchesAhead: jest.fn(async () => outgoing),
+    listStashes: jest.fn(async () => []), listWorktrees: jest.fn(async () => worktrees),
+    worktreeChangeCount: jest.fn(async (path: string) => counts[path] ?? 0),
+    worktreeStatus: jest.fn(async () => ({ branch: { oid: other, head: "feature", upstream: null, ahead: 0, behind: 0 }, entries: files })),
+    worktreeFileDiff: jest.fn(async () => ""),
+    revParse: jest.fn(async () => head), refDecorations: jest.fn(async () => new Map()), remoteUrl: jest.fn(async () => null), currentBranch: jest.fn(async () => "main"),
+    logRange: jest.fn(async () => ({ commits: [{ oid: other, parents: [head], author: "Ada", email: "ada@example.test", time: 1, summary: "Outgoing", path: "", oldPath: null, status: "" }], done: true })),
+    commitDetails: jest.fn(async (oid: string) => ({ oid, parents: [head], author: { name: "Ada", email: "ada@example.test", time: 1 }, committer: { name: "Ada", email: "ada@example.test", time: 1 }, message: "Outgoing" })),
+    commitPatch: jest.fn(async () => ""),
+    stageFile: jest.fn(async () => {}), unstageFile: jest.fn(async () => {}), commit: jest.fn(async () => {}),
+    pushBranch: jest.fn(async (_branch: string, _options: GitNetworkOptions & { setUpstream?: string }) => {}), publishRemote: jest.fn(async () => "origin") };
+  // The queued worktree's writes go through its own service.
+  const worktree = { repoRoot: dirty.path, stageFile: jest.fn(async () => { files = [{ ...files[0]!, indexStatus: "M", worktreeStatus: "." }, files[1]!]; }), unstageFile: jest.fn(async () => {}),
+    commit: jest.fn(async () => { files = [files[1]!]; counts = { ...counts, [dirty.path]: 1 }; outgoing = { ...outgoing, "refs/heads/feature": 1 }; }) };
+  jest.mocked(getGitService).mockImplementation(path => (path === dirty.path ? worktree : git) as unknown as GitService);
+  jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
+  const consoleError = jest.spyOn(console, "error");
+  let renderer!: ReactTestRenderer;
+  await act(async () => { renderer = create(<App />); });
+  await act(async () => { openRepository(); });
+  const sidebar = () => renderer.root.findAllByType(Sidebar)[0]!;
+  const items = () => sidebar().findAllByType(SidebarItem);
+  const row = (id: string) => items().find(item => item.props.id === id)!;
+  const menuItem = (id: string) => lastMenu().items.flatMap(entry => entry.items ?? []).find(entry => entry.id === id);
+  // A queued worktree's row also has a Worktrees row; their React keys must differ (the app pass hit a duplicate key).
+  expect(consoleError.mock.calls.some(call => String(call[0]).includes("same key"))).toBe(false);
+  // The last match: Changes' own Stage button stays mounted, hidden.
+  const button = (label: string) => renderer.root.findAllByType(Button).filter(node => [node.props.children].flat().join("") === label).at(-1);
+  const texts = (node: { findAllByType: typeof renderer.root.findAllByType }) => node.findAllByType(Text).map(text => [text.props.children].flat().join(""));
+
+  // The dirty worktree, then the branch ahead of its upstream and the unpublished one; not the clean worktree, main or a branch level with main.
+  const ids = items().map(item => item.props.id);
+  expect(ids.slice(ids.indexOf("history") + 1, ids.indexOf("history") + 5)).toEqual(["review", "review:worktree:/work/dirty", "review:branch:refs/heads/fresh", "review:branch:refs/heads/ahead"]);
+  expect(row("review").findAllByType("SFSymbol" as any).map(symbol => symbol.props.name)).toEqual(["tray.full"]);
+  expect(texts(row("review"))).toEqual(["Review Queue", "3"]);
+  expect(texts(row("review:worktree:/work/dirty"))).toEqual(["dirty", "2 files"]);
+  expect(texts(row("review:branch:refs/heads/ahead"))).toEqual(["ahead", "↑2"]);
+  expect(texts(row("review:branch:refs/heads/fresh"))).toEqual(["fresh", "↑1"]);
+  expect(git.branchesAhead).toHaveBeenCalledWith("refs/remotes/origin/main", expect.anything());
+  expect(menuItem("show-review")).toMatchObject({ label: "Review Queue", shortcut: "Cmd+3", disabled: false });
+  expect(menuItem("open-review-worktree")).toMatchObject({ shortcut: "Cmd+Down", disabled: true });
+
+  // ⌘3 selects the first entry: its files, Stage for the selected one, Commit… once something is staged.
+  await act(async () => { lastMenu().onAction({ itemId: "show-review" }); });
+  expect(sidebar().props.selectedId).toBe("review:worktree:/work/dirty");
+  expect(git.worktreeStatus).toHaveBeenLastCalledWith(dirty.path, expect.anything());
+  expect(menuItem("commit")).toMatchObject({ label: "Commit…", disabled: true });
+  await act(async () => { button("Stage")!.props.onPress(); });
+  expect(worktree.stageFile).toHaveBeenCalledWith("a.txt");
+  expect(git.stageFile).not.toHaveBeenCalled();
+  expect(button("Unstage")).toBeDefined();
+  expect(menuItem("commit")).toMatchObject({ disabled: false });
+  // ⌘↓ opens the worktree in its window.
+  expect(menuItem("open-review-worktree")).toMatchObject({ disabled: false });
+  await act(async () => { lastMenu().onAction({ itemId: "open-review-worktree" }); });
+  expect(openWorktreeWindow).toHaveBeenLastCalledWith(dirty.path, "repo", "repo — feature");
+
+  // Commit… asks for the message, commits in that worktree only, and the queue re-reads its count and the branch's commits.
+  jest.mocked(showPrompt).mockResolvedValueOnce({ canceled: false, value: "Review it" });
+  await act(async () => { lastMenu().onAction({ itemId: "commit" }); });
+  expect(worktree.commit).toHaveBeenCalledWith({ message: "Review it\n" });
+  expect(git.commit).not.toHaveBeenCalled();
+  expect(texts(row("review:worktree:/work/dirty"))).toEqual(["dirty", "1 file · ↑1"]);
+
+  // A worktree with nothing left to commit gives way to its branch's entry, which lists the outgoing commits.
+  counts = { ...counts, [dirty.path]: 0 };
+  await act(async () => { lastMenu().onAction({ itemId: "refresh" }); });
+  expect(sidebar().props.selectedId).toBe("review:branch:refs/heads/feature");
+  expect(git.logRange).toHaveBeenLastCalledWith("refs/remotes/origin/main", "refs/heads/feature", expect.anything());
+  expect(renderer.root.findAllByType("LegendList" as any).at(-1)!.props.data.map((commit: any) => commit.summary)).toEqual(["Outgoing"]);
+
+  // Push sends a branch that isn't checked out to its upstream; once level, it leaves the queue.
+  await act(async () => { sidebar().props.onSelectionChange({ id: "review:branch:refs/heads/ahead" }); });
+  expect(git.logRange).toHaveBeenLastCalledWith("refs/remotes/origin/ahead", "refs/heads/ahead", expect.anything());
+  git.pushBranch.mockImplementationOnce(async () => { aheadBranch = 0; });
+  await act(async () => { button("Push")!.props.onPress(); });
+  expect(git.pushBranch).toHaveBeenLastCalledWith("ahead", expect.objectContaining({ signal: expect.anything() }));
+  expect(items().some(item => item.props.id === "review:branch:refs/heads/ahead")).toBe(false);
+  expect(sidebar().props.selectedId).toMatch(/^review:branch:/);
+
+  // An unpublished branch is published from its context menu after the sheet.
+  jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: false, itemId: "push-review" });
+  jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "publish" });
+  await act(async () => { row("review:branch:refs/heads/fresh").props.onContextMenu({ windowPosition: { x: 1, y: 2 } }); });
+  expect(jest.mocked(showContextMenu).mock.calls.at(-1)![0].items.map((entry: any) => entry.label)).toEqual(["Publish Branch…"]);
+  expect(git.pushBranch).toHaveBeenLastCalledWith("fresh", expect.objectContaining({ setUpstream: "origin" }));
+
+  // A removed worktree leaves the queue; with nothing pending the Review Queue row is gone and the selection falls back.
+  worktrees = [main, clean];
+  outgoing = { ...outgoing, "refs/heads/feature": 0, "refs/heads/fresh": 0 };
+  await act(async () => { lastMenu().onAction({ itemId: "refresh" }); });
+  expect(items().some(item => String(item.props.id).startsWith("review"))).toBe(false);
+  expect(sidebar().props.selectedId).toBe("changes");
+  expect(menuItem("show-review")).toMatchObject({ disabled: true });
   await act(async () => { renderer.unmount(); });
 });

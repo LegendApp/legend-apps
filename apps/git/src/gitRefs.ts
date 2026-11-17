@@ -2,8 +2,9 @@ import { getGitService, type GitAddWorktreeOptions, type GitBranch, type GitRefL
 
 /** A worktree and its number of changed paths (null until counted, or when its folder can't be read). */
 export type WorktreeEntry = GitWorktree & { changes: number | null };
-export type RefsState = { root: string | null; refs: GitRefList | null; stashes: GitStash[] | null; worktrees: WorktreeEntry[] | null; writing: boolean; error: string | null };
-export const emptyRefs: RefsState = { root: null, refs: null, stashes: null, worktrees: null, writing: false, error: null };
+/** `outgoing`: commits each local branch without a live upstream has that the default branch doesn't, by full ref name (null until read, or when there's no default branch). */
+export type RefsState = { root: string | null; refs: GitRefList | null; stashes: GitStash[] | null; worktrees: WorktreeEntry[] | null; outgoing: Record<string, number> | null; writing: boolean; error: string | null };
+export const emptyRefs: RefsState = { root: null, refs: null, stashes: null, worktrees: null, outgoing: null, writing: false, error: null };
 
 /** A sidebar ref: a local branch, a remote branch or a tag, found by its full ref name. */
 export type RefEntry = { kind: "branch"; ref: GitBranch } | { kind: "remote"; ref: GitRemoteBranch } | { kind: "tag"; ref: GitTag };
@@ -56,6 +57,13 @@ export function createGitRefs(onChange: (state: RefsState) => void, serviceFor: 
       // Counts from the last read stay shown until the new ones land; a missing folder has none.
       const previous = new Map(state.worktrees?.map(entry => [entry.path, entry.changes]));
       publish({ refs, stashes, worktrees: listed.map(entry => ({ ...entry, changes: previous.get(entry.path) ?? null })), error: null });
+      // One extra read for branches the Review Queue compares with the default branch instead of an upstream.
+      const base = refs.defaultBranch;
+      if (base && refs.branches.some(branch => !branch.upstream || branch.gone)) {
+        void git.branchesAhead(base, { signal: controller.signal }).then(outgoing => {
+          if (current === run && active === controller && !closed) publish({ outgoing });
+        }, () => {});
+      } else publish({ outgoing: null });
       if (listed.length < 2) return;
       // Counted after the refs land, so writes and refreshes don't wait for every worktree's status.
       void Promise.all(listed.map(entry => entry.bare || entry.prunable !== null ? null

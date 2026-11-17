@@ -491,3 +491,38 @@ it("lists a ref's history, keeps the selection by oid, follows the ref when it m
   expect(t.opened.slice(0, -1).every(reader => (reader as unknown as { closed(): boolean }).closed())).toBe(true);
   t.controller.dispose();
 });
+
+it("lists a branch's outgoing commits as a range, re-reads it when the base moves, and closes a file history on the same ref", async () => {
+  const path = repo("range", false);
+  const commit = (file: string, message: string) => {
+    writeFileSync(join(path, file), `${message}\n`);
+    fixtureGit(path, "add", "--", file);
+    fixtureGit(path, "commit", "-q", "-m", message);
+    return fixtureGit(path, "rev-parse", "HEAD");
+  };
+  commit("a.txt", "Base");
+  fixtureGit(path, "switch", "-q", "-c", "feature");
+  const first = commit("b.txt", "One");
+  const second = commit("b.txt", "Two");
+  fixtureGit(path, "switch", "-q", "main");
+  const t = setup(path);
+  t.controller.setRef("refs/heads/feature");
+  await t.controller.activate();
+  await t.controller.showFileHistory("b.txt");
+  expect(t.state().file).not.toBeNull();
+  // The same ref: the file history closes and only the outgoing commits are listed, newest selected.
+  t.controller.setRange("refs/heads/feature", "refs/heads/main");
+  await t.controller.refresh();
+  expect(t.state().file).toBeNull();
+  expect(t.state().range).toMatchObject({ base: "refs/heads/main", loading: false, error: null });
+  expect(t.state().range!.commits.map(entry => entry.oid)).toEqual([second, first]);
+  expect(t.state().selectedOid).toBe(second);
+  // The base catches up by one commit (as after a push): the range shrinks, keeping the selection.
+  fixtureGit(path, "update-ref", "refs/heads/main", first);
+  await t.controller.refresh();
+  expect(t.state().range!.commits.map(entry => entry.oid)).toEqual([second]);
+  // Selecting the plain ref ends the range.
+  t.controller.setRef("refs/heads/feature");
+  expect(t.state().range).toBeNull();
+  t.controller.dispose();
+});

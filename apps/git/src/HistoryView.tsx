@@ -148,7 +148,7 @@ const CommitRow = memo(function CommitRow({ commit, columns, palette, path, sele
 
 /** History's list column: the commit list with its graph, one file's history, or the unborn/loading state. */
 export function HistoryList({ history, actions }: { history: HistoryState; actions: HistoryActions }) {
-  const { commits, refs, selectedOid, currentBranch, file, search, compare } = history;
+  const { commits, refs, selectedOid, currentBranch, file, search, compare, range } = history;
   const onSelect = useCallback((oid: string) => actions.select(oid), [actions]);
   const onCompare = useCallback((oid: string) => actions.compare(oid), [actions]);
   const onContextMenu = useCallback((oid: string, position: { x: number; y: number }) => actions.contextMenu(oid, position), [actions]);
@@ -160,7 +160,7 @@ export function HistoryList({ history, actions }: { history: HistoryState; actio
   if (history.head?.unborn) return <EmptyState title="No Commits Yet" message="Make the first commit from Changes." />;
   if (!history.head) return history.error ? <Text accessibilityRole="alert" style={styles.error}>{history.error}</Text> : <EmptyState title="Loading History…" />;
   const folder = file && pathParts(file.path);
-  const filter = search ?? file;
+  const filter = search ?? file ?? range;
   const scopeLabel = search && searchScopes.find(entry => entry.scope === search.scope)!.label;
   const highlighted = (oid: string) => compare ? oid === compare.base || oid === compare.target : oid === selectedOid;
   return <View style={styles.list}>
@@ -182,8 +182,10 @@ export function HistoryList({ history, actions }: { history: HistoryState; actio
       : search && !search.commits.length ? search.error ? null : <EmptyState title="No Results" message={`No commit matches in ${scopeLabel!.toLowerCase()}.`} />
       : file?.loading ? <EmptyState title="Loading File History…" />
       : file && !file.commits.length ? <EmptyState title="No History" message="No commit touched this file." />
+      : range?.loading && !range.commits.length ? <EmptyState title="Loading Commits…" />
+      : range && !range.commits.length ? range.error ? null : <EmptyState symbol="checkmark.circle" title="Nothing to Push" message="Every commit is on the upstream already." />
       : <LegendList<RowCommit>
-        key={search ? `search:${search.scope}:${search.text}` : file?.path}
+        key={search ? `search:${search.scope}:${search.text}` : file?.path ?? (range ? `range:${range.base}..${history.ref}` : undefined)}
         data={filter ? filter.commits : commits}
         keyExtractor={item => item.oid}
         estimatedItemSize={historyRowHeight}
@@ -256,7 +258,7 @@ function commitLabel(history: HistoryState, oid: string) {
   return summary ? `${shortOid(oid)} ${summary}` : shortOid(oid);
 }
 const listedSummary = (history: HistoryState, oid: string) =>
-  (history.search?.commits.find(commit => commit.oid === oid) ?? history.file?.commits.find(commit => commit.oid === oid) ?? history.commits.find(commit => commit.oid === oid))?.summary;
+  (history.search?.commits.find(commit => commit.oid === oid) ?? history.file?.commits.find(commit => commit.oid === oid) ?? history.range?.commits.find(commit => commit.oid === oid) ?? history.commits.find(commit => commit.oid === oid))?.summary;
 
 /** Two commits compared: `git diff base target`, its changed files and the selected file's patch. */
 function CompareDetails({ history, actions }: { history: HistoryState; actions: HistoryActions }) {

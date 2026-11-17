@@ -12,6 +12,8 @@ export const searchScopes: readonly { scope: SearchScope; label: string }[] = [
 ];
 /** A history search's results (`git log --grep/--author/-S/<path>`), shown in place of the full history while set. */
 export type SearchState = { scope: SearchScope; text: string; commits: GitFileHistoryCommit[]; done: boolean; loading: boolean; error: string | null };
+/** The commits the listed ref has that `base` doesn't (`git log base..ref`, a branch's outgoing commits), shown in place of the full history while set. */
+export type RangeState = { base: string; commits: GitFileHistoryCommit[]; done: boolean; loading: boolean; error: string | null };
 /** Two commits compared (`git diff base target`), shown in the content column while set. */
 export type CompareState = { base: string; target: string; files: CommitFile[]; selectedPath: string | null; loading: boolean; error: string | null };
 export type HistoryState = {
@@ -32,8 +34,9 @@ export type HistoryState = {
   file: FileHistoryState | null;
   search: SearchState | null;
   compare: CompareState | null;
+  range: RangeState | null;
 };
-export const emptyHistory: HistoryState = { root: null, ref: null, head: null, commits: [], done: false, loading: false, error: null, refs: new Map(), currentBranch: null, remoteUrl: null, selectedOid: null, details: null, file: null, search: null, compare: null };
+export const emptyHistory: HistoryState = { root: null, ref: null, head: null, commits: [], done: false, loading: false, error: null, refs: new Map(), currentBranch: null, remoteUrl: null, selectedOid: null, details: null, file: null, search: null, compare: null, range: null };
 
 /** The path a file had in a commit of its history, so selecting the commit selects that file's patch. */
 function preferredPath(state: HistoryState, oid: string, files: CommitFile[]) {
@@ -79,7 +82,7 @@ const cancelled = (error: unknown) => error instanceof Error && (error.name === 
  * demand, and ref or HEAD changes re-read only what was already loaded, keeping the selection by oid.
  */
 /** The commits the list shows now: search results, one file's history, or the full history. */
-export const listedCommits = (state: HistoryState): readonly { oid: string }[] => state.search?.commits ?? state.file?.commits ?? state.commits;
+export const listedCommits = (state: HistoryState): readonly { oid: string }[] => state.search?.commits ?? state.file?.commits ?? state.range?.commits ?? state.commits;
 
 export function createGitHistory(onChange: (state: HistoryState) => void, watch: GitDirectoryWatcher, {
   serviceFor = getGitService, open = openGitHistory, blame = blameLine, searchDelay = 250,
@@ -104,6 +107,7 @@ export function createGitHistory(onChange: (state: HistoryState) => void, watch:
   let unlinkSearch: (() => void) | undefined;
   let searchPaging: Promise<void> | undefined;
   let compareRun = 0;
+  let rangeRun = 0;
   const publish = (patch: Partial<HistoryState>) => { state = { ...state, ...patch }; if (!closed) onChange(state); };
   const current = (controller: AbortController) => !closed && active === controller && !controller.signal.aborted;
   const report = (error: unknown, controller: AbortController) => {
@@ -208,6 +212,22 @@ export function createGitHistory(onChange: (state: HistoryState) => void, watch:
     }
   };
 
+  /** Re-reads the listed range and keeps the selection when it is listed. */
+  const readRange = async (git: GitService, controller: AbortController) => {
+    const range = state.range, ref = state.ref;
+    if (!range || !ref) return;
+    const run = ++rangeRun;
+    const latest = () => current(controller) && run === rangeRun && state.range?.base === range.base && state.ref === ref;
+    try {
+      const page = await git.logRange(range.base, ref, { signal: controller.signal });
+      if (!latest()) return;
+      publish({ range: { base: range.base, commits: page.commits, done: page.done, loading: false, error: null } });
+      await keepSelection(git, controller, page.commits);
+    } catch (error) {
+      if (latest() && !cancelled(error)) publish({ range: { ...range, loading: false, error: message(error) } });
+    }
+  };
+
   /** Reads the listed ref (or HEAD), refs and the remote; re-walks history only when its commit moved (or on the first load). */
   const reload = async (git: GitService, controller: AbortController, first: boolean) => {
     const signal = controller.signal;
@@ -220,6 +240,8 @@ export function createGitHistory(onChange: (state: HistoryState) => void, watch:
     ]);
     // A newer reload, queued by setRef, lists the other ref.
     if (!current(controller) || state.ref !== ref) return;
+    // A range's base can move while its ref stays (a push), so it is re-read on every reload.
+    if (state.range) await readRange(git, controller);
     if (!first && state.head && headOid === (state.head.unborn ? null : state.head.oid)) {
       publish({ refs, remoteUrl, currentBranch });
       return;
@@ -272,15 +294,30 @@ export function createGitHistory(onChange: (state: HistoryState) => void, watch:
      * comparison close; the selection stays when the new list has it.
      */
     setRef(ref: string | null) {
-      if (ref === state.ref) return;
+      if (ref === state.ref && !state.range) return;
       reader?.close();
       reader = undefined;
       paging = undefined;
       api.closeFileHistory();
       api.closeCompare();
       const git = service, controller = active;
-      publish({ ref, head: null, commits: [], done: false, loading: !!controller, error: null });
+      rangeRun++;
+      publish({ ref, range: null, head: null, commits: [], done: false, loading: !!controller, error: null });
       if (git && controller) void queueReload(git, controller, true).catch(error => report(error, controller));
+    },
+    /** Lists only the commits `ref` has that `base` doesn't (both full ref names), e.g. a branch's outgoing commits. */
+    setRange(ref: string, base: string) {
+      if (state.ref === ref && state.range?.base === base) return;
+      const reloads = ref !== state.ref || !!state.range;
+      api.setRef(ref);
+      // setRef returns early for the same ref, so these close here too.
+      api.closeFileHistory();
+      api.closeCompare();
+      api.closeSearch();
+      publish({ range: { base, commits: [], done: false, loading: true, error: null } });
+      // A changed ref reloads (and reads the range); the same ref is read here.
+      const git = service, controller = active;
+      if (!reloads && git && controller) void readRange(git, controller);
     },
     /** Loads the first page and starts watching refs; later calls do nothing. */
     activate() {
