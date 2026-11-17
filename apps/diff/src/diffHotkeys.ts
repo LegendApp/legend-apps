@@ -107,9 +107,20 @@ export type DiffHotkeyId = (typeof diffHotkeyDefinitions)[number]["id"];
 export const diffHotkeyRouter = createHotkeyRouter();
 export const diffApplicationHotkeyScope: HotkeyScope = { kind: "application" };
 
+// Storage hands `load` an empty object when hotkeys.json is missing, and a file saved
+// from partial changes can lack `version`; Spark's normalizer rejects both.
+export function loadDiffHotkeyFile(value: unknown) {
+  const bindings = value && typeof value === "object" && !Array.isArray(value) ? (value as { bindings?: unknown }).bindings : undefined;
+  try {
+    return normalizeHotkeyFile(bindings === undefined ? undefined : { version: 1, bindings }, diffHotkeyDefinitions, { maxBindingsPerCommand: 1 });
+  } catch {
+    return normalizeHotkeyFile(undefined, diffHotkeyDefinitions, { maxBindingsPerCommand: 1 });
+  }
+}
+
 export const diffHotkeys$ = createObservableFile({
-  initialValue: normalizeHotkeyFile(undefined, diffHotkeyDefinitions, { maxBindingsPerCommand: 1 }),
-  transform: { load: value => normalizeHotkeyFile(value, diffHotkeyDefinitions, { maxBindingsPerCommand: 1 }) },
+  initialValue: loadDiffHotkeyFile(undefined),
+  transform: { load: loadDiffHotkeyFile },
   filename: "hotkeys",
 });
 

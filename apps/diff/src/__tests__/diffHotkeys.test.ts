@@ -3,6 +3,7 @@ import {
   diffHotkeys$,
   diffHotkeyDefinitions,
   getDiffHotkeyMenuPatches,
+  loadDiffHotkeyFile,
   setDiffHotkeyBindings,
   type DiffHotkeyId,
 } from "../diffHotkeys";
@@ -15,6 +16,15 @@ function defaultBindings() {
 }
 
 describe("Diff hotkeys", () => {
+  it("loads a missing, unversioned or invalid hotkeys file without throwing", () => {
+    const defaults = loadDiffHotkeyFile(undefined);
+    expect(defaults.bindings.changeStory).toEqual(["Cmd+Shift+S"]);
+    expect(loadDiffHotkeyFile({})).toEqual(defaults);
+    expect(loadDiffHotkeyFile({ bindings: { reload: ["Cmd+Shift+R"] } }).bindings.reload).toEqual(["Cmd+Shift+R"]);
+    expect(loadDiffHotkeyFile({ version: 1, bindings: { reload: ["Cmd+Alt+R"] } }).bindings.reload).toEqual(["Cmd+Alt+R"]);
+    expect(loadDiffHotkeyFile({ version: 1, bindings: { reload: "nonsense" } })).toEqual(defaults);
+  });
+
   it("uses the primary representable binding for each native menu item", () => {
     const bindings = defaultBindings();
     bindings.nextHunk = [
