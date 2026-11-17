@@ -33,6 +33,10 @@ if [[ ${#MISSING_PATHS[@]} -gt 0 ]]; then
 fi
 
 mkdir -p "$BUILD_DIR"
+clang++ -std=c++20 -Wall -Wextra \
+  "$ROOT/packages/diff-parser/tests/DiffRowSelection.test.cpp" \
+  -o "$BUILD_DIR/diff_row_selection_test"
+"$BUILD_DIR/diff_row_selection_test"
 rm -rf "$GIT_FIXTURE"
 mkdir -p "$GIT_FIXTURE/src" "$GIT_FIXTURE/assets"
 

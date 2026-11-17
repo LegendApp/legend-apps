@@ -3,15 +3,18 @@
 #import <CoreText/CoreText.h>
 
 #import <react/renderer/components/RNDiffParserSpec/ComponentDescriptors.h>
+#import <react/renderer/components/RNDiffParserSpec/EventEmitters.h>
 #import <react/renderer/components/RNDiffParserSpec/Props.h>
 #import <react/renderer/components/RNDiffParserSpec/RCTComponentViewHelpers.h>
 
 #import "../cpp/DiffInlineChange.hpp"
+#import "../cpp/DiffRowSelection.hpp"
 #import "../cpp/HybridDiffDocument.hpp"
 #import "../cpp/HybridDiffSideBySideProjection.hpp"
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 #include <string>
 #include <variant>
 #include <vector>
@@ -160,6 +163,9 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId);
 @property(nonatomic, strong) NSColor *activeSearchRowHighlightColor;
 @property(nonatomic, copy) NSDictionary<NSString *, NSString *> *searchHighlightByRowIndex;
 @property(nonatomic, copy) NSDictionary<NSString *, NSString *> *activeSearchHighlightByRowIndex;
+@property(nonatomic, copy) NSDictionary<NSNumber *, NSArray<NSDictionary *> *> *annotationHighlightsByRowIndex;
+@property(nonatomic, copy) NSArray<NSDictionary<NSString *, NSString *> *> *contextMenuItems;
+@property(nonatomic, copy) void (^selectionActionHandler)(NSDictionary *payload);
 @property(nonatomic, strong) NSMutableParagraphStyle *textParagraph;
 @property(nonatomic, strong) NSMutableParagraphStyle *rightParagraph;
 @property(nonatomic, strong) NSMutableParagraphStyle *centerParagraph;
@@ -189,6 +195,8 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId);
 - (void)setCollapsedFileIndexesString:(NSString *)value;
 - (void)setSearchHighlightByRowIndexString:(NSString *)value active:(BOOL)active;
 - (NSString *)searchHighlightsForRowIndex:(double)rowIndex active:(BOOL)active;
+- (void)setAnnotationHighlightRangesString:(NSString *)value;
+- (void)setContextMenuItemsString:(NSString *)value;
 - (const std::vector<double> &)collapsedFileIndexes;
 - (NSColor *)colorForScopeId:(double)scopeId document:(HybridDiffDocument *)document;
 - (NSArray<NSValue *> *)inlineHighlightRangesForRow:(const DiffRenderRow &)row
@@ -251,6 +259,8 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId);
     _activeSearchRowHighlightColor = [NSColor colorWithRed:1 green:0.58 blue:0 alpha:0.22];
     _searchHighlightByRowIndex = @{};
     _activeSearchHighlightByRowIndex = @{};
+    _annotationHighlightsByRowIndex = @{};
+    _contextMenuItems = @[];
     _textParagraph = [NSMutableParagraphStyle new];
     _textParagraph.lineBreakMode = NSLineBreakByClipping;
     _rightParagraph = [NSMutableParagraphStyle new];
@@ -453,6 +463,62 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId);
   return highlights ?: @"";
 }
 
+static id RNDiffJSONObjectFromString(NSString *value)
+{
+  NSData *data = value.length > 0 ? [value dataUsingEncoding:NSUTF8StringEncoding] : nil;
+  return data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+}
+
+- (void)setAnnotationHighlightRangesString:(NSString *)value
+{
+  NSArray *decoded = RNDiffJSONObjectFromString(value);
+  NSMutableDictionary<NSNumber *, NSMutableArray<NSDictionary *> *> *highlights = [NSMutableDictionary new];
+  if ([decoded isKindOfClass:NSArray.class]) {
+    NSColor *defaultColor = [NSColor colorWithRed:0.54 green:0.34 blue:0.9 alpha:0.32];
+    for (NSDictionary *range in decoded) {
+      if (![range isKindOfClass:NSDictionary.class]) {
+        continue;
+      }
+      NSNumber *rowIndex = range[@"rowIndex"];
+      NSNumber *startColumn = range[@"startColumn"];
+      NSNumber *endColumn = range[@"endColumn"];
+      if (![rowIndex isKindOfClass:NSNumber.class] || ![startColumn isKindOfClass:NSNumber.class]
+          || ![endColumn isKindOfClass:NSNumber.class] || rowIndex.doubleValue < 0) {
+        continue;
+      }
+      NSString *side = [range[@"side"] isKindOfClass:NSString.class] ? range[@"side"] : @"";
+      NSString *colorString = [range[@"color"] isKindOfClass:NSString.class] ? range[@"color"] : @"";
+      NSNumber *key = @(floor(rowIndex.doubleValue));
+      if (!highlights[key]) {
+        highlights[key] = [NSMutableArray new];
+      }
+      [highlights[key] addObject:@{
+        @"side": @([side isEqualToString:@"old"] ? 0 : [side isEqualToString:@"new"] ? 1 : -1),
+        @"startColumn": startColumn,
+        @"endColumn": endColumn,
+        @"color": RNDiffColorFromString(colorString, defaultColor),
+      }];
+    }
+  }
+  self.annotationHighlightsByRowIndex = highlights;
+}
+
+- (void)setContextMenuItemsString:(NSString *)value
+{
+  NSArray *decoded = RNDiffJSONObjectFromString(value);
+  NSMutableArray<NSDictionary<NSString *, NSString *> *> *items = [NSMutableArray new];
+  if ([decoded isKindOfClass:NSArray.class]) {
+    for (NSDictionary *item in decoded) {
+      if ([item isKindOfClass:NSDictionary.class] && [item[@"id"] isKindOfClass:NSString.class]
+          && [item[@"text"] isKindOfClass:NSString.class]) {
+        NSString *icon = [item[@"icon"] isKindOfClass:NSString.class] ? item[@"icon"] : @"";
+        [items addObject:@{@"id": item[@"id"], @"text": item[@"text"], @"icon": icon}];
+      }
+    }
+  }
+  self.contextMenuItems = items;
+}
+
 - (void)setCollapsedFileIndexesString:(NSString *)value
 {
   _collapsedFileIndexes.clear();
@@ -498,33 +564,12 @@ static void RNDiffNativeRowInvalidateViews(NSString *configId);
   if (!self.hasSelection || side != self.selectionSide) {
     return NSMakeRange(NSNotFound, 0);
   }
-
-  double startRow = self.selectionAnchorRowIndex;
-  NSUInteger startColumn = self.selectionAnchorColumn;
-  double endRow = self.selectionFocusRowIndex;
-  NSUInteger endColumn = self.selectionFocusColumn;
-  if (startRow > endRow || (startRow == endRow && startColumn > endColumn)) {
-    std::swap(startRow, endRow);
-    std::swap(startColumn, endColumn);
-  }
-
-  const double safeRowIndex = floor(rowIndex);
-  if (safeRowIndex < startRow || safeRowIndex > endRow) {
-    return NSMakeRange(NSNotFound, 0);
-  }
-
-  const NSUInteger safeStartColumn = MIN(startColumn, textLength);
-  const NSUInteger safeEndColumn = MIN(endColumn, textLength);
-  if (startRow == endRow) {
-    return NSMakeRange(safeStartColumn, safeEndColumn - safeStartColumn);
-  }
-  if (safeRowIndex == startRow) {
-    return NSMakeRange(safeStartColumn, textLength - safeStartColumn);
-  }
-  if (safeRowIndex == endRow) {
-    return NSMakeRange(0, safeEndColumn);
-  }
-  return NSMakeRange(0, textLength);
+  const auto range = diffSelectionRangeForRow(
+      {self.selectionAnchorRowIndex, self.selectionAnchorColumn},
+      {self.selectionFocusRowIndex, self.selectionFocusColumn},
+      rowIndex,
+      textLength);
+  return range ? NSMakeRange(range->start, range->end - range->start) : NSMakeRange(NSNotFound, 0);
 }
 
 - (NSColor *)colorForScopeId:(double)scopeId document:(HybridDiffDocument *)document
@@ -956,8 +1001,10 @@ static void RNDiffDrawHorizontalText(
                                     side:(NSInteger)side
                                 document:(HybridDiffDocument *)document
                                   config:(RNDiffNativeRowRenderConfig *)config
+                          sourceRowIndex:(double *)sourceRowIndex
 {
   NSString *text = nil;
+  double source = -1;
   if ([config.presentation isEqualToString:@"blocks"]) {
     auto projection = getRegisteredDiffSideBySideProjection(config.projectionId);
     const auto itemId = projection ? projection->getItemId(rowIndex) : -1;
@@ -966,19 +1013,33 @@ static void RNDiffDrawHorizontalText(
       : DiffSideBySideRenderRow();
     if (side == 0 && row.oldRowVisible && row.oldRow.kind == diffRowKindLine) {
       text = RNDiffStringFromStdString(row.oldRow.text);
+      source = row.oldRow.index;
     } else if (side == 1 && row.newRowVisible) {
       const DiffRenderRow &newRow = row.newRowEqualsOldRow ? row.oldRow : row.newRow;
       if (newRow.kind == diffRowKindLine) {
         text = RNDiffStringFromStdString(newRow.text);
+        source = newRow.index;
       }
     }
   } else {
     const auto row = document->getRow(rowIndex);
     if (row.plain.kind == diffRowKindLine) {
       text = RNDiffStringFromStdString(row.plain.text);
+      source = row.plain.index;
     }
   }
+  if (sourceRowIndex != nullptr) {
+    *sourceRowIndex = source;
+  }
   return text;
+}
+
+- (NSString *)selectableTextForRowIndex:(double)rowIndex
+                                    side:(NSInteger)side
+                                document:(HybridDiffDocument *)document
+                                  config:(RNDiffNativeRowRenderConfig *)config
+{
+  return [self selectableTextForRowIndex:rowIndex side:side document:document config:config sourceRowIndex:nullptr];
 }
 
 - (NSString *)selectableTextForSide:(NSInteger)side
@@ -1129,38 +1190,82 @@ static void RNDiffDrawHorizontalText(
   }
 }
 
+- (std::optional<DiffSelectionPayload>)selectionPayloadForDocument:(HybridDiffDocument *)document
+                                                            config:(RNDiffNativeRowRenderConfig *)config
+{
+  if (!config.hasSelection) {
+    return std::nullopt;
+  }
+  const NSInteger side = config.selectionSide;
+  return buildDiffSelectionPayload(
+      {config.selectionAnchorRowIndex, config.selectionAnchorColumn},
+      {config.selectionFocusRowIndex, config.selectionFocusColumn},
+      [&](double rowIndex) -> std::optional<DiffSelectionRowText> {
+        double sourceRowIndex = -1;
+        NSString *line = [self selectableTextForRowIndex:rowIndex
+                                                    side:side
+                                                document:document
+                                                  config:config
+                                          sourceRowIndex:&sourceRowIndex];
+        if (line == nil) {
+          return std::nullopt;
+        }
+        return DiffSelectionRowText{RNDiffUTF16String(line), sourceRowIndex};
+      });
+}
+
 - (NSString *)selectedTextForDocument:(HybridDiffDocument *)document
                                config:(RNDiffNativeRowRenderConfig *)config
 {
-  if (!config.hasSelection) {
+  const auto payload = [self selectionPayloadForDocument:document config:config];
+  if (!payload) {
     return @"";
   }
+  return [NSString stringWithCharacters:reinterpret_cast<const unichar *>(payload->selectedText.data())
+                                 length:payload->selectedText.size()];
+}
 
-  double startRow = config.selectionAnchorRowIndex;
-  NSUInteger startColumn = config.selectionAnchorColumn;
-  double endRow = config.selectionFocusRowIndex;
-  NSUInteger endColumn = config.selectionFocusColumn;
-  if (startRow > endRow || (startRow == endRow && startColumn > endColumn)) {
-    std::swap(startRow, endRow);
-    std::swap(startColumn, endColumn);
+- (NSMenu *)menuForEvent:(NSEvent *)event
+{
+  RNDiffNativeRowRenderConfig *config = RNDiffNativeRowConfigForId(self.configId);
+  auto document = config && config.contextMenuItems.count > 0 ? getRegisteredDiffDocument(config.documentId) : nullptr;
+  const auto payload = document ? [self selectionPayloadForDocument:document.get() config:config] : std::nullopt;
+  if (!payload) {
+    return [super menuForEvent:event];
   }
 
-  NSMutableArray<NSString *> *lines = [NSMutableArray new];
-  for (double rowIndex = startRow; rowIndex <= endRow; rowIndex += 1) {
-    NSString *line = [self selectableTextForRowIndex:rowIndex
-                                                side:config.selectionSide
-                                            document:document
-                                              config:config];
-    if (line != nil) {
-      const NSRange range = [config selectionRangeForRowIndex:rowIndex
-                                                        side:config.selectionSide
-                                                  textLength:line.length];
-      if (range.location != NSNotFound) {
-        [lines addObject:[line substringWithRange:range]];
-      }
+  NSString *side = ![config.presentation isEqualToString:@"blocks"] ? @"unified" : config.selectionSide == 0 ? @"old" : @"new";
+  NSString *selectedText = [NSString stringWithCharacters:reinterpret_cast<const unichar *>(payload->selectedText.data())
+                                                   length:payload->selectedText.size()];
+  NSMenu *menu = [[NSMenu alloc] initWithTitle:@""];
+  [menu addItemWithTitle:@"Copy" action:@selector(copy:) keyEquivalent:@""].target = self;
+  [menu addItem:NSMenuItem.separatorItem];
+  for (NSDictionary<NSString *, NSString *> *item in config.contextMenuItems) {
+    NSMenuItem *menuItem = [menu addItemWithTitle:item[@"text"] action:@selector(performSelectionAction:) keyEquivalent:@""];
+    menuItem.target = self;
+    if (item[@"icon"].length > 0) {
+      menuItem.image = [NSImage imageWithSystemSymbolName:item[@"icon"] accessibilityDescription:nil];
     }
+    menuItem.representedObject = @{
+      @"actionId": item[@"id"],
+      @"itemText": item[@"text"],
+      @"side": side,
+      @"anchorRowIndex": @(payload->anchorRowIndex),
+      @"anchorColumn": @(payload->anchorColumn),
+      @"focusRowIndex": @(payload->focusRowIndex),
+      @"focusColumn": @(payload->focusColumn),
+      @"selectedText": selectedText,
+    };
   }
-  return [lines componentsJoinedByString:@"\n"];
+  return menu;
+}
+
+- (void)performSelectionAction:(NSMenuItem *)sender
+{
+  RNDiffNativeRowRenderConfig *config = RNDiffNativeRowConfigForId(self.configId);
+  if (config.selectionActionHandler && [sender.representedObject isKindOfClass:NSDictionary.class]) {
+    config.selectionActionHandler(sender.representedObject);
+  }
 }
 
 - (void)copy:(id)sender
@@ -1259,6 +1364,33 @@ static void RNDiffDrawHorizontalText(
   }
 }
 
+- (void)applyAnnotationHighlightsForRow:(const DiffRenderRow &)plain
+                                   side:(NSInteger)side
+                       toAttributedText:(NSMutableAttributedString *)attributedText
+                                 config:(RNDiffNativeRowRenderConfig *)config
+{
+  NSArray<NSDictionary *> *ranges = plain.index >= 0 ? config.annotationHighlightsByRowIndex[@(floor(plain.index))] : nil;
+  if (ranges.count == 0) {
+    return;
+  }
+  const auto text = RNDiffUTF16String(attributedText.string);
+  for (NSDictionary *range in ranges) {
+    const NSInteger rangeSide = [range[@"side"] integerValue];
+    if (side >= 0 && rangeSide >= 0 && rangeSide != side) {
+      continue;
+    }
+    const auto clipped = clipDiffTextRange(text, [range[@"startColumn"] doubleValue], [range[@"endColumn"] doubleValue]);
+    if (!clipped) {
+      continue;
+    }
+    NSColor *color = range[@"color"];
+    const NSRange textRange = NSMakeRange(clipped->start, clipped->end - clipped->start);
+    [attributedText addAttribute:NSBackgroundColorAttributeName value:color range:textRange];
+    [attributedText addAttribute:NSUnderlineStyleAttributeName value:@(NSUnderlineStyleSingle) range:textRange];
+    [attributedText addAttribute:NSUnderlineColorAttributeName value:[color colorWithAlphaComponent:1] range:textRange];
+  }
+}
+
 - (NSMutableAttributedString *)attributedTextForRow:(const DiffRenderRow &)plain
                                              tokens:(const std::vector<DiffSyntaxTokenRun> *)tokens
                                            document:(HybridDiffDocument *)document
@@ -1289,6 +1421,10 @@ static void RNDiffDrawHorizontalText(
         }
       }
     }
+    [self applyAnnotationHighlightsForRow:plain
+                                     side:[config.presentation isEqualToString:@"blocks"] ? selectionSide : -1
+                         toAttributedText:attributedText
+                                   config:config];
     [self applyEncodedHighlights:highlights toAttributedText:attributedText color:config.searchHighlightColor];
     [self applyEncodedHighlights:activeHighlights toAttributedText:attributedText color:config.activeSearchHighlightColor];
   }
@@ -1981,7 +2117,8 @@ static NSUInteger RNDiffNativeRowInvalidateTokenizedRanges(
       && newProps.projectionId == previousProps.projectionId
       && newProps.horizontalViewportWidth == previousProps.horizontalViewportWidth
       && newProps.searchHighlightByRowIndex == previousProps.searchHighlightByRowIndex
-      && newProps.activeSearchHighlightByRowIndex == previousProps.activeSearchHighlightByRowIndex;
+      && newProps.activeSearchHighlightByRowIndex == previousProps.activeSearchHighlightByRowIndex
+      && newProps.annotationHighlightRanges == previousProps.annotationHighlightRanges;
   }
   NSString *nextConfigId = [NSString stringWithUTF8String:newProps.configId.c_str()] ?: @"";
   if (_configId.length > 0 && ![_configId isEqualToString:nextConfigId]) {
@@ -2024,6 +2161,12 @@ static NSUInteger RNDiffNativeRowInvalidateTokenizedRanges(
                                       active:NO];
   [config setSearchHighlightByRowIndexString:[NSString stringWithUTF8String:newProps.activeSearchHighlightByRowIndex.c_str()] ?: @""
                                       active:YES];
+  [config setAnnotationHighlightRangesString:[NSString stringWithUTF8String:newProps.annotationHighlightRanges.c_str()] ?: @""];
+  [config setContextMenuItemsString:[NSString stringWithUTF8String:newProps.contextMenuItems.c_str()] ?: @""];
+  __weak RNDiffNativeRowConfig *weakSelf = self;
+  config.selectionActionHandler = ^(NSDictionary *payload) {
+    [weakSelf emitSelectionAction:payload];
+  };
   [config updateHorizontalMetrics];
   if (tokenizationOnlyUpdate) {
     RNDiffNativeRowInvalidateTokenizedRanges(
@@ -2036,6 +2179,29 @@ static NSUInteger RNDiffNativeRowInvalidateTokenizedRanges(
 #endif
   [super updateProps:props oldProps:oldProps];
 }
+
+#if TARGET_OS_OSX
+- (void)emitSelectionAction:(NSDictionary *)payload
+{
+  if (!_eventEmitter) {
+    return;
+  }
+  const auto stringValue = [payload](NSString *key) {
+    const char *value = [payload[key] UTF8String];
+    return std::string(value ? value : "");
+  };
+  DiffNativeRowConfigEventEmitter::OnSelectionAction event;
+  event.actionId = stringValue(@"actionId");
+  event.itemText = stringValue(@"itemText");
+  event.side = stringValue(@"side");
+  event.anchorRowIndex = [payload[@"anchorRowIndex"] doubleValue];
+  event.anchorColumn = [payload[@"anchorColumn"] doubleValue];
+  event.focusRowIndex = [payload[@"focusRowIndex"] doubleValue];
+  event.focusColumn = [payload[@"focusColumn"] doubleValue];
+  event.selectedText = stringValue(@"selectedText");
+  std::static_pointer_cast<const DiffNativeRowConfigEventEmitter>(_eventEmitter)->onSelectionAction(event);
+}
+#endif
 
 - (void)prepareForRecycle
 {
