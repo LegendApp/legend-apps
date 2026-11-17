@@ -22,6 +22,8 @@ import { showContextMenu } from "@legendapp/spark/context-menu";
 import { openURL } from "@legendapp/spark/links";
 import { openWorktreeWindow } from "../gitWindows";
 import { DiffPane } from "../DiffPane";
+import { CommentSheet, ReviewThreadView } from "../ReviewThreadView";
+import { gitHubAccount } from "../gitHubAccount";
 
 jest.mock("@legend-apps/git-core", () => ({ ...jest.requireActual("@legend-apps/git-core"), getGitService: jest.fn() }));
 jest.mock("react-native", () => ({
@@ -1469,5 +1471,91 @@ describe("pull requests", () => {
     expect(sidebar().props.selectedId).toBe("changes");
     expect(renderer.root.findAllByType(StateBar)).toHaveLength(0);
     await act(async () => { renderer.unmount(); });
+  });
+
+  it("shows a PR's review threads on its diff and in the files list, posts a line comment and a reply on the head commit, and offers Sign In… for a 401", async () => {
+    jest.clearAllMocks();
+    jest.mocked(watchDirectories).mockReturnValue({ remove: jest.fn() });
+    jest.mocked(loadUnifiedDiff).mockReturnValue(new Promise(() => {}));
+    jest.mocked(getGitService).mockReturnValue({
+      resolveRoot: jest.fn(async () => "/repo"), watchLocations: jest.fn(async () => ({ root: "/repo", gitDir: "/repo/.git", commonDir: "/repo/.git", ignoredPaths: [] })),
+      status: jest.fn(async () => ({ branch: { oid: "abc", head: "main", upstream: null, ahead: 0, behind: 0 }, entries: [] })), lastDiscard: jest.fn(async () => null), operationState: jest.fn(async () => null),
+      remoteUrl: jest.fn(async (name: string) => name === "origin" ? "git@github.com:me/app.git" : null), configValue: jest.fn(async () => null),
+    } as unknown as GitService);
+    const comment = (id: number, body: string) => ({ id: `C${id}`, databaseId: id, author: { login: "bo" }, body, createdAt: "2026-11-17T10:00:00Z" });
+    const threads = [
+      { id: "T1", path: "src/a.ts", line: 1, originalLine: 1, startLine: null, diffSide: "RIGHT", startDiffSide: null, isResolved: false, isOutdated: false, comments: { nodes: [comment(11, "Why b?")], pageInfo: { hasNextPage: false, endCursor: null } } },
+      { id: "T2", path: "src/a.ts", line: 1, originalLine: 1, startLine: null, diffSide: "LEFT", startDiffSide: null, isResolved: true, isOutdated: false, comments: { nodes: [comment(12, "Done")], pageInfo: { hasNextPage: false, endCursor: null } } },
+      { id: "T3", path: "src/a.ts", line: null, originalLine: 9, startLine: null, diffSide: "RIGHT", startDiffSide: null, isResolved: false, isOutdated: true, comments: { nodes: [comment(13, "Old")], pageInfo: { hasNextPage: false, endCursor: null } } },
+    ];
+    let postStatus = 201;
+    let pullsFail = false;
+    const posts: { url: string; body: unknown }[] = [];
+    const fetch = jest.fn(async (url: string, init: { method?: string; headers: Record<string, string>; body?: string }) => {
+      const reply = (status: number, body: unknown) => ({ status, headers: { get: () => null }, json: async () => body, text: async () => JSON.stringify(body) });
+      if (url.endsWith("/user")) return reply(200, { login: "ana" });
+      if (url.endsWith("/graphql") && postStatus === 401) return reply(401, { message: "Bad credentials" });
+      if (url.endsWith("/graphql")) return reply(200, { data: { repository: { pullRequest: { headRefOid: "head4-pushed", reviewThreads: { nodes: threads, pageInfo: { hasNextPage: false, endCursor: null } } } } } });
+      if (init.method === "POST") { posts.push({ url, body: JSON.parse(init.body!) }); return reply(postStatus, postStatus === 201 ? {} : { message: "Bad credentials" }); }
+      if (url.includes("/pulls/4/files")) return reply(200, [{ filename: "src/a.ts", status: "modified", additions: 1, deletions: 1, patch: "@@ -1 +1 @@\n-a\n+b" }, { filename: "src/b.ts", status: "modified", additions: 1, deletions: 0, patch: "@@ -1 +1,2 @@\n a\n+b" }]);
+      if (url.includes("/pulls?") && pullsFail) return reply(401, { message: "Bad credentials" });
+      if (url.includes("/pulls?")) return reply(200, [{ number: 4, title: "Fix the thing", user: { login: "bo" }, state: "open", draft: false, base: { ref: "main" }, head: { ref: "fix", sha: "head4", label: "me:fix", repo: { full_name: "me/app" } }, html_url: "" }]);
+      throw new Error(`unexpected ${url}`);
+    });
+    (globalThis as { fetch?: unknown }).fetch = fetch;
+    await gitHubAccount.signIn("tok");
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<App />); });
+    jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
+    await act(async () => { openRepository(); });
+    await act(async () => { renderer.root.findAllByType(Sidebar)[0]!.props.onSelectionChange({ id: "pr:4" }); });
+    const text = () => renderer.root.findAllByType(Text).map(node => [node.props.children].flat().join("")).join("\n");
+    expect(text()).toContain("3 comments");
+    const pane = () => renderer.root.findByType(DiffPane);
+    // The open thread sits under new line 1, the resolved one under old line 1; the outdated one is listed above the diff.
+    expect([...pane().props.annotations.keys()]).toEqual(["R:1", "L:1"]);
+    // Elements, not renders: the header and each row's annotation hold ReviewThreadView elements.
+    const children = (node: { props: { children: unknown } }) => [node.props.children].flat() as { type: unknown; props: { thread: { id: string; resolved: boolean }; onReply: (thread: unknown) => void } }[];
+    expect(children(pane().props.header).map(view => [view.type === ReviewThreadView, view.props.thread.id])).toEqual([[true, "T3"]]);
+    const views = (key: string) => children(pane().props.annotations.get(key));
+    expect(views("L:1").map(view => [view.props.thread.id, view.props.thread.resolved])).toEqual([["T2", true]]);
+    let collapsed!: ReactTestRenderer;
+    await act(async () => { collapsed = create(<ReviewThreadView thread={views("L:1")[0]!.props.thread as never} disabled={false} onReply={() => {}} />); });
+    expect(collapsed.root.findAllByType(Text).map(node => [node.props.children].flat().join("")).join(" ")).toContain("Resolved  bo: Done");
+    expect(JSON.stringify(collapsed.toJSON())).not.toContain("Reply…");
+
+    // Add Comment… needs a selected line; it posts on the PR's head commit.
+    const addButton = () => pane().props.accessory as { props: { disabled: boolean; onPress: () => void } };
+    expect(addButton().props.disabled).toBe(true);
+    await act(async () => { pane().props.onRangeChange({ start: { side: "old", line: 1, path: "src/a.ts" }, end: { side: "new", line: 1, path: "src/a.ts" } }); });
+    await act(async () => { addButton().props.onPress(); });
+    const sheet = () => renderer.root.findByType(CommentSheet);
+    expect(sheet().props).toMatchObject({ title: "Add Comment", context: "Lines 1 (old)–1 of “src/a.ts”" });
+    await act(async () => { sheet().props.onSubmit("Looks off"); });
+    expect(posts.at(-1)).toEqual({ url: "https://api.github.com/repos/me/app/pulls/4/comments", body: { body: "Looks off", commit_id: "head4-pushed", path: "src/a.ts", line: 1, side: "RIGHT", start_line: 1, start_side: "LEFT" } });
+    expect(renderer.root.findAllByType(CommentSheet)).toHaveLength(0);
+
+    // Reply… on the open thread; a 401 keeps the sheet and offers Sign In….
+    postStatus = 401;
+    await act(async () => { views("R:1")[0]!.props.onReply(views("R:1")[0]!.props.thread); });
+    expect(sheet().props.title).toBe("Reply to bo");
+    jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "cancel" });
+    await act(async () => { sheet().props.onSubmit("Fixed"); });
+    expect(posts.at(-1)).toEqual({ url: "https://api.github.com/repos/me/app/pulls/4/comments/11/replies", body: { body: "Fixed" } });
+    expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ title: "Couldn’t Post the Comment", message: "GitHub didn’t accept the token: Bad credentials.", buttons: [{ id: "sign-in", label: "Sign In…" }, { id: "cancel", label: "Cancel" }] }));
+    expect(renderer.root.findAllByType(CommentSheet)).toHaveLength(1);
+    expect(JSON.stringify(renderer.toJSON())).not.toContain("tok\"");
+    // The thread re-read after the write was refused too: its bar offers Sign In…; a refused list read takes its place rather than doubling it.
+    expect(renderer.root.findAllByType(StateBar).map(bar => [bar.props.text, bar.findAllByType(Button).map(button => button.props.children)])).toEqual([["GitHub didn’t accept the token: Bad credentials.", ["Sign In…"]]]);
+    pullsFail = true;
+    await act(async () => { lastMenu().onAction({ itemId: "refresh" }); });
+    expect(renderer.root.findAllByType(StateBar).map(bar => bar.props.text)).toEqual(["GitHub didn’t accept the token: Bad credentials."]);
+    pullsFail = false;
+    await act(async () => { sheet().props.onCancel(); });
+    // Choosing another file closes nothing open and shows its own (no) threads.
+    await act(async () => { renderer.root.findAllByType(Sidebar)[1]!.props.onSelectionChange({ id: "src/b.ts" }); });
+    expect(pane().props.annotations.size).toBe(0);
+    await act(async () => { renderer.unmount(); });
+    await gitHubAccount.signOut();
   });
 });

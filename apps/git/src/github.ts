@@ -33,11 +33,23 @@ export type GitHubPullRequest = {
   /** Base branch name; head as GitHub labels it ("owner:branch" from a fork, else the branch). */
   base: string;
   head: string;
+  /** The head commit, which new review comments are made on. */
+  headSha: string;
   url: string;
 };
 export type GitHubPullFile = { path: string; previousPath: string | null; status: string; additions: number; deletions: number; patch: string | null };
 
-type Fetch = (url: string, init: { method?: string; headers: Record<string, string> }) => Promise<{ status: number; headers: { get(name: string): string | null }; json(): Promise<unknown>; text(): Promise<string> }>;
+export type ReviewSide = "LEFT" | "RIGHT";
+export type ReviewComment = { id: string; databaseId: number; author: string; body: string; createdAt: string };
+/** A review thread: `line`/`side` (and `startLine`/`startSide` for a range) on the PR's current diff; `line` is null when outdated or on the whole file. */
+export type ReviewThread = {
+  id: string; path: string; line: number | null; originalLine: number | null; startLine: number | null; side: ReviewSide; startSide: ReviewSide | null;
+  resolved: boolean; outdated: boolean; comments: ReviewComment[];
+};
+/** A new line comment: `line`/`side` end it, `startLine`/`startSide` start a range. */
+export type NewReviewComment = { commitId: string; path: string; line: number; side: ReviewSide; startLine?: number; startSide?: ReviewSide; body: string };
+
+type Fetch = (url: string, init: { method?: string; headers: Record<string, string>; body?: string }) => Promise<{ status: number; headers: { get(name: string): string | null }; json(): Promise<unknown>; text(): Promise<string> }>;
 
 const nextLink = (link: string | null) => link?.split(",").map(part => part.match(/<([^>]+)>\s*;\s*rel="next"/)?.[1]).find(Boolean) ?? null;
 const scrub = (text: string, token: string) => token ? text.split(token).join("•••") : text;
@@ -46,7 +58,12 @@ const scrub = (text: string, token: string) => token ? text.split(token).join("�
 async function responseError(response: Awaited<ReturnType<Fetch>>, token: string) {
   const body = await response.text().catch(() => "");
   let message = "";
-  try { message = (JSON.parse(body) as { message?: string }).message ?? ""; } catch { message = body.slice(0, 200); }
+  try {
+    const parsed = JSON.parse(body) as { message?: string; errors?: (string | { message?: string; field?: string; code?: string })[] };
+    // 422 Validation Failed names what failed in `errors`.
+    const details = (parsed.errors ?? []).map(error => typeof error === "string" ? error : error.message ?? [error.field, error.code].filter(Boolean).join(" ")).filter(Boolean);
+    message = [parsed.message ?? "", ...details].filter(Boolean).join(": ");
+  } catch { message = body.slice(0, 200); }
   message = scrub(message.trim(), token);
   const status = response.status;
   if (status === 401) return new GitHubError("unauthorized", `GitHub didn’t accept the token${message ? `: ${message}` : ""}.`, status);
@@ -68,15 +85,32 @@ type Cached = { etag: string; data: unknown; next: string | null };
 export function createGitHubClient({ token, apiUrl = gitHubApiUrl, fetch: request = globalThis.fetch as unknown as Fetch, maxPages = 10 }: { token: string; apiUrl?: string; fetch?: Fetch; maxPages?: number }) {
   const cache = new Map<string, Cached>();
 
+  const headersFor = () => ({ Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", Authorization: `Bearer ${token}`, "Cache-Control": "no-cache" } as Record<string, string>);
+  async function send(url: string, init: { method: string; headers: Record<string, string>; body?: string }) {
+    try { return await request(url, init); } catch (error) {
+      throw new GitHubError("network", `Couldn’t reach GitHub: ${scrub(error instanceof Error ? error.message : String(error), token).replace(/[^.]$/, "$&.")}`);
+    }
+  }
+  /** A JSON POST (REST or GraphQL); non-2xx answers become GitHubErrors with GitHub's message. */
+  async function post(url: string, body: unknown): Promise<unknown> {
+    const response = await send(url, { method: "POST", headers: { ...headersFor(), "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (response.status < 200 || response.status >= 300) throw await responseError(response, token);
+    return response.json();
+  }
+  /** GraphQL answers 200 with `errors` for a query that fails; the first error's message is GitHub's. */
+  async function graphql<T>(query: string, variables: Record<string, unknown>): Promise<T> {
+    const result = await post(`${apiUrl}/graphql`, { query, variables }) as { data?: T; errors?: { type?: string; message: string }[] };
+    const error = result.errors?.[0];
+    if (error) throw new GitHubError(error.type === "NOT_FOUND" ? "not-found" : "other", `GitHub answered: ${scrub(error.message, token)}`);
+    return result.data as T;
+  }
+
   async function get(url: string): Promise<{ data: unknown; next: string | null }> {
     const cached = cache.get(url);
     // no-cache: the system URL cache would otherwise answer from its copy for GitHub's max-age=60 without asking.
-    const headers: Record<string, string> = { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", Authorization: `Bearer ${token}`, "Cache-Control": "no-cache" };
+    const headers = headersFor();
     if (cached) headers["If-None-Match"] = cached.etag;
-    let response: Awaited<ReturnType<Fetch>>;
-    try { response = await request(url, { method: "GET", headers }); } catch (error) {
-      throw new GitHubError("network", `Couldn’t reach GitHub: ${scrub(error instanceof Error ? error.message : String(error), token).replace(/[^.]$/, "$&.")}`);
-    }
+    const response = await send(url, { method: "GET", headers });
     if (response.status === 304 && cached) return cached;
     if (response.status < 200 || response.status >= 300) throw await responseError(response, token);
     const data = await response.json();
@@ -102,7 +136,7 @@ export function createGitHubClient({ token, apiUrl = gitHubApiUrl, fetch: reques
   }
 
   const repoPath = (repo: GitHubRepo) => `/repos/${encodeURIComponent(repo.owner)}/${encodeURIComponent(repo.name)}`;
-  type RawPull = { number: number; title: string; user: { login: string } | null; state: "open" | "closed"; draft?: boolean; merged_at?: string | null; base: { ref: string }; head: { ref: string; label: string; repo: { full_name: string } | null }; html_url: string };
+  type RawPull = { number: number; title: string; user: { login: string } | null; state: "open" | "closed"; draft?: boolean; merged_at?: string | null; base: { ref: string }; head: { ref: string; sha: string; label: string; repo: { full_name: string } | null }; html_url: string };
   type RawFile = { filename: string; previous_filename?: string; status: string; additions: number; deletions: number; patch?: string };
 
   return {
@@ -116,15 +150,72 @@ export function createGitHubClient({ token, apiUrl = gitHubApiUrl, fetch: reques
       const ownRepo = `${repo.owner}/${repo.name}`.toLowerCase();
       return pulls.map(pull => ({
         number: pull.number, title: pull.title, author: pull.user?.login ?? "ghost", state: pull.state, draft: !!pull.draft, merged: !!pull.merged_at,
-        base: pull.base.ref, head: pull.head.repo?.full_name.toLowerCase() === ownRepo ? pull.head.ref : pull.head.label, url: pull.html_url,
+        base: pull.base.ref, head: pull.head.repo?.full_name.toLowerCase() === ownRepo ? pull.head.ref : pull.head.label, headSha: pull.head.sha, url: pull.html_url,
       }));
     },
     async pullRequestFiles(repo: GitHubRepo, number: number): Promise<GitHubPullFile[]> {
       const files = await list<RawFile>(`${repoPath(repo)}/pulls/${number}/files`);
       return files.map(file => ({ path: file.filename, previousPath: file.previous_filename ?? null, status: file.status, additions: file.additions, deletions: file.deletions, patch: file.patch ?? null }));
     },
+    /**
+     * Every review thread of a pull request with all its comments (GraphQL, 100 a page, up to `maxPages` pages each),
+     * and its head commit as of this read, which new comments must be made on.
+     */
+    async reviewThreads(repo: GitHubRepo, number: number): Promise<{ headSha: string; threads: ReviewThread[] }> {
+      const threads: ReviewThread[] = [];
+      let headSha = "";
+      let after: string | null = null;
+      for (let page = 0; page < maxPages; page += 1) {
+        const data: ThreadsData = await graphql<ThreadsData>(threadsQuery, { owner: repo.owner, name: repo.name, number, after });
+        const connection = data.repository?.pullRequest?.reviewThreads;
+        if (!connection) throw new GitHubError("not-found", `GitHub couldn’t find pull request #${number}.`);
+        headSha ||= data.repository!.pullRequest!.headRefOid;
+        for (const node of connection.nodes) {
+          const comments = node.comments.nodes.slice();
+          let more = node.comments.pageInfo;
+          for (let commentPage = 1; more.hasNextPage && commentPage < maxPages; commentPage += 1) {
+            const next: CommentsData = await graphql<CommentsData>(commentsQuery, { id: node.id, after: more.endCursor });
+            if (!next.node) break;
+            comments.push(...next.node.comments.nodes);
+            more = next.node.comments.pageInfo;
+          }
+          threads.push({
+            id: node.id, path: node.path, line: node.line, originalLine: node.originalLine, startLine: node.startLine, side: node.diffSide, startSide: node.startDiffSide,
+            resolved: node.isResolved, outdated: node.isOutdated,
+            comments: comments.map(comment => ({ id: comment.id, databaseId: comment.databaseId, author: comment.author?.login ?? "ghost", body: comment.body, createdAt: comment.createdAt })),
+          });
+        }
+        if (!connection.pageInfo.hasNextPage) break;
+        after = connection.pageInfo.endCursor;
+      }
+      return { headSha, threads };
+    },
+    /** POST /pulls/{n}/comments: a new thread on a line or a range of the diff at `commitId`. */
+    async addReviewComment(repo: GitHubRepo, number: number, comment: NewReviewComment) {
+      const body: Record<string, unknown> = { body: comment.body, commit_id: comment.commitId, path: comment.path, line: comment.line, side: comment.side };
+      const startSide = comment.startSide ?? comment.side;
+      if (comment.startLine !== undefined && (comment.startLine !== comment.line || startSide !== comment.side)) { body.start_line = comment.startLine; body.start_side = startSide; }
+      await post(`${apiUrl}${repoPath(repo)}/pulls/${number}/comments`, body);
+    },
+    /** POST /pulls/{n}/comments/{id}/replies: a reply to a thread's first comment. */
+    async replyToReviewComment(repo: GitHubRepo, number: number, commentId: number, body: string) {
+      await post(`${apiUrl}${repoPath(repo)}/pulls/${number}/comments/${commentId}/replies`, { body });
+    },
   };
 }
+
+type PageInfo = { hasNextPage: boolean; endCursor: string | null };
+type RawComment = { id: string; databaseId: number; author: { login: string } | null; body: string; createdAt: string };
+type RawThread = {
+  id: string; path: string; line: number | null; originalLine: number | null; startLine: number | null; diffSide: ReviewSide; startDiffSide: ReviewSide | null;
+  isResolved: boolean; isOutdated: boolean; comments: { nodes: RawComment[]; pageInfo: PageInfo };
+};
+type ThreadsData = { repository: { pullRequest: { headRefOid: string; reviewThreads: { nodes: RawThread[]; pageInfo: PageInfo } } | null } | null };
+type CommentsData = { node: { comments: { nodes: RawComment[]; pageInfo: PageInfo } } | null };
+const commentFields = "nodes { id databaseId author { login } body createdAt } pageInfo { hasNextPage endCursor }";
+const threadsQuery = `query($owner: String!, $name: String!, $number: Int!, $after: String) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { headRefOid
+  reviewThreads(first: 100, after: $after) { nodes { id path line originalLine startLine diffSide startDiffSide isResolved isOutdated comments(first: 100) { ${commentFields} } } pageInfo { hasNextPage endCursor } } } } }`;
+const commentsQuery = `query($id: ID!, $after: String) { node(id: $id) { ... on PullRequestReviewThread { comments(first: 100, after: $after) { ${commentFields} } } } }`;
 export type GitHubClient = ReturnType<typeof createGitHubClient>;
 
 /** A git-style patch for one PR file, from GitHub's hunks (`patch`), so DiffPane can parse it; null when GitHub sent no hunks (binary or too large). */

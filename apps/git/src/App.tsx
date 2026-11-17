@@ -22,7 +22,9 @@ import { subscribeToOpenRequests } from "@legendapp/spark/app/documents";
 import { EmptyState } from "./EmptyState";
 import { gitHubAccount, gitHubCliToken, useGitHubAccount } from "./gitHubAccount";
 import { createPullRequests, emptyPullRequests, type PullRequestsState } from "./gitPullRequests";
-import type { GitHubPullRequest } from "./github";
+import { GitHubError, type GitHubPullRequest, type ReviewThread } from "./github";
+import { commentCounts, commentRange, placeThreads, threadLines } from "./reviewThreads";
+import { CommentSheet, ReviewThreadView } from "./ReviewThreadView";
 import { StateBar } from "./StateBar";
 import { abortLabel, abortWarning, canContinue, operationText } from "./gitOperation";
 import { recentLabels, recentRepositories, useRecentRepositories } from "./gitRecents";
@@ -71,6 +73,8 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
   const pullsController = useRef<ReturnType<typeof createPullRequests> | null>(null);
   const gitHub = useGitHubAccount();
   const signingIn = useRef(false);
+  const [pullRange, setPullRange] = useState<{ start: DiffLineTarget; end: DiffLineTarget } | null>(null);
+  const [commentSheet, setCommentSheet] = useState<{ title: string; context: string; post: (body: string) => Promise<void> } | null>(null);
   const root = changes.root;
   const recents = useRecentRepositories();
   const operation = root ? changes.operation : null;
@@ -84,6 +88,8 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
   const selectedPullNumber = sectionPullRequest(section);
   // Rows are listed only while signed in (the list is cleared just after a sign-out).
   const selectedPull = root && selectedPullNumber !== null && gitHub.status === "signed-in" ? pulls.pulls?.find(pull => pull.number === selectedPullNumber) ?? null : null;
+  // The comment sheet belongs to one file of one pull request.
+  useEffect(() => { setCommentSheet(null); }, [selectedPull?.number, pulls.selectedPath]);
   const selectedCommit = root && showsHistory ? history.selectedOid : null;
   const unstaged = unstagedEntries(changes.status);
   const staged = stagedEntries(changes.status);
@@ -423,6 +429,32 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     }
     try { await gitHubAccount.signIn(token, pullsController.current?.apiUrl()); }
     catch (error) { await reportBranchError("Couldn’t Sign In to GitHub", error); }
+  }
+
+  /** Posts from the comment sheet; on failure the sheet stays open with the text, GitHub's message shows, and a 401 offers Sign In…. */
+  async function postComment(post: (body: string) => Promise<void>, body: string) {
+    try { await post(body); setCommentSheet(null); }
+    catch (error) {
+      if (error instanceof GitHubError && error.kind === "unauthorized") {
+        const choice = await showMessage({ windowId, kind: "warning", title: "Couldn’t Post the Comment", message: error.message,
+          buttons: [{ id: "sign-in", label: "Sign In…" }, { id: "cancel", label: "Cancel" }], defaultButtonId: "sign-in", cancelButtonId: "cancel" }).catch((failed: unknown) => { console.error(failed); return { buttonId: "cancel" }; });
+        if (choice.buttonId === "sign-in") { setCommentSheet(null); runCommand("sign-in-github", contextRef.current); }
+      } else await reportBranchError("Couldn’t Post the Comment", error);
+    }
+  }
+  const githubSide = (target: DiffLineTarget) => target.side === "old" ? "LEFT" as const : "RIGHT" as const;
+  function addPullComment() {
+    const range = pullRange, path = pulls.selectedPath;
+    if (!range || !path || pulls.writing) return;
+    const old = (target: DiffLineTarget) => `${target.line}${target.side === "old" ? " (old)" : ""}`;
+    const lines = range.start.side === range.end.side && range.start.line === range.end.line ? `Line ${old(range.end)}` : `Lines ${old(range.start)}–${old(range.end)}`;
+    const location = commentRange({ side: githubSide(range.start), line: range.start.line }, { side: githubSide(range.end), line: range.end.line });
+    setCommentSheet({ title: "Add Comment", context: `${lines} of “${path}”`, post: body => pullsController.current?.addComment({ ...location, body }) ?? Promise.resolve() });
+  }
+  function replyToThread(thread: ReviewThread) {
+    const first = thread.comments[0];
+    if (!first || pulls.writing) return;
+    setCommentSheet({ title: `Reply to ${first.author}`, context: `${threadLines(thread)} of “${thread.path}”`, post: body => pullsController.current?.reply(first.databaseId, body) ?? Promise.resolve() });
   }
 
   const currentBranch = refs.refs?.branches.find(branch => branch.current)?.name ?? null;
@@ -895,8 +927,14 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
       symbol={!worktreePreview.loading && !worktreePreview.error && !worktreePreview.files.length ? "checkmark.circle" : undefined} message={worktreePreview.error ?? undefined} />;
 
   const pullFile = selectedPull && pulls.number === selectedPull.number ? pulls.files?.find(file => file.path === pulls.selectedPath) : undefined;
+  const placed = pullFile ? placeThreads(pulls.threads ?? [], pullFile.path, pullFile.file) : null;
+  const threadView = (thread: ReviewThread, aboveDiff?: boolean) => <ReviewThreadView key={thread.id} thread={thread} aboveDiff={aboveDiff} disabled={pulls.writing} onReply={replyToThread} />;
+  const annotations = useMemo(() => new Map([...placed?.byKey ?? []].map(([key, threads]) => [key, <>{threads.map(thread => threadView(thread))}</>])), [pulls.threads, pullFile, pulls.writing]); // eslint-disable-line react-hooks/exhaustive-deps -- placed and threadView follow these
   const pullDetail = pullFile?.text
-    ? <DiffPane readOnly disabled patch={{ path: pullFile.path, text: pullFile.text, file: pullFile.file, section: "unstaged", conflicted: false }} onApply={() => {}} />
+    ? <DiffPane readOnly disabled patch={{ path: pullFile.path, text: pullFile.text, file: pullFile.file, section: "unstaged", conflicted: false }} onApply={() => {}}
+      annotations={annotations} header={placed?.unplaced.length ? <View style={styles.unplaced}>{placed.unplaced.map(thread => threadView(thread, true))}</View> : null}
+      onRangeChange={setPullRange}
+      accessory={<Button style={styles.addComment} disabled={!pullRange || pulls.writing} onPress={addPullComment}>Add Comment…</Button>} />
     : <EmptyState title={pulls.filesLoading && !pulls.files ? "Loading Pull Request…" : pulls.filesError ? "Couldn’t Read the Pull Request" : pullFile?.error ? "Couldn’t Show the Diff" : pullFile ? "No Diff to Show" : pulls.files?.length === 0 ? "No Changes" : "No Selection"}
       message={pulls.filesError ?? pullFile?.error ?? (pullFile ? "GitHub doesn’t show a diff for this file (binary, or too large)." : undefined)} />;
 
@@ -985,11 +1023,18 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
             {pulls.error.kind === "unauthorized" ? <Button style={styles.barButton} onPress={() => runCommand("sign-in-github", contextRef.current)}>Sign In…</Button>
               : <Button style={styles.barButton} disabled={pulls.loading} onPress={() => void pullsController.current?.refresh()}>Try Again</Button>}
           </StateBar> : null}
+          {/* A refused token fails both reads; one bar says so. */}
+          {selectedPull && pulls.threadsError && !pulls.error ? <StateBar tone="error" text={pulls.threadsError.message}>
+            {pulls.threadsError.kind === "unauthorized" ? <Button style={styles.barButton} onPress={() => runCommand("sign-in-github", contextRef.current)}>Sign In…</Button>
+              : <Button style={styles.barButton} onPress={() => void pullsController.current?.refresh()}>Try Again</Button>}
+          </StateBar> : null}
           {root ? <View style={styles.detail}>{showsHistory || queueBranch ? <CommitDetails history={history} actions={historyActions} /> : stashEntry ? stashDetail : worktreeEntry || queueWorktree ? worktreeDetailPane : selectedPull ? pullDetail : changesDetail}</View>
             : changes.loading ? <EmptyState title="Opening Repository…" />
             : <EmptyState symbol="folder" title="No Repository Open" message="Open a Git repository to see its changes and commit them.">
               <Button style={styles.open} onPress={() => void chooseRepository()}>Open Repository…</Button>
             </EmptyState>}
+          {commentSheet && selectedPull ? <CommentSheet key={commentSheet.title + commentSheet.context} top={contentInset} title={commentSheet.title} context={commentSheet.context} busy={pulls.writing}
+            onCancel={() => setCommentSheet(null)} onSubmit={(body: string) => void postComment(commentSheet.post, body)} /> : null}
         </View>
       }
     />
@@ -1097,6 +1142,7 @@ const pullState = (pull: GitHubPullRequest) => pull.merged ? "Merged" : pull.sta
 
 /** The selected pull request's header (title, number, author, base ← head, state) over its changed files. */
 function PullRequestFiles({ pull, state, filter, onSelect }: { pull: GitHubPullRequest; state: PullRequestsState; filter: string; onSelect: (path: string) => void }) {
+  const comments = commentCounts(state.number === pull.number ? state.threads : null);
   const files = state.number === pull.number ? state.files?.filter(file => !filter || file.path === state.selectedPath || pathParts(file.path).name.toLowerCase().includes(filter.toLowerCase())) ?? [] : [];
   return <View style={styles.listSection}>
     <View style={styles.pullHeader}>
@@ -1106,10 +1152,13 @@ function PullRequestFiles({ pull, state, filter, onSelect }: { pull: GitHubPullR
     {files.length ? <Sidebar style={[styles.root, styles.separated]} selectedId={files.some(file => file.path === state.selectedPath) ? state.selectedPath : null} onSelectionChange={event => { if (event.id) onSelect(event.id); }} defaultRowHeight={24}>
       {files.map(file => {
         const { name, folder } = pathParts(file.path);
+        const count = comments.get(file.path) ?? 0;
+        const commentsLabel = count === 1 ? "1 comment" : `${count} comments`;
         return <SidebarItem key={file.path} id={file.path}>
-          <View style={styles.fileRow} accessible accessibilityLabel={`${name}${folder ? `, ${folder}` : ""}, ${file.additions} added, ${file.deletions} removed`}>
+          <View style={styles.fileRow} accessible accessibilityLabel={`${name}${folder ? `, ${folder}` : ""}, ${file.additions} added, ${file.deletions} removed${count ? `, ${commentsLabel}` : ""}`}>
             <Text style={styles.fileName} numberOfLines={1}>{name}</Text>
             <Text style={styles.fileFolder} numberOfLines={1} ellipsizeMode="head">{folder}</Text>
+            {count ? <Text style={styles.count}>{commentsLabel}</Text> : null}
             <Text style={styles.count}>{`+${file.additions} −${file.deletions}`}</Text>
           </View>
         </SidebarItem>;
@@ -1239,6 +1288,8 @@ const styles = StyleSheet.create({
   indented: { paddingLeft: 24 },
   sidebarIcon: { width: 18, height: 18, alignItems: "center", justifyContent: "center" },
   label: { flex: 1, fontSize: 13, color: PlatformColor("labelColor") },
+  addComment: { width: 120, height: 24 },
+  unplaced: { paddingVertical: 4, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: PlatformColor("separatorColor") },
   count: { fontSize: 12, color: PlatformColor("secondaryLabelColor"), fontVariant: ["tabular-nums"] },
   sidebarNote: { paddingHorizontal: 10, paddingVertical: 6, fontSize: 13, color: PlatformColor("secondaryLabelColor") },
   barButton: { width: 84, height: 24 },

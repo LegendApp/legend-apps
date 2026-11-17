@@ -1,6 +1,6 @@
 import { getGitService, githubRepository, type GitService } from "@legend-apps/git-core";
 import { findUnifiedPatchFile, parseUnifiedPatch, type UnifiedPatchFile } from "@legend-apps/diff-parser/src/unifiedPatch";
-import { apiUrlOverride, createGitHubClient, gitHubApiUrl, GitHubError, pullFilePatch, type GitHubClient, type GitHubPullFile, type GitHubPullRequest, type GitHubRepo } from "./github";
+import { apiUrlOverride, createGitHubClient, gitHubApiUrl, GitHubError, pullFilePatch, type GitHubClient, type GitHubPullFile, type GitHubPullRequest, type GitHubRepo, type NewReviewComment, type ReviewThread } from "./github";
 
 /** `text` is null when GitHub sent no hunks (binary or too large); `error` when its hunks don't parse. */
 export type PullFile = GitHubPullFile & { text: string | null; file: UnifiedPatchFile | null; error: string | null };
@@ -18,8 +18,16 @@ export type PullRequestsState = {
   filesLoading: boolean;
   filesError: string | null;
   selectedPath: string | null;
+  /** The selected pull request's review threads; null until read. */
+  threads: ReviewThread[] | null;
+  /** Its head commit as of the thread read (newer than the list's when someone pushed since). */
+  headSha: string | null;
+  threadsError: { kind: GitHubError["kind"]; message: string } | null;
+  /** A comment or reply is being posted. */
+  writing: boolean;
 };
-export const emptyPullRequests: PullRequestsState = { root: null, repo: null, pulls: null, loading: false, error: null, number: null, files: null, filesLoading: false, filesError: null, selectedPath: null };
+const noSelection = { number: null, files: null, filesLoading: false, filesError: null, selectedPath: null, threads: null, headSha: null, threadsError: null };
+export const emptyPullRequests: PullRequestsState = { root: null, repo: null, pulls: null, loading: false, error: null, ...noSelection, writing: false };
 
 /** One file's patch parsed on its own, so a malformed one doesn't hide the others. */
 function pullFile(file: GitHubPullFile): PullFile {
@@ -40,20 +48,35 @@ const errorOf = (error: unknown) => error instanceof GitHubError ? { kind: error
  */
 export function createPullRequests(onChange: (state: PullRequestsState) => void, {
   serviceFor = getGitService, clientFor = (token: string, apiUrl: string) => createGitHubClient({ token, apiUrl }),
-}: { serviceFor?: (path: string) => GitService; clientFor?: (token: string, apiUrl: string) => Pick<GitHubClient, "pullRequests" | "pullRequestFiles"> } = {}) {
+}: { serviceFor?: (path: string) => GitService; clientFor?: (token: string, apiUrl: string) => Pick<GitHubClient, "pullRequests" | "pullRequestFiles" | "reviewThreads" | "addReviewComment" | "replyToReviewComment"> } = {}) {
   let state = emptyPullRequests;
   let closed = false;
   let token: string | null = null;
   let apiUrl = gitHubApiUrl;
   let client: ReturnType<typeof clientFor> | null = null;
-  let listRead = 0, filesRead = 0, rootRead = 0;
+  let listRead = 0, filesRead = 0, rootRead = 0, threadsRead = 0;
+  // Not state: a repository switch resets the published `writing` while a POST is still out.
+  let writing = false;
   const publish = (patch: Partial<PullRequestsState>) => { state = { ...state, ...patch }; if (!closed) onChange(state); };
   const makeClient = () => { client = token && state.repo ? clientFor(token, apiUrl) : null; };
+
+  /** Reads the threads on their own, so a failed GraphQL read still shows the files. */
+  async function readThreads(number: number) {
+    const repo = state.repo, owner = client, read = ++threadsRead;
+    if (!repo || !owner) return;
+    try {
+      const { threads, headSha } = await owner.reviewThreads(repo, number);
+      if (read === threadsRead && !closed) publish({ threads, headSha: headSha || null, threadsError: null });
+    } catch (error) {
+      if (read === threadsRead && !closed) publish({ threadsError: errorOf(error) });
+    }
+  }
 
   async function readFiles(number: number, keepSelection: boolean) {
     const repo = state.repo, owner = client, read = ++filesRead;
     if (!repo || !owner) return;
-    publish(keepSelection ? { filesLoading: true } : { number, files: null, filesLoading: true, filesError: null, selectedPath: null });
+    publish(keepSelection ? { filesLoading: true } : { ...noSelection, number, filesLoading: true });
+    void readThreads(number);
     try {
       const files = (await owner.pullRequestFiles(repo, number)).map(pullFile);
       if (read !== filesRead || closed) return;
@@ -61,6 +84,19 @@ export function createPullRequests(onChange: (state: PullRequestsState) => void,
       publish({ files, filesLoading: false, filesError: null, selectedPath });
     } catch (error) {
       if (read === filesRead) publish({ filesLoading: false, filesError: errorOf(error).message });
+    }
+  }
+
+  async function write(number: number, post: (owner: NonNullable<typeof client>, repo: GitHubRepo) => Promise<void>) {
+    const repo = state.repo, owner = client;
+    if (!repo || !owner || writing) return;
+    writing = true;
+    publish({ writing: true });
+    try { await post(owner, repo); }
+    finally {
+      writing = false;
+      if (!closed) publish({ writing: false });
+      if (client === owner && state.number === number) await readThreads(number);
     }
   }
 
@@ -72,7 +108,7 @@ export function createPullRequests(onChange: (state: PullRequestsState) => void,
       const pulls = await owner.pullRequests(repo);
       if (read !== listRead || closed) return;
       const number = state.number !== null && pulls.some(pull => pull.number === state.number) ? state.number : null;
-      publish({ pulls, loading: false, error: null, ...number === null ? { number: null, files: null, selectedPath: null, filesError: null } : {} });
+      publish({ pulls, loading: false, error: null, ...number === null ? noSelection : {} });
       if (number !== null) await readFiles(number, true);
     } catch (error) {
       if (read === listRead && !closed) publish({ loading: false, error: errorOf(error) });
@@ -83,7 +119,7 @@ export function createPullRequests(onChange: (state: PullRequestsState) => void,
     /** Reads the repository's GitHub remote (and the loopback API override, for tests), then its pull requests. */
     async setRoot(root: string | null) {
       const read = ++rootRead;
-      listRead += 1; filesRead += 1;
+      listRead += 1; filesRead += 1; threadsRead += 1;
       client = null;
       apiUrl = gitHubApiUrl;
       publish({ ...emptyPullRequests, root });
@@ -102,9 +138,9 @@ export function createPullRequests(onChange: (state: PullRequestsState) => void,
     setToken(next: string | null) {
       if (next === token) return;
       token = next;
-      listRead += 1; filesRead += 1;
+      listRead += 1; filesRead += 1; threadsRead += 1;
       makeClient();
-      publish({ pulls: null, loading: false, error: null, number: null, files: null, filesLoading: false, filesError: null, selectedPath: null });
+      publish({ pulls: null, loading: false, error: null, ...noSelection });
       void refresh();
     },
     refresh,
@@ -112,11 +148,24 @@ export function createPullRequests(onChange: (state: PullRequestsState) => void,
     apiUrl: () => apiUrl,
     select(number: number | null) {
       if (number === state.number) return;
-      filesRead += 1;
-      if (number === null || !state.pulls?.some(pull => pull.number === number)) { publish({ number: null, files: null, filesLoading: false, filesError: null, selectedPath: null }); return; }
+      filesRead += 1; threadsRead += 1;
+      if (number === null || !state.pulls?.some(pull => pull.number === number)) { publish(noSelection); return; }
       void readFiles(number, false);
     },
     selectFile(path: string) { if (state.files?.some(file => file.path === path)) publish({ selectedPath: path }); },
-    dispose() { closed = true; listRead += 1; filesRead += 1; rootRead += 1; client = null; },
+    /** Comments on the selected file's lines at the pull request's head commit, then reads the threads again. Throws GitHub's error. */
+    addComment(comment: Omit<NewReviewComment, "commitId" | "path">) {
+      const pull = state.pulls?.find(entry => entry.number === state.number), path = state.selectedPath;
+      if (!pull || !path) return Promise.resolve();
+      const commitId = state.headSha ?? pull.headSha;
+      return write(pull.number, (owner, repo) => owner.addReviewComment(repo, pull.number, { ...comment, path, commitId }));
+    },
+    /** Replies to the thread whose first comment is `commentId`, then reads the threads again. Throws GitHub's error. */
+    reply(commentId: number, body: string) {
+      const number = state.number;
+      if (number === null) return Promise.resolve();
+      return write(number, (owner, repo) => owner.replyToReviewComment(repo, number, commentId, body));
+    },
+    dispose() { closed = true; listRead += 1; filesRead += 1; rootRead += 1; threadsRead += 1; client = null; },
   };
 }
