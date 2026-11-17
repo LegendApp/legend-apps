@@ -1368,6 +1368,29 @@ export class GitService {
   }
 
   /**
+   * Fetches pull request `number`'s head (`refs/pull/<number>/head` on `remote`, as GitHub publishes it) into local
+   * branch `branch`: creates it, or fast-forwards it (the checked-out branch with `merge --ff-only`). Never forces: Git
+   * refuses, and its message rejects, when the branch has commits the pull request doesn't, or is checked out in
+   * another worktree. Resolves with the head commit.
+   */
+  async fetchPullRequest(remote: string, number: number, branch: string, options: GitNetworkOptions = {}) {
+    if (!remote || remote.startsWith("-")) throw new Error(`“${remote}” isn’t a remote name.`);
+    if (!Number.isSafeInteger(number) || number < 1) throw new Error(`“${number}” isn’t a pull request number.`);
+    await this.validateBranchName(branch, options);
+    const source = `refs/pull/${number}/head`;
+    return this.network(options, async run => {
+      if (await this.currentBranch(options) === branch) {
+        await run(["fetch", "--progress", "--no-tags", remote, source]);
+        // Read at once: another fetch (an editor's, a terminal's) may rewrite FETCH_HEAD before the merge runs.
+        const head = (await this.git(["rev-parse", "--verify", "FETCH_HEAD^{commit}"], {}, 5_000)).trim();
+        await this.branchWrite(options, () => this.git(["merge", "--ff-only", "--no-edit", head], {}, 120_000));
+      } else await run(["fetch", "--progress", "--no-tags", remote, `${source}:refs/heads/${branch}`]);
+      // Not cancellable: the branch has moved by now, so the caller should go on to check it out.
+      return (await this.git(["rev-parse", "--verify", `refs/heads/${branch}^{commit}`], {}, 5_000)).trim();
+    });
+  }
+
+  /**
    * Fetches the upstream's remote (cancellable), then fast-forwards the current branch to its upstream with
    * `git merge --ff-only @{u}` as a queued write (checks index.lock first; once started it finishes). Rejects with Git's
    * message when the branch can't be fast-forwarded, and with GitNoUpstreamError without an upstream.

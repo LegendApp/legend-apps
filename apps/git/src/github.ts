@@ -46,6 +46,12 @@ export type ReviewThread = {
   id: string; path: string; line: number | null; originalLine: number | null; startLine: number | null; side: ReviewSide; startSide: ReviewSide | null;
   resolved: boolean; outdated: boolean; comments: ReviewComment[];
 };
+export type ReviewEvent = "APPROVE" | "REQUEST_CHANGES" | "COMMENT";
+export type ReviewState = "APPROVED" | "CHANGES_REQUESTED" | "COMMENTED" | "DISMISSED" | "PENDING";
+/** A submitted review, oldest first as GitHub lists them. */
+export type GitHubReview = { id: number; author: string; state: ReviewState; submittedAt: string | null };
+/** Approve may go without a summary; Comment and Request Changes need one. */
+export const canSubmitReview = (event: ReviewEvent, body: string) => !!body.trim() || event === "APPROVE";
 /** A new line comment: `line`/`side` end it, `startLine`/`startSide` start a range. */
 export type NewReviewComment = { commitId: string; path: string; line: number; side: ReviewSide; startLine?: number; startSide?: ReviewSide; body: string };
 
@@ -137,6 +143,7 @@ export function createGitHubClient({ token, apiUrl = gitHubApiUrl, fetch: reques
 
   const repoPath = (repo: GitHubRepo) => `/repos/${encodeURIComponent(repo.owner)}/${encodeURIComponent(repo.name)}`;
   type RawPull = { number: number; title: string; user: { login: string } | null; state: "open" | "closed"; draft?: boolean; merged_at?: string | null; base: { ref: string }; head: { ref: string; sha: string; label: string; repo: { full_name: string } | null }; html_url: string };
+  type RawReview = { id: number; user: { login: string } | null; state: ReviewState; submitted_at?: string | null };
   type RawFile = { filename: string; previous_filename?: string; status: string; additions: number; deletions: number; patch?: string };
 
   return {
@@ -190,6 +197,20 @@ export function createGitHubClient({ token, apiUrl = gitHubApiUrl, fetch: reques
       }
       return { headSha, threads };
     },
+    /** Every submitted review of a pull request (REST, paged), oldest first. */
+    async reviews(repo: GitHubRepo, number: number): Promise<GitHubReview[]> {
+      const reviews = await list<RawReview>(`${repoPath(repo)}/pulls/${number}/reviews`);
+      return reviews.map(review => ({ id: review.id, author: review.user?.login ?? "ghost", state: review.state, submittedAt: review.submitted_at ?? null }));
+    },
+    /**
+     * POST /pulls/{n}/reviews: approves, requests changes or comments on the pull request at `commitId`. Request Changes
+     * and Comment need a summary; GitHub refuses (422) to approve or request changes on your own pull request.
+     */
+    async submitReview(repo: GitHubRepo, number: number, review: { commitId: string; event: ReviewEvent; body: string }) {
+      const body = review.body.trim();
+      if (!canSubmitReview(review.event, body)) throw new Error(review.event === "COMMENT" ? "Write a comment to submit." : "Say what needs to change.");
+      await post(`${apiUrl}${repoPath(repo)}/pulls/${number}/reviews`, { commit_id: review.commitId, event: review.event, ...body ? { body } : {} });
+    },
     /** POST /pulls/{n}/comments: a new thread on a line or a range of the diff at `commitId`. */
     async addReviewComment(repo: GitHubRepo, number: number, comment: NewReviewComment) {
       const body: Record<string, unknown> = { body: comment.body, commit_id: comment.commitId, path: comment.path, line: comment.line, side: comment.side };
@@ -217,6 +238,23 @@ const threadsQuery = `query($owner: String!, $name: String!, $number: Int!, $aft
   reviewThreads(first: 100, after: $after) { nodes { id path line originalLine startLine diffSide startDiffSide isResolved isOutdated comments(first: 100) { ${commentFields} } } pageInfo { hasNextPage endCursor } } } } }`;
 const commentsQuery = `query($id: ID!, $after: String) { node(id: $id) { ... on PullRequestReviewThread { comments(first: 100, after: $after) { ${commentFields} } } } }`;
 export type GitHubClient = ReturnType<typeof createGitHubClient>;
+
+const reviewWords: Partial<Record<ReviewState, string>> = { APPROVED: "approved", CHANGES_REQUESTED: "requested changes", COMMENTED: "commented" };
+
+/**
+ * Where each reviewer stands, in the order they first reviewed: their latest approval or change request (a later
+ * comment doesn't change it); a dismissed one drops them; someone who only commented (or commented after a dismissal) "commented". Pending reviews are
+ * the author's drafts and don't count.
+ */
+export function reviewSummary(reviews: readonly GitHubReview[]) {
+  const latest = new Map<string, ReviewState>();
+  for (const review of reviews) {
+    const current = latest.get(review.author);
+    if (review.state === "PENDING" || (review.state === "COMMENTED" && current && current !== "DISMISSED")) continue;
+    latest.set(review.author, review.state);
+  }
+  return [...latest].filter(([, state]) => state !== "DISMISSED").map(([author, state]) => ({ author, state, text: `${author} ${reviewWords[state]}` }));
+}
 
 /** A git-style patch for one PR file, from GitHub's hunks (`patch`), so DiffPane can parse it; null when GitHub sent no hunks (binary or too large). */
 export function pullFilePatch(file: GitHubPullFile) {

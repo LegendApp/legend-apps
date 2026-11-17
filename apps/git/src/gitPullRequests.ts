@@ -1,6 +1,6 @@
 import { getGitService, githubRepository, type GitService } from "@legend-apps/git-core";
 import { findUnifiedPatchFile, parseUnifiedPatch, type UnifiedPatchFile } from "@legend-apps/diff-parser/src/unifiedPatch";
-import { apiUrlOverride, createGitHubClient, gitHubApiUrl, GitHubError, pullFilePatch, type GitHubClient, type GitHubPullFile, type GitHubPullRequest, type GitHubRepo, type NewReviewComment, type ReviewThread } from "./github";
+import { apiUrlOverride, createGitHubClient, gitHubApiUrl, GitHubError, pullFilePatch, type GitHubClient, type GitHubPullFile, type GitHubPullRequest, type GitHubRepo, type GitHubReview, type NewReviewComment, type ReviewEvent, type ReviewThread } from "./github";
 
 /** `text` is null when GitHub sent no hunks (binary or too large); `error` when its hunks don't parse. */
 export type PullFile = GitHubPullFile & { text: string | null; file: UnifiedPatchFile | null; error: string | null };
@@ -8,6 +8,8 @@ export type PullRequestsState = {
   root: string | null;
   /** The github.com repository whose pull requests are listed (the `upstream` remote's, else `origin`'s); null for other hosts. */
   repo: GitHubRepo | null;
+  /** The remote `repo` was read from ("upstream" or "origin"), which pull requests are fetched from. */
+  remote: string | null;
   /** Open pull requests, newest first; null until read (or when signed out). */
   pulls: GitHubPullRequest[] | null;
   loading: boolean;
@@ -23,11 +25,14 @@ export type PullRequestsState = {
   /** Its head commit as of the thread read (newer than the list's when someone pushed since). */
   headSha: string | null;
   threadsError: { kind: GitHubError["kind"]; message: string } | null;
-  /** A comment or reply is being posted. */
+  /** The selected pull request's submitted reviews, oldest first; null until read. */
+  reviews: GitHubReview[] | null;
+  reviewsError: { kind: GitHubError["kind"]; message: string } | null;
+  /** A comment, reply or review is being posted. */
   writing: boolean;
 };
-const noSelection = { number: null, files: null, filesLoading: false, filesError: null, selectedPath: null, threads: null, headSha: null, threadsError: null };
-export const emptyPullRequests: PullRequestsState = { root: null, repo: null, pulls: null, loading: false, error: null, ...noSelection, writing: false };
+const noSelection = { number: null, files: null, filesLoading: false, filesError: null, selectedPath: null, threads: null, headSha: null, threadsError: null, reviews: null, reviewsError: null };
+export const emptyPullRequests: PullRequestsState = { root: null, repo: null, remote: null, pulls: null, loading: false, error: null, ...noSelection, writing: false };
 
 /** One file's patch parsed on its own, so a malformed one doesn't hide the others. */
 function pullFile(file: GitHubPullFile): PullFile {
@@ -41,6 +46,9 @@ function pullFile(file: GitHubPullFile): PullFile {
 
 const errorOf = (error: unknown) => error instanceof GitHubError ? { kind: error.kind, message: error.message } : { kind: "other" as const, message: error instanceof Error ? error.message : String(error) };
 
+/** The local branch a pull request is checked out as: its head branch, prefixed with the fork's owner ("bo/fix") when it comes from a fork. */
+export const pullRequestBranch = (pull: Pick<GitHubPullRequest, "head">) => pull.head.replace(":", "/");
+
 /**
  * The open pull requests of one repository's GitHub remote, read with the signed-in account's token. Reads happen on
  * `refresh` (⌘R, window focus) and selection only, never on a timer; unchanged pages come back as 304s from the
@@ -48,13 +56,13 @@ const errorOf = (error: unknown) => error instanceof GitHubError ? { kind: error
  */
 export function createPullRequests(onChange: (state: PullRequestsState) => void, {
   serviceFor = getGitService, clientFor = (token: string, apiUrl: string) => createGitHubClient({ token, apiUrl }),
-}: { serviceFor?: (path: string) => GitService; clientFor?: (token: string, apiUrl: string) => Pick<GitHubClient, "pullRequests" | "pullRequestFiles" | "reviewThreads" | "addReviewComment" | "replyToReviewComment"> } = {}) {
+}: { serviceFor?: (path: string) => GitService; clientFor?: (token: string, apiUrl: string) => Pick<GitHubClient, "pullRequests" | "pullRequestFiles" | "reviewThreads" | "reviews" | "addReviewComment" | "replyToReviewComment" | "submitReview"> } = {}) {
   let state = emptyPullRequests;
   let closed = false;
   let token: string | null = null;
   let apiUrl = gitHubApiUrl;
   let client: ReturnType<typeof clientFor> | null = null;
-  let listRead = 0, filesRead = 0, rootRead = 0, threadsRead = 0;
+  let listRead = 0, filesRead = 0, rootRead = 0, threadsRead = 0, reviewsRead = 0;
   // Not state: a repository switch resets the published `writing` while a POST is still out.
   let writing = false;
   const publish = (patch: Partial<PullRequestsState>) => { state = { ...state, ...patch }; if (!closed) onChange(state); };
@@ -72,11 +80,24 @@ export function createPullRequests(onChange: (state: PullRequestsState) => void,
     }
   }
 
+  /** Each reviewer's latest review, for the header; read with the files. */
+  async function readReviews(number: number) {
+    const repo = state.repo, owner = client, read = ++reviewsRead;
+    if (!repo || !owner) return;
+    try {
+      const reviews = await owner.reviews(repo, number);
+      if (read === reviewsRead && !closed) publish({ reviews, reviewsError: null });
+    } catch (error) {
+      if (read === reviewsRead && !closed) publish({ reviewsError: errorOf(error) });
+    }
+  }
+
   async function readFiles(number: number, keepSelection: boolean) {
     const repo = state.repo, owner = client, read = ++filesRead;
     if (!repo || !owner) return;
     publish(keepSelection ? { filesLoading: true } : { ...noSelection, number, filesLoading: true });
     void readThreads(number);
+    void readReviews(number);
     try {
       const files = (await owner.pullRequestFiles(repo, number)).map(pullFile);
       if (read !== filesRead || closed) return;
@@ -96,7 +117,7 @@ export function createPullRequests(onChange: (state: PullRequestsState) => void,
     finally {
       writing = false;
       if (!closed) publish({ writing: false });
-      if (client === owner && state.number === number) await readThreads(number);
+      if (client === owner && state.number === number) await Promise.all([readThreads(number), readReviews(number)]);
     }
   }
 
@@ -119,7 +140,7 @@ export function createPullRequests(onChange: (state: PullRequestsState) => void,
     /** Reads the repository's GitHub remote (and the loopback API override, for tests), then its pull requests. */
     async setRoot(root: string | null) {
       const read = ++rootRead;
-      listRead += 1; filesRead += 1; threadsRead += 1;
+      listRead += 1; filesRead += 1; threadsRead += 1; reviewsRead += 1;
       client = null;
       apiUrl = gitHubApiUrl;
       publish({ ...emptyPullRequests, root });
@@ -129,7 +150,8 @@ export function createPullRequests(onChange: (state: PullRequestsState) => void,
         const [upstream, origin, override] = await Promise.all([git.remoteUrl("upstream"), git.remoteUrl("origin"), git.configValue("legendgit.githubApiUrl")]);
         if (read !== rootRead || closed) return;
         apiUrl = apiUrlOverride(override) ?? gitHubApiUrl;
-        publish({ repo: githubRepository(upstream) ?? githubRepository(origin) });
+        const fromUpstream = githubRepository(upstream);
+        publish({ repo: fromUpstream ?? githubRepository(origin), remote: fromUpstream ? "upstream" : githubRepository(origin) ? "origin" : null });
         makeClient();
         await refresh();
       } catch (error) { console.error(error); }
@@ -138,7 +160,7 @@ export function createPullRequests(onChange: (state: PullRequestsState) => void,
     setToken(next: string | null) {
       if (next === token) return;
       token = next;
-      listRead += 1; filesRead += 1; threadsRead += 1;
+      listRead += 1; filesRead += 1; threadsRead += 1; reviewsRead += 1;
       makeClient();
       publish({ pulls: null, loading: false, error: null, ...noSelection });
       void refresh();
@@ -148,7 +170,7 @@ export function createPullRequests(onChange: (state: PullRequestsState) => void,
     apiUrl: () => apiUrl,
     select(number: number | null) {
       if (number === state.number) return;
-      filesRead += 1; threadsRead += 1;
+      filesRead += 1; threadsRead += 1; reviewsRead += 1;
       if (number === null || !state.pulls?.some(pull => pull.number === number)) { publish(noSelection); return; }
       void readFiles(number, false);
     },
@@ -166,6 +188,13 @@ export function createPullRequests(onChange: (state: PullRequestsState) => void,
       if (number === null) return Promise.resolve();
       return write(number, (owner, repo) => owner.replyToReviewComment(repo, number, commentId, body));
     },
-    dispose() { closed = true; listRead += 1; filesRead += 1; rootRead += 1; threadsRead += 1; client = null; },
+    /** Approves, requests changes or comments on the selected pull request at its head commit, then reads its reviews and threads again. Throws GitHub's error. */
+    submitReview(event: ReviewEvent, body: string) {
+      const pull = state.pulls?.find(entry => entry.number === state.number);
+      if (!pull) return Promise.resolve();
+      const commitId = state.headSha ?? pull.headSha;
+      return write(pull.number, (owner, repo) => owner.submitReview(repo, pull.number, { commitId, event, body }));
+    },
+    dispose() { closed = true; listRead += 1; filesRead += 1; rootRead += 1; threadsRead += 1; reviewsRead += 1; client = null; },
   };
 }

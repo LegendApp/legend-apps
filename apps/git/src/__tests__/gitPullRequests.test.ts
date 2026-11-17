@@ -16,6 +16,8 @@ function setup(remotes: Record<string, string> = { origin: "git@github.com:me/ap
     reviewThreads: jest.fn(async () => ({ headSha: "", threads: [] as ReviewThread[] })),
     addReviewComment: jest.fn(async () => {}),
     replyToReviewComment: jest.fn(async () => {}),
+    reviews: jest.fn(async () => []),
+    submitReview: jest.fn(async () => {}),
   };
   const clientFor = jest.fn((_token: string, _apiUrl: string) => client);
   const owner = createPullRequests(next => { state = next; }, { serviceFor: () => service(remotes, override), clientFor });
@@ -61,7 +63,7 @@ it("prefers the upstream remote, honours only a loopback API override, lists, se
 
 it("forgets one repository's API override when another opens", async () => {
   let override: string | null = "http://127.0.0.1:8123";
-  const clientFor = jest.fn((_token: string, _apiUrl: string) => ({ pullRequests: jest.fn(async () => []), pullRequestFiles: jest.fn(async () => []), reviewThreads: jest.fn(async () => ({ headSha: "", threads: [] })), addReviewComment: jest.fn(), replyToReviewComment: jest.fn() }));
+  const clientFor = jest.fn((_token: string, _apiUrl: string) => ({ pullRequests: jest.fn(async () => []), pullRequestFiles: jest.fn(async () => []), reviewThreads: jest.fn(async () => ({ headSha: "", threads: [] })), addReviewComment: jest.fn(), replyToReviewComment: jest.fn(), reviews: jest.fn(async () => []), submitReview: jest.fn() }));
   const owner = createPullRequests(() => {}, { serviceFor: () => ({ remoteUrl: async () => "git@github.com:me/app.git", configValue: async () => override }) as unknown as GitService, clientFor });
   owner.setToken("t");
   await owner.setRoot("/a");

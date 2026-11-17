@@ -21,8 +21,8 @@ import { openURL } from "@legendapp/spark/links";
 import { subscribeToOpenRequests } from "@legendapp/spark/app/documents";
 import { EmptyState } from "./EmptyState";
 import { gitHubAccount, gitHubCliToken, useGitHubAccount } from "./gitHubAccount";
-import { createPullRequests, emptyPullRequests, type PullRequestsState } from "./gitPullRequests";
-import { GitHubError, type GitHubPullRequest, type ReviewThread } from "./github";
+import { createPullRequests, emptyPullRequests, pullRequestBranch, type PullRequestsState } from "./gitPullRequests";
+import { GitHubError, reviewSummary, type GitHubPullRequest, type ReviewEvent, type ReviewThread } from "./github";
 import { commentCounts, commentRange, placeThreads, threadLines } from "./reviewThreads";
 import { CommentSheet, ReviewThreadView } from "./ReviewThreadView";
 import { StateBar } from "./StateBar";
@@ -71,10 +71,13 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
   const networkController = useRef<ReturnType<typeof createGitNetwork> | null>(null);
   const [pulls, setPulls] = useState(emptyPullRequests);
   const pullsController = useRef<ReturnType<typeof createPullRequests> | null>(null);
+  const pullsRef = useRef(pulls);
+  pullsRef.current = pulls;
   const gitHub = useGitHubAccount();
   const signingIn = useRef(false);
   const [pullRange, setPullRange] = useState<{ start: DiffLineTarget; end: DiffLineTarget } | null>(null);
-  const [commentSheet, setCommentSheet] = useState<{ title: string; context: string; post: (body: string) => Promise<void> } | null>(null);
+  // A line comment or reply, or (with `review`) a review of the whole pull request.
+  const [commentSheet, setCommentSheet] = useState<{ title: string; context: string; review?: boolean; post: (body: string, event: ReviewEvent) => Promise<void> } | null>(null);
   const root = changes.root;
   const recents = useRecentRepositories();
   const operation = root ? changes.operation : null;
@@ -88,8 +91,9 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
   const selectedPullNumber = sectionPullRequest(section);
   // Rows are listed only while signed in (the list is cleared just after a sign-out).
   const selectedPull = root && selectedPullNumber !== null && gitHub.status === "signed-in" ? pulls.pulls?.find(pull => pull.number === selectedPullNumber) ?? null : null;
-  // The comment sheet belongs to one file of one pull request.
-  useEffect(() => { setCommentSheet(null); }, [selectedPull?.number, pulls.selectedPath]);
+  // The comment sheet belongs to one file of one pull request; the review sheet to the pull request.
+  useEffect(() => { setCommentSheet(null); }, [selectedPull?.number]);
+  useEffect(() => { setCommentSheet(sheet => sheet?.review ? sheet : null); }, [pulls.selectedPath]);
   const selectedCommit = root && showsHistory ? history.selectedOid : null;
   const unstaged = unstagedEntries(changes.status);
   const staged = stagedEntries(changes.status);
@@ -179,17 +183,57 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
 
   /** Checks out the branch; when Git refuses because uncommitted changes would be overwritten, offers Stash and Switch. */
   async function checkout(ref: string) {
-    const entry = findRef(refsRef.current.refs, ref), owner = refsController.current;
-    if (!entry || entry.kind === "tag" || !owner) return;
+    const owner = refsController.current;
+    // The controller's refs: a branch made just now isn't in this render's yet.
+    const entry = findRef(owner?.current().refs ?? null, ref);
+    if (!entry || entry.kind === "tag" || !owner) return false;
     // A selected remote branch gives way to the local branch made from it.
     const switched = (local: string) => { if (entry.kind === "remote") setSection(current => current === `ref:${ref}` ? `ref:${local}` : current); };
     try {
       switched(await owner.checkout(entry));
+      return true;
     } catch (error) {
-      if (!(error instanceof GitLocalChangesError)) { await reportBranchError(`Couldn’t Switch to “${entry.ref.name}”`, error); return; }
-      if (!await confirmStashAndSwitch(windowId, error.branch, error.message)) return;
-      try { switched(await owner.stashAndCheckout(entry)); } catch (failed) { await reportBranchError(`Couldn’t Switch to “${entry.ref.name}”`, failed); }
+      if (!(error instanceof GitLocalChangesError)) { await reportBranchError(`Couldn’t Switch to “${entry.ref.name}”`, error); return false; }
+      if (!await confirmStashAndSwitch(windowId, error.branch, error.message)) return false;
+      try { switched(await owner.stashAndCheckout(entry)); return true; } catch (failed) { await reportBranchError(`Couldn’t Switch to “${entry.ref.name}”`, failed); return false; }
     }
+  }
+
+  /**
+   * Fetches a pull request's head into a local branch named after it (see pullRequestBranch), then checks the branch
+   * out (offering Stash and Switch when changes are in the way) or adds a worktree for it next to the repository and
+   * opens it in its own window. A worktree that has the branch already is just opened.
+   */
+  async function checkOutPullRequest(number: number, worktree: boolean) {
+    const pull = pullsRef.current.pulls?.find(entry => entry.number === number), remote = pullsRef.current.remote;
+    const network = networkController.current, owner = refsController.current;
+    if (!pull || !remote || !network || !owner) return;
+    const branch = pullRequestBranch(pull);
+    const open = (path: string) => {
+      const name = repositoryName();
+      openWorktreeWindow(path, name, `${name} — ${branch}`).catch((error: unknown) => reportBranchError("Couldn’t Open the Worktree", error));
+    };
+    const existing = worktree ? refsRef.current.worktrees?.find(entry => entry.branch === branch && entry.prunable === null) : undefined;
+    if (existing) { setSection(`worktree:${existing.path}`); if (existing.path !== root) open(existing.path); return; }
+    try {
+      await network.fetchPullRequest(remote, number, branch);
+    } catch (error) {
+      if (!(error instanceof GitServiceError && error.code === "aborted")) await reportBranchError(`Couldn’t Fetch Pull Request #${number}`, (error instanceof Error ? error.message : String(error)).replace(/^hint:.*(?:\n|$)/gm, "").trim());
+      return;
+    }
+    if (refsController.current !== owner) return;
+    await owner.refresh();
+    if (!worktree) {
+      if (await checkout(`refs/heads/${branch}`)) setSection(`ref:refs/heads/${branch}`);
+      return;
+    }
+    const main = owner.current().worktrees?.[0]?.path ?? root;
+    if (!main) return;
+    try {
+      const path = await owner.addWorktreeNextTo(main, branch);
+      setSection(`worktree:${path}`);
+      open(path);
+    } catch (error) { await reportBranchError("Couldn’t Create the Worktree", error); }
   }
 
   async function stashChanges(includeUntracked: boolean) {
@@ -432,14 +476,15 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
   }
 
   /** Posts from the comment sheet; on failure the sheet stays open with the text, GitHub's message shows, and a 401 offers Sign In…. */
-  async function postComment(post: (body: string) => Promise<void>, body: string) {
-    try { await post(body); setCommentSheet(null); }
+  async function postComment(sheet: NonNullable<typeof commentSheet>, body: string, event: ReviewEvent) {
+    const title = sheet.review ? "Couldn’t Submit the Review" : "Couldn’t Post the Comment";
+    try { await sheet.post(body, event); setCommentSheet(null); }
     catch (error) {
       if (error instanceof GitHubError && error.kind === "unauthorized") {
-        const choice = await showMessage({ windowId, kind: "warning", title: "Couldn’t Post the Comment", message: error.message,
+        const choice = await showMessage({ windowId, kind: "warning", title, message: error.message,
           buttons: [{ id: "sign-in", label: "Sign In…" }, { id: "cancel", label: "Cancel" }], defaultButtonId: "sign-in", cancelButtonId: "cancel" }).catch((failed: unknown) => { console.error(failed); return { buttonId: "cancel" }; });
         if (choice.buttonId === "sign-in") { setCommentSheet(null); runCommand("sign-in-github", contextRef.current); }
-      } else await reportBranchError("Couldn’t Post the Comment", error);
+      } else await reportBranchError(title, error);
     }
   }
   const githubSide = (target: DiffLineTarget) => target.side === "old" ? "LEFT" as const : "RIGHT" as const;
@@ -450,6 +495,11 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     const lines = range.start.side === range.end.side && range.start.line === range.end.line ? `Line ${old(range.end)}` : `Lines ${old(range.start)}–${old(range.end)}`;
     const location = commentRange({ side: githubSide(range.start), line: range.start.line }, { side: githubSide(range.end), line: range.end.line });
     setCommentSheet({ title: "Add Comment", context: `${lines} of “${path}”`, post: body => pullsController.current?.addComment({ ...location, body }) ?? Promise.resolve() });
+  }
+  function reviewPullRequest() {
+    const pull = selectedPull;
+    if (!pull || pulls.writing) return;
+    setCommentSheet({ title: "Review Pull Request", context: `#${pull.number} ${pull.title}`, review: true, post: (body, event) => pullsController.current?.submitReview(event, body) ?? Promise.resolve() });
   }
   function replyToThread(thread: ReviewThread) {
     const first = thread.comments[0];
@@ -494,6 +544,8 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     recents,
     operation,
     gitHub,
+    pullRequests: root && gitHub.status === "signed-in" && pulls.remote ? pulls.pulls?.map(pull => pull.number) ?? [] : [],
+    pullWriting: pulls.writing,
     run: {
       openRepository: () => void chooseRepository(),
       openRecent,
@@ -544,6 +596,8 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
       cancelNetwork: () => networkController.current?.cancel(),
       pushQueueEntry: id => void pushQueueEntry(id),
       signInToGitHub: () => void signInToGitHub(),
+      reviewPullRequest,
+      checkOutPullRequest: (number, worktree) => void checkOutPullRequest(number, worktree),
       signOutOfGitHub: () => { gitHubAccount.signOut().catch((error: unknown) => reportBranchError("Couldn’t Sign Out of GitHub", error)); },
     },
   };
@@ -563,6 +617,7 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
       // AppKit's own View ▸ Show/Hide Sidebar drives the split view, so the menu has no second one.
       { type: "submenu", id: "view", label: "View", target: { menu: "view" }, items: [item("show-changes"), item("show-history"), item("show-review"), { type: "separator" }, item("show-file-history"), item("show-all-history")] },
       { type: "submenu", id: "repository", label: "Repository", placement: { before: { menu: "window" } }, items: [item("fetch"), item("pull"), item("push"), item("cancel-network"), { type: "separator" }, item("refresh"), { type: "separator" }, item("open-github"), { type: "separator" }, item("sign-in-github"), item("sign-out-github")] },
+      { type: "submenu", id: "pull-request", label: "Pull Request", placement: { before: { menu: "window" } }, items: [item("review-pull-request"), { type: "separator" }, item("checkout-pull-request"), item("pull-request-worktree")] },
       { type: "submenu", id: "branch", label: "Branch", placement: { before: { menu: "window" } }, items: [item("switch-branch"), item("new-branch"), { type: "separator" }, item("rename-branch"), item("delete-branch"), { type: "separator" }, item("abort-operation"), item("continue-operation")] },
       { type: "submenu", id: "worktree", label: "Worktree", placement: { before: { menu: "window" } }, items: [item("new-worktree"), item("open-review-worktree"), { type: "separator" }, item("reveal-worktree"), item("remove-worktree")] },
       {
@@ -724,6 +779,13 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     ] : [push];
     showContextMenu({ windowId, position, items })
       .then(result => { if (!result.canceled) runCommand(result.itemId, contextRef.current, result.itemId === "push-review" ? entry.id : entry.kind === "worktree" ? entry.path : undefined); }, console.error);
+  }
+
+  function showPullRequestMenu({ number, position }: { number: number; position: { x: number; y: number } }) {
+    const menuContext = contextRef.current, target = String(number);
+    const items = (["checkout-pull-request", "pull-request-worktree"] as const).map(id => commandMenuItem(id, menuContext, { target, shortcut: false }));
+    showContextMenu({ windowId, position, items })
+      .then(result => { if (!result.canceled) runCommand(result.itemId, contextRef.current, target); }, console.error);
   }
 
   function showRefMenu({ ref, position }: { ref: string; position: { x: number; y: number } }) {
@@ -926,6 +988,8 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     : <EmptyState title={worktreePreview.loading ? "Loading Worktree…" : worktreePreview.error ? "Couldn’t Read the Worktree" : worktreePreview.files.length ? "No Selection" : "Working Tree Clean"}
       symbol={!worktreePreview.loading && !worktreePreview.error && !worktreePreview.files.length ? "checkmark.circle" : undefined} message={worktreePreview.error ?? undefined} />;
 
+  // Threads or reviews GitHub refused to read; the files may still show.
+  const detailError = pulls.threadsError ?? pulls.reviewsError;
   const pullFile = selectedPull && pulls.number === selectedPull.number ? pulls.files?.find(file => file.path === pulls.selectedPath) : undefined;
   const placed = pullFile ? placeThreads(pulls.threads ?? [], pullFile.path, pullFile.file) : null;
   const threadView = (thread: ReviewThread, aboveDiff?: boolean) => <ReviewThreadView key={thread.id} thread={thread} aboveDiff={aboveDiff} disabled={pulls.writing} onReply={replyToThread} />;
@@ -977,7 +1041,7 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
             ...refSidebarItems(refs.refs, ref => showRefMenu(ref)),
             ...stashSidebarItems(refs.stashes, showStashMenu),
             ...worktreeSidebarItems(refs.worktrees, root, showWorktreeMenu),
-            ...pullRequestSidebarItems(pulls, gitHub.status),
+            ...pullRequestSidebarItems(pulls, gitHub.status, showPullRequestMenu),
           ] : recents.length ? recentLabels(recents).map((label, index) => <SidebarItem key={recents[index]} id={`recent:${recents[index]}`}>
             <SidebarRow symbol="folder" label={label} />
           </SidebarItem>) :
@@ -999,7 +1063,8 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
             <Button style={styles.discard} disabled={!commandEnabled("commit", context)} onPress={() => runCommand("commit", contextRef.current)}>Commit…</Button>
           </View>
         </View> : null}
-        {selectedPull ? <View style={styles.listPane}><PullRequestFiles pull={selectedPull} state={pulls} filter={filter} onSelect={path => pullsController.current?.selectFile(path)} /></View> : null}
+        {selectedPull ? <View style={styles.listPane}><PullRequestFiles pull={selectedPull} state={pulls} filter={filter} onSelect={path => pullsController.current?.selectFile(path)}
+          review={<Button style={styles.action} disabled={!commandEnabled("review-pull-request", context)} onPress={() => runCommand("review-pull-request", contextRef.current)}>Review…</Button>} /></View> : null}
         {queueBranch ? <View style={styles.listPane}>
           <View style={[styles.heading, styles.tallHeading]}>
             <View style={styles.headingStack}>
@@ -1023,9 +1088,9 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
             {pulls.error.kind === "unauthorized" ? <Button style={styles.barButton} onPress={() => runCommand("sign-in-github", contextRef.current)}>Sign In…</Button>
               : <Button style={styles.barButton} disabled={pulls.loading} onPress={() => void pullsController.current?.refresh()}>Try Again</Button>}
           </StateBar> : null}
-          {/* A refused token fails both reads; one bar says so. */}
-          {selectedPull && pulls.threadsError && !pulls.error ? <StateBar tone="error" text={pulls.threadsError.message}>
-            {pulls.threadsError.kind === "unauthorized" ? <Button style={styles.barButton} onPress={() => runCommand("sign-in-github", contextRef.current)}>Sign In…</Button>
+          {/* A refused token fails every read; one bar says so. */}
+          {selectedPull && detailError && !pulls.error ? <StateBar tone="error" text={detailError.message}>
+            {detailError.kind === "unauthorized" ? <Button style={styles.barButton} onPress={() => runCommand("sign-in-github", contextRef.current)}>Sign In…</Button>
               : <Button style={styles.barButton} onPress={() => void pullsController.current?.refresh()}>Try Again</Button>}
           </StateBar> : null}
           {root ? <View style={styles.detail}>{showsHistory || queueBranch ? <CommitDetails history={history} actions={historyActions} /> : stashEntry ? stashDetail : worktreeEntry || queueWorktree ? worktreeDetailPane : selectedPull ? pullDetail : changesDetail}</View>
@@ -1033,8 +1098,8 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
             : <EmptyState symbol="folder" title="No Repository Open" message="Open a Git repository to see its changes and commit them.">
               <Button style={styles.open} onPress={() => void chooseRepository()}>Open Repository…</Button>
             </EmptyState>}
-          {commentSheet && selectedPull ? <CommentSheet key={commentSheet.title + commentSheet.context} top={contentInset} title={commentSheet.title} context={commentSheet.context} busy={pulls.writing}
-            onCancel={() => setCommentSheet(null)} onSubmit={(body: string) => void postComment(commentSheet.post, body)} /> : null}
+          {commentSheet && selectedPull ? <CommentSheet key={commentSheet.review ? "review" : commentSheet.title + commentSheet.context} top={contentInset} title={commentSheet.title} context={commentSheet.context} busy={pulls.writing}
+            review={commentSheet.review} onCancel={() => setCommentSheet(null)} onSubmit={(body, event) => void postComment(commentSheet, body, event)} /> : null}
         </View>
       }
     />
@@ -1113,13 +1178,13 @@ function queueSidebarItems(queue: readonly QueueEntry[], onContextMenu: (event: 
 }
 
 /** Pull Requests (for a repository on github.com): open PRs, or Sign In to GitHub… when signed out. */
-function pullRequestSidebarItems(state: PullRequestsState, status: "loading" | "signed-out" | "signed-in") {
+function pullRequestSidebarItems(state: PullRequestsState, status: "loading" | "signed-out" | "signed-in", onContextMenu: (event: { number: number; position: { x: number; y: number } }) => void) {
   if (!state.repo || status === "loading") return [];
   const note = (text: string) => <SidebarItem key="pulls:note" id="pulls:note" selectable={false}><Text style={styles.sidebarNote}>{text}</Text></SidebarItem>;
   return [
     <SidebarItem key="group:pulls" id="group:pulls" selectable={false}><Text style={styles.section} accessibilityRole="header">Pull Requests</Text></SidebarItem>,
     ...status === "signed-out" ? [<SidebarItem key="github-sign-in" id="github-sign-in"><SidebarRow symbol="person.crop.circle" label="Sign In to GitHub…" /></SidebarItem>]
-      : state.pulls?.length ? state.pulls.map(pull => <SidebarItem key={`pr:${pull.number}`} id={`pr:${pull.number}`} rowHeight={40}><PullRequestRow pull={pull} /></SidebarItem>)
+      : state.pulls?.length ? state.pulls.map(pull => <SidebarItem key={`pr:${pull.number}`} id={`pr:${pull.number}`} rowHeight={40} onContextMenu={event => onContextMenu({ number: pull.number, position: event.windowPosition })}><PullRequestRow pull={pull} /></SidebarItem>)
       : [note(state.pulls ? "No open pull requests" : state.error && !state.loading ? "Couldn’t load pull requests" : "Loading…")],
   ];
 }
@@ -1140,14 +1205,19 @@ function PullRequestRow({ pull }: { pull: GitHubPullRequest }) {
 
 const pullState = (pull: GitHubPullRequest) => pull.merged ? "Merged" : pull.state === "closed" ? "Closed" : pull.draft ? "Draft" : "Open";
 
-/** The selected pull request's header (title, number, author, base ← head, state) over its changed files. */
-function PullRequestFiles({ pull, state, filter, onSelect }: { pull: GitHubPullRequest; state: PullRequestsState; filter: string; onSelect: (path: string) => void }) {
+/** The selected pull request's header (title, number, author, base ← head, state, where each reviewer stands, Review…) over its changed files. */
+function PullRequestFiles({ pull, state, filter, onSelect, review }: { pull: GitHubPullRequest; state: PullRequestsState; filter: string; onSelect: (path: string) => void; review: ReactNode }) {
+  const reviewers = state.number === pull.number && state.reviews ? reviewSummary(state.reviews).map(entry => entry.text).join(" · ") : "";
   const comments = commentCounts(state.number === pull.number ? state.threads : null);
   const files = state.number === pull.number ? state.files?.filter(file => !filter || file.path === state.selectedPath || pathParts(file.path).name.toLowerCase().includes(filter.toLowerCase())) ?? [] : [];
   return <View style={styles.listSection}>
     <View style={styles.pullHeader}>
       <Text style={styles.pullTitle} accessibilityRole="header" selectable numberOfLines={3}>{pull.title}</Text>
       <Text style={styles.headingNote} selectable numberOfLines={2}>{`#${pull.number} · ${pull.author} · ${pull.base} ← ${pull.head} · ${pullState(pull)}`}</Text>
+      <View style={styles.pullReview}>
+        <Text style={[styles.headingNote, styles.root]} selectable numberOfLines={2} accessibilityLabel={reviewers ? `Reviews: ${reviewers}` : "No reviews"}>{reviewers || "No reviews yet"}</Text>
+        {review}
+      </View>
     </View>
     {files.length ? <Sidebar style={[styles.root, styles.separated]} selectedId={files.some(file => file.path === state.selectedPath) ? state.selectedPath : null} onSelectionChange={event => { if (event.id) onSelect(event.id); }} defaultRowHeight={24}>
       {files.map(file => {
@@ -1296,6 +1366,7 @@ const styles = StyleSheet.create({
   pullRow: { height: 40, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 8 },
   pullRowTitle: { fontSize: 13, color: PlatformColor("labelColor") },
   pullAuthor: { fontSize: 11, marginTop: 1 },
+  pullReview: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 },
   pullHeader: { paddingLeft: 16, paddingRight: 12, paddingTop: 10, paddingBottom: 10, gap: 2 },
   pullTitle: { fontSize: 13, fontWeight: "600", color: PlatformColor("labelColor") },
 });

@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { PlatformColor, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { Button } from "@legendapp/spark/ui";
+import { Button, SegmentedControl } from "@legendapp/spark/ui";
 import { SFSymbol } from "@legendapp/spark/ui/symbol";
-import type { ReviewThread } from "./github";
+import { canSubmitReview, type ReviewEvent, type ReviewThread } from "./github";
 import { threadLines } from "./reviewThreads";
 import { useSymbolColor } from "./FileRow";
 
@@ -48,21 +48,30 @@ export function ReviewThreadView({ thread, aboveDiff, disabled, onReply }: {
   </View>;
 }
 
+const reviewEvents = [{ label: "Comment", value: "COMMENT" }, { label: "Approve", value: "APPROVE" }, { label: "Request Changes", value: "REQUEST_CHANGES" }] as const;
+
 /**
- * Add Comment… and Reply…: a sheet-style panel attached to the top of the detail with a multi-line field. The pinned
- * Spark has no window sheets and its prompt is single-line, so this is drawn in the window.
+ * Add Comment…, Reply… and Review…: a sheet-style panel attached to the top of the detail with a multi-line field (and,
+ * for a review, Comment / Approve / Request Changes). The pinned Spark has no window sheets and its prompt is
+ * single-line, so this is drawn in the window.
  */
-export function CommentSheet({ top, title, context, busy, onCancel, onSubmit }: { top: number; title: string; context: string; busy: boolean; onCancel: () => void; onSubmit: (body: string) => void }) {
+export function CommentSheet({ top, title, context, busy, review, onCancel, onSubmit }: {
+  top: number; title: string; context: string; busy: boolean; review?: boolean; onCancel: () => void; onSubmit: (body: string, event: ReviewEvent) => void;
+}) {
   const [body, setBody] = useState("");
+  const [event, setEvent] = useState<ReviewEvent>("COMMENT");
   // Attached under the toolbar, like a sheet.
   return <View style={[styles.scrim, { top }]}>
     <View style={styles.sheet} accessibilityRole="none" accessibilityLabel={title}>
       <Text style={styles.sheetTitle} accessibilityRole="header">{title}</Text>
       <Text style={styles.sheetContext} numberOfLines={2}>{context}</Text>
-      <TextInput accessibilityLabel="Comment" placeholder="Leave a comment (Markdown)" multiline autoFocus value={body} editable={!busy} onChangeText={setBody} style={styles.field} />
+      {review ? <SegmentedControl style={styles.events} accessibilityLabel="Review" options={reviewEvents} value={event} disabled={busy} onValueChange={value => setEvent(value as ReviewEvent)} /> : null}
+      <TextInput accessibilityLabel={review ? "Summary" : "Comment"} placeholder={review ? event === "APPROVE" ? "Summary (optional, Markdown)" : "Summary (Markdown)" : "Leave a comment (Markdown)"} multiline autoFocus value={body} editable={!busy} onChangeText={setBody} style={styles.field} />
       <View style={styles.sheetButtons}>
         <Button style={styles.sheetButton} disabled={busy} onPress={onCancel}>Cancel</Button>
-        <Button style={styles.sheetButton} variant="default" disabled={busy || !body.trim()} onPress={() => onSubmit(body.trim())}>{busy ? "Posting…" : "Comment"}</Button>
+        <Button style={review ? styles.submitReview : styles.sheetButton} variant="default" disabled={busy || !canSubmitReview(review ? event : "COMMENT", body)} onPress={() => onSubmit(body.trim(), event)}>
+          {busy ? "Posting…" : review ? "Submit Review" : "Comment"}
+        </Button>
       </View>
     </View>
   </View>;
@@ -90,4 +99,6 @@ const styles = StyleSheet.create({
   field: { height: 110, padding: 6, fontSize: 13, borderWidth: StyleSheet.hairlineWidth, borderColor: PlatformColor("separatorColor"), backgroundColor: PlatformColor("textBackgroundColor"), color: PlatformColor("labelColor") },
   sheetButtons: { flexDirection: "row", justifyContent: "flex-end", gap: 10, marginTop: 4 },
   sheetButton: { width: 88, height: 24 },
+  submitReview: { width: 120, height: 24 },
+  events: { width: 300, height: 24, alignSelf: "center", marginVertical: 4 },
 });

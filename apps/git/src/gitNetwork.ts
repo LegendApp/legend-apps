@@ -25,7 +25,7 @@ export function createGitNetwork(onChange: (state: NetworkState) => void, servic
   let active: AbortController | undefined;
   const publish = (patch: Partial<NetworkState>) => { state = { ...state, ...patch }; if (!closed) onChange(state); };
 
-  const run = async (operation: NetworkOperation, start: (git: GitService, options: GitNetworkOptions) => Promise<void>) => {
+  const run = async <T>(operation: NetworkOperation, start: (git: GitService, options: GitNetworkOptions) => Promise<T>): Promise<T> => {
     const root = state.root;
     if (!root || closed) throw new Error("Open a repository first.");
     if (state.operation) throw new Error(`${verbs[state.operation]} is still running.`);
@@ -41,7 +41,7 @@ export function createGitNetwork(onChange: (state: NetworkState) => void, servic
       publish({ progress });
     };
     try {
-      await start(serviceFor(root), { signal: controller.signal, onProgress });
+      return await start(serviceFor(root), { signal: controller.signal, onProgress });
     } finally {
       if (active === controller) { active = undefined; publish({ operation: null, progress: null }); }
     }
@@ -56,6 +56,8 @@ export function createGitNetwork(onChange: (state: NetworkState) => void, servic
     },
     /** Fetches every remote and prunes remote branches deleted there. */
     fetch() { return run("fetch", (git, options) => git.fetch({ ...options, prune: true })); },
+    /** Fetches pull request `number` from `remote` into local branch `branch` (see GitService.fetchPullRequest); resolves with its head commit. */
+    fetchPullRequest(remote: string, number: number, branch: string) { return run("fetch", (git, options) => git.fetchPullRequest(remote, number, branch, options)); },
     pull() { return run("pull", (git, options) => git.pull(options)); },
     push() { return run("push", (git, options) => git.push(options)); },
     /** The branch's first push: sets its upstream on `remote`. */

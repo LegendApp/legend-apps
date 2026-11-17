@@ -68,6 +68,11 @@ it("adds a worktree for an existing branch and for a new branch from a start poi
   await expect(git.addWorktree(join(parent, "missing-branch"), { branch: "nope" })).rejects.toThrow("There’s no local branch named “nope”.");
   await expect(git.addWorktree(join(parent, "bad"), { newBranch: "bad..name" })).rejects.toThrow("isn’t a valid branch name");
   await expect(git.addWorktree("relative", { branch: "feature" })).rejects.toThrow("Expected an absolute folder path.");
+  // A folder that's there already (Legend Git then tries the next name).
+  fixtureGit(path, "branch", "spare", first);
+  mkdirSync(join(parent, "taken")); writeFileSync(join(parent, "taken", "keep.txt"), "keep\n");
+  await expect(git.addWorktree(join(parent, "taken"), { branch: "spare" })).rejects.toThrow(/already exists/);
+  expect(readFileSync(join(parent, "taken", "keep.txt"), "utf8")).toBe("keep\n");
   expect(listed(path)).toEqual([path, existing, created]);
 });
 

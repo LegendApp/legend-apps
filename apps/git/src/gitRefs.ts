@@ -33,6 +33,9 @@ export function resolveBranchName(refs: GitRefList | null, name: string): RefEnt
   return matches.length === 1 ? { kind: "remote", ref: matches[0]! } : null;
 }
 
+/** The folder a branch's worktree gets next to the repository: "<repository>-<branch>", slashes as dashes. */
+export const worktreeFolder = (main: string, branch: string) => `${main.replace(/\/+$/, "").split("/").pop()}-${branch.replace(/\//g, "-")}`;
+
 /** Local branches, most recently committed first, for the toolbar's branch menu. */
 export const recentBranches = (refs: GitRefList | null, count = 10) => [...refs?.branches ?? []].sort((a, b) => b.time - a.time).slice(0, count);
 
@@ -110,6 +113,8 @@ export function createGitRefs(onChange: (state: RefsState) => void, serviceFor: 
       void refresh();
     },
     refresh,
+    /** The last published state (newer than a render's copy right after a write or refresh). */
+    current: () => state,
     /** Checks out a local branch, or a remote branch as a tracking local branch; resolves with the local branch's ref name. */
     checkout(entry: RefEntry) {
       if (entry.kind === "tag") return Promise.reject(new Error("Check out a branch, not a tag."));
@@ -143,6 +148,19 @@ export function createGitRefs(onChange: (state: RefsState) => void, serviceFor: 
     /** Adds a worktree at `path` for an existing branch or a new one (see GitService.addWorktree); resolves with its path as Git lists it. */
     addWorktree(path: string, options: Omit<GitAddWorktreeOptions, "signal">) {
       return write((git, signal) => git.addWorktree(path, { ...options, signal } as GitAddWorktreeOptions));
+    },
+    /**
+     * Adds a worktree for existing local branch `branch` in a new folder next to the main worktree `main`, named
+     * "<repository>-<branch>" ("-2", "-3", … when that folder exists); resolves with its path as Git lists it.
+     */
+    addWorktreeNextTo(main: string, branch: string) {
+      return write(async (git, signal) => {
+        const base = `${main.replace(/\/+$/, "").replace(/[^/]*$/, "")}${worktreeFolder(main, branch)}`;
+        for (let attempt = 1; ; attempt += 1) {
+          try { return await git.addWorktree(attempt === 1 ? base : `${base}-${attempt}`, { branch, signal }); }
+          catch (error) { if (attempt >= 9 || !(error instanceof Error && /already exists/.test(error.message))) throw error; }
+        }
+      });
     },
     /** Without `force`, Git refuses a worktree with changes or a lock and its message is the error. */
     removeWorktree(path: string, force = false) {

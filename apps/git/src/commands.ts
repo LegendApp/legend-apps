@@ -79,6 +79,9 @@ export type CommandContext = {
   operation: GitOperation | null;
   /** The GitHub account pull requests are read with. */
   gitHub: GitHubAccountState;
+  /** Open pull requests' numbers (signed in, on a GitHub repository), and whether a comment or review is being posted. */
+  pullRequests: readonly number[];
+  pullWriting: boolean;
   run: {
     openRepository(): void;
     openRecent(path: string): void;
@@ -126,6 +129,10 @@ export type CommandContext = {
     /** Uses GitHub CLI's token or a pasted one, after a sheet. */
     signInToGitHub(): void;
     signOutOfGitHub(): void;
+    /** Opens the review sheet for the selected pull request. */
+    reviewPullRequest(): void;
+    /** Fetches the pull request into a local branch, then checks it out or adds a worktree for it next to the repository. */
+    checkOutPullRequest(number: number, worktree: boolean): void;
   };
 };
 
@@ -166,6 +173,11 @@ const openable = (context: CommandContext, target?: string) => {
 };
 /** The queue entry a queue command acts on: the context menu's (by id), else the selected one. */
 const queued = (context: CommandContext, target?: string) => target ? context.queue.find(entry => entry.id === target) ?? null : queueEntry(context.queue, context.section);
+/** The pull request a pull request command acts on: the context menu's (its number), else the selected one. */
+const pullRequest = (context: CommandContext, target?: string) => {
+  const number = target ? Number(target) : sectionPullRequest(context.section);
+  return number !== null && context.pullRequests.includes(number) ? number : null;
+};
 const canStash = (context: CommandContext) => canWriteBranch(context) && context.hasChanges && !context.busy;
 
 export const commands = [
@@ -209,6 +221,21 @@ export const commands = [
   {
     id: "sign-out-github", label: context => context.gitHub.login ? `Sign Out of GitHub (${context.gitHub.login})` : "Sign Out of GitHub",
     enabled: context => context.gitHub.status === "signed-in", run: context => context.run.signOutOfGitHub(),
+  },
+  {
+    id: "review-pull-request", label: "Review…",
+    enabled: context => context.gitHub.status === "signed-in" && pullRequest(context) !== null && !context.pullWriting, run: context => context.run.reviewPullRequest(),
+  },
+  // Fetching goes through the network slot; checking out waits for branch writes like any checkout.
+  {
+    id: "checkout-pull-request", label: "Check Out as Branch",
+    enabled: (context, target) => canWriteBranch(context) && pullRequest(context, target) !== null && !context.network,
+    run: (context, target) => context.run.checkOutPullRequest(pullRequest(context, target)!, false),
+  },
+  {
+    id: "pull-request-worktree", label: "Open in New Worktree…",
+    enabled: (context, target) => canWriteBranch(context) && pullRequest(context, target) !== null && !context.network && !!context.worktrees,
+    run: (context, target) => context.run.checkOutPullRequest(pullRequest(context, target)!, true),
   },
   { id: "copy-sha", label: "Copy SHA", shortcut: "Cmd+Shift+c", enabled: (context, target) => !!commit(context, target), run: (context, target) => context.run.copySha(commit(context, target)!) },
   {

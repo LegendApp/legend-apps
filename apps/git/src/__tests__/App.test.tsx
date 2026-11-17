@@ -37,7 +37,7 @@ jest.mock("@legendapp/spark/clipboard", () => ({ setStringAsync: jest.fn(async (
 jest.mock("@legendapp/spark/context-menu", () => ({ showContextMenu: jest.fn(async () => ({ canceled: false, itemId: "copy-sha" })) }));
 jest.mock("@legendapp/spark/links", () => ({ openURL: jest.fn(async () => true) }));
 jest.mock("@legend-apps/file-system-watcher", () => ({ watchDirectories: jest.fn(() => ({ remove: jest.fn() })) }));
-jest.mock("@legendapp/spark/ui", () => ({ Button: "Button" }));
+jest.mock("@legendapp/spark/ui", () => ({ Button: "Button", SegmentedControl: "SegmentedControl" }));
 jest.mock("@legendapp/spark/ui/symbol", () => ({ SFSymbol: "SFSymbol" }));
 jest.mock("@legendapp/spark/dialogs", () => ({ openFileDialog: jest.fn(async () => ({ canceled: true })), showMessage: jest.fn(async () => ({ buttonId: "confirm" })), showPrompt: jest.fn(async () => ({ canceled: true })) }));
 jest.mock("@legendapp/spark/menus", () => ({ useMenu: jest.fn() }));
@@ -1415,6 +1415,7 @@ describe("pull requests", () => {
       const reply = (status: number, body: unknown) => ({ status, headers: { get: () => null }, json: async () => body, text: async () => JSON.stringify(body) });
       if (init.headers.Authorization !== `Bearer ${token}`) return reply(401, { message: "Bad credentials" });
       if (url.endsWith("/user")) return reply(200, { login: "ana" });
+      if (url.includes("/pulls/4/reviews")) return reply(200, []);
       if (url.includes("/pulls/4/files")) return reply(200, [{ filename: "src/a.ts", status: "modified", additions: 1, deletions: 1, patch: "@@ -1 +1 @@\n-a\n+b" }]);
       if (url.includes("/pulls?")) return reply(pullsStatus, pullsStatus === 200 ? [{ number: 4, title: "Fix the thing", user: { login: "bo" }, state: "open", draft: false, base: { ref: "main" }, head: { ref: "fix", label: "me:fix", repo: { full_name: "me/app" } }, html_url: "" }] : { message: "Bad credentials" });
       throw new Error(`unexpected ${url}`);
@@ -1497,6 +1498,7 @@ describe("pull requests", () => {
       if (url.endsWith("/graphql") && postStatus === 401) return reply(401, { message: "Bad credentials" });
       if (url.endsWith("/graphql")) return reply(200, { data: { repository: { pullRequest: { headRefOid: "head4-pushed", reviewThreads: { nodes: threads, pageInfo: { hasNextPage: false, endCursor: null } } } } } });
       if (init.method === "POST") { posts.push({ url, body: JSON.parse(init.body!) }); return reply(postStatus, postStatus === 201 ? {} : { message: "Bad credentials" }); }
+      if (url.includes("/pulls/4/reviews")) return reply(200, []);
       if (url.includes("/pulls/4/files")) return reply(200, [{ filename: "src/a.ts", status: "modified", additions: 1, deletions: 1, patch: "@@ -1 +1 @@\n-a\n+b" }, { filename: "src/b.ts", status: "modified", additions: 1, deletions: 0, patch: "@@ -1 +1,2 @@\n a\n+b" }]);
       if (url.includes("/pulls?") && pullsFail) return reply(401, { message: "Bad credentials" });
       if (url.includes("/pulls?")) return reply(200, [{ number: 4, title: "Fix the thing", user: { login: "bo" }, state: "open", draft: false, base: { ref: "main" }, head: { ref: "fix", sha: "head4", label: "me:fix", repo: { full_name: "me/app" } }, html_url: "" }]);
@@ -1557,5 +1559,120 @@ describe("pull requests", () => {
     expect(pane().props.annotations.size).toBe(0);
     await act(async () => { renderer.unmount(); });
     await gitHubAccount.signOut();
+  });
+
+  it("shows each reviewer's latest review in the PR header, submits a review from Review…, shows GitHub's 422, and checks a PR out as a branch or in a new worktree", async () => {
+    jest.clearAllMocks();
+    jest.mocked(watchDirectories).mockReturnValue({ remove: jest.fn() });
+    jest.mocked(loadUnifiedDiff).mockReturnValue(new Promise(() => {}));
+    const { GitLocalChangesError } = jest.requireActual("@legend-apps/git-core");
+    const branch = (name: string, current = false) => ({ name, ref: `refs/heads/${name}`, oid: "abc", current, upstream: null, time: 1 });
+    let branches = [branch("main", true)];
+    let worktrees: unknown[] = [{ path: "/src/app", head: "abc", branch: "main", detached: false, bare: false, locked: null, prunable: null, main: true }];
+    const git = {
+      resolveRoot: jest.fn(async () => "/src/app"), watchLocations: jest.fn(async () => ({ root: "/src/app", gitDir: "/src/app/.git", commonDir: "/src/app/.git", ignoredPaths: [] })),
+      status: jest.fn(async () => ({ branch: { oid: "abc", head: "main", upstream: null, ahead: 0, behind: 0 }, entries: [] })), lastDiscard: jest.fn(async () => null), operationState: jest.fn(async () => null),
+      remoteUrl: jest.fn(async (name: string) => name === "origin" ? "git@github.com:me/app.git" : null), configValue: jest.fn(async () => null),
+      listRefs: jest.fn(async () => ({ branches, remotes: [], tags: [] })), listStashes: jest.fn(async () => []), listWorktrees: jest.fn(async () => worktrees),
+      worktreeChangeCount: jest.fn(async () => 0), worktreeStatus: jest.fn(async () => ({ branch: { oid: "abc", head: "fix", upstream: null, ahead: 0, behind: 0 }, entries: [] })),
+      fetchPullRequest: jest.fn(async (_remote: string, _number: number, name: string) => { if (!branches.some(entry => entry.name === name)) branches = [...branches, branch(name)]; return "def"; }),
+      checkoutBranch: jest.fn(async () => {}), stashAndSwitch: jest.fn(async (name: string) => ({ branch: name, stash: "s1" })),
+      addWorktree: jest.fn(async (path: string) => { worktrees = [...worktrees, { path, head: "def", branch: "fix", detached: false, bare: false, locked: null, prunable: null, main: false }]; return path; }),
+    };
+    jest.mocked(getGitService).mockReturnValue(git as unknown as GitService);
+    const posts: unknown[] = [];
+    let reviews = [{ id: 1, user: { login: "bo" }, state: "CHANGES_REQUESTED" }, { id: 2, user: { login: "cy" }, state: "COMMENTED" }, { id: 3, user: { login: "bo" }, state: "APPROVED" }];
+    const fetch = jest.fn(async (url: string, init: { method?: string; headers: Record<string, string>; body?: string }) => {
+      const reply = (status: number, body: unknown) => ({ status, headers: { get: () => null }, json: async () => body, text: async () => JSON.stringify(body) });
+      if (url.endsWith("/user")) return reply(200, { login: "ana" });
+      if (url.endsWith("/graphql")) return reply(200, { data: { repository: { pullRequest: { headRefOid: "head4-pushed", reviewThreads: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } } } } });
+      if (init.method === "POST") {
+        const body = JSON.parse(init.body!) as { event: string; body?: string };
+        posts.push({ url, body });
+        // ana's own pull request: GitHub refuses approving it.
+        if (body.event === "APPROVE") return reply(422, { message: "Unprocessable Entity", errors: ["Review Can not approve your own pull request"] });
+        reviews = [...reviews, { id: 4, user: { login: "ana" }, state: "COMMENTED" }];
+        return reply(200, {});
+      }
+      if (url.includes("/pulls/4/reviews")) return reply(200, reviews);
+      if (url.includes("/pulls/4/files")) return reply(200, [{ filename: "src/a.ts", status: "modified", additions: 1, deletions: 1, patch: "@@ -1 +1 @@\n-a\n+b" }]);
+      if (url.includes("/pulls?")) return reply(200, [
+        { number: 4, title: "Fix the thing", user: { login: "ana" }, state: "open", draft: false, base: { ref: "main" }, head: { ref: "fix", sha: "head4", label: "me:fix", repo: { full_name: "me/app" } }, html_url: "" },
+        { number: 5, title: "Gutter", user: { login: "bo" }, state: "open", draft: false, base: { ref: "main" }, head: { ref: "gutter", sha: "head5", label: "bo:gutter", repo: { full_name: "bo/app" } }, html_url: "" },
+      ]);
+      throw new Error(`unexpected ${url}`);
+    });
+    (globalThis as { fetch?: unknown }).fetch = fetch;
+    await gitHubAccount.signIn("tok");
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<App />); });
+    jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/src/app"] });
+    await act(async () => { openRepository(); });
+    const sidebar = () => renderer.root.findAllByType(Sidebar)[0]!;
+    const menuItem = (id: string) => lastMenu().items.flatMap(entry => entry.items ?? []).find(entry => entry.id === id);
+    const text = () => renderer.root.findAllByType(Text).map(node => [node.props.children].flat().join("")).join("\n");
+    expect(lastMenu().items.find(entry => entry.id === "pull-request").items.map((entry: { id?: string }) => entry.id)).toEqual(["review-pull-request", undefined, "checkout-pull-request", "pull-request-worktree"]);
+    expect(menuItem("review-pull-request")).toMatchObject({ label: "Review…", disabled: true });
+
+    await act(async () => { sidebar().props.onSelectionChange({ id: "pr:4" }); });
+    expect(text()).toContain("bo approved · cy commented");
+    expect(menuItem("review-pull-request")).toMatchObject({ disabled: false });
+    const reviewButton = renderer.root.findAllByType(Button).find(node => node.props.children === "Review…")!;
+    await act(async () => { reviewButton.props.onPress(); });
+    const sheet = () => renderer.root.findByType(CommentSheet);
+    expect(sheet().props).toMatchObject({ title: "Review Pull Request", context: "#4 Fix the thing", review: true });
+    const segmented = sheet().findByType("SegmentedControl" as never) as unknown as { props: { options: { label: string }[]; value: string } };
+    expect(segmented.props.options.map(option => option.label)).toEqual(["Comment", "Approve", "Request Changes"]);
+
+    // Approving your own pull request: GitHub's message, and the sheet stays.
+    jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "ok" });
+    await act(async () => { sheet().props.onSubmit("", "APPROVE"); });
+    expect(posts.at(-1)).toEqual({ url: "https://api.github.com/repos/me/app/pulls/4/reviews", body: { commit_id: "head4-pushed", event: "APPROVE" } });
+    expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ title: "Couldn’t Submit the Review", message: "GitHub answered 422: Unprocessable Entity: Review Can not approve your own pull request." }));
+    expect(renderer.root.findAllByType(CommentSheet)).toHaveLength(1);
+    // Choosing another file keeps the review sheet open.
+    await act(async () => { pullsFiles().props.onSelectionChange({ id: "src/a.ts" }); });
+    expect(renderer.root.findAllByType(CommentSheet)).toHaveLength(1);
+    await act(async () => { sheet().props.onSubmit("Looks good", "COMMENT"); });
+    expect(posts.at(-1)).toEqual({ url: "https://api.github.com/repos/me/app/pulls/4/reviews", body: { commit_id: "head4-pushed", event: "COMMENT", body: "Looks good" } });
+    expect(renderer.root.findAllByType(CommentSheet)).toHaveLength(0);
+    expect(text()).toContain("bo approved · cy commented · ana commented");
+
+    // Check Out as Branch from a fork PR's context menu: fetched into "bo/gutter", then checked out; changes in the way offer Stash and Switch.
+    git.checkoutBranch.mockRejectedValueOnce(new GitLocalChangesError("bo/gutter", "error: Your local changes would be overwritten by checkout"));
+    jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "stash" });
+    jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: false, itemId: "checkout-pull-request" } as never);
+    const row = (id: string) => sidebar().findAllByType(SidebarItem).find(item => item.props.id === id)!;
+    await act(async () => { row("pr:5").props.onContextMenu({ windowPosition: { x: 1, y: 2 } }); });
+    expect(jest.mocked(showContextMenu).mock.calls.at(-1)![0].items.map((entry: object) => (entry as { id?: string }).id)).toEqual(["checkout-pull-request", "pull-request-worktree"]);
+    expect(git.fetchPullRequest).toHaveBeenLastCalledWith("origin", 5, "bo/gutter", expect.anything());
+    expect(git.checkoutBranch).toHaveBeenLastCalledWith("bo/gutter", expect.anything());
+    expect(git.stashAndSwitch).toHaveBeenLastCalledWith("bo/gutter", expect.anything());
+    expect(sidebar().props.selectedId).toBe("ref:refs/heads/bo/gutter");
+    expect(sidebar().findAllByType(SidebarItem).map(item => item.props.id)).toContain("ref:refs/heads/bo/gutter");
+
+    // Open in New Worktree… for a same-repository PR: branch "fix", a folder next to the repository, its own window.
+    await act(async () => { sidebar().props.onSelectionChange({ id: "pr:4" }); });
+    await act(async () => { lastMenu().onAction({ itemId: "pull-request-worktree" }); });
+    expect(git.fetchPullRequest).toHaveBeenLastCalledWith("origin", 4, "fix", expect.anything());
+    expect(git.addWorktree).toHaveBeenLastCalledWith("/src/app-fix", expect.objectContaining({ branch: "fix" }));
+    expect(openWorktreeWindow).toHaveBeenLastCalledWith("/src/app-fix", "app", "app — fix");
+    expect(sidebar().props.selectedId).toBe("worktree:/src/app-fix");
+    // Again: the worktree that has the branch is opened, nothing is fetched.
+    await act(async () => { sidebar().props.onSelectionChange({ id: "pr:4" }); });
+    await act(async () => { lastMenu().onAction({ itemId: "pull-request-worktree" }); });
+    expect(git.fetchPullRequest).toHaveBeenCalledTimes(2);
+    expect(openWorktreeWindow).toHaveBeenCalledTimes(2);
+
+    // Git's refusal (a diverged branch) is shown as Git says it.
+    git.fetchPullRequest.mockRejectedValueOnce(new Error(" ! [rejected]        refs/pull/5/head -> bo/gutter  (non-fast-forward)"));
+    await act(async () => { sidebar().props.onSelectionChange({ id: "pr:5" }); });
+    await act(async () => { lastMenu().onAction({ itemId: "checkout-pull-request" }); });
+    expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ title: "Couldn’t Fetch Pull Request #5", message: "! [rejected]        refs/pull/5/head -> bo/gutter  (non-fast-forward)" }));
+    expect(JSON.stringify(renderer.toJSON())).not.toContain("tok\"");
+    await act(async () => { renderer.unmount(); });
+    await gitHubAccount.signOut();
+
+    function pullsFiles() { return renderer.root.findAllByType(Sidebar)[1]!; }
   });
 });

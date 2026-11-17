@@ -226,3 +226,42 @@ it("decodes progress whole when a UTF-8 character is split between stderr chunks
   await new GitService("/repo", runner).fetch({ remote: "origin", onProgress: entry => seen.push(entry) });
   expect(seen).toEqual([{ phase: "Réception des objets", percent: 45 }, { phase: "Réception des objets", percent: 100 }]);
 });
+
+it("fetches a pull request's head into a new branch, fast-forwards it (also checked out), and refuses a diverged branch with Git's message", async () => {
+  const { path, other, remote, git } = setup("pull-request");
+  fixtureGit(other, "switch", "-q", "-c", "feature");
+  const first = commitFile(other, "b.txt", "2\n", "Second");
+  fixtureGit(other, "push", "-q", "origin", "feature:refs/pull/7/head");
+  await expect(git.fetchPullRequest("origin", 7, "bo/feature")).resolves.toBe(first);
+  expect(fixtureGit(path, "rev-parse", "refs/heads/bo/feature")).toBe(first);
+  // Nothing is checked out by the fetch.
+  expect(fixtureGit(path, "symbolic-ref", "--short", "HEAD")).toBe("main");
+
+  // A newer head fast-forwards the branch, also while it is checked out.
+  const second = commitFile(other, "c.txt", "3\n", "Third");
+  fixtureGit(other, "push", "-q", "origin", "feature:refs/pull/7/head");
+  fixtureGit(path, "switch", "-q", "bo/feature");
+  await expect(git.fetchPullRequest("origin", 7, "bo/feature")).resolves.toBe(second);
+  expect(fixtureGit(path, "rev-parse", "HEAD")).toBe(second);
+  expect(fixtureGit(path, "status", "--porcelain")).toBe("");
+
+  // A branch with its own commits isn't overwritten, checked out or not.
+  const own = commitFile(path, "mine.txt", "mine\n", "Mine");
+  const forced = commitFile(other, "d.txt", "4\n", "Rewritten");
+  fixtureGit(other, "push", "-q", "-f", "origin", "feature:refs/pull/7/head");
+  await expect(git.fetchPullRequest("origin", 7, "bo/feature")).rejects.toThrow(/Not possible to fast-forward|diverg/i);
+  expect(fixtureGit(path, "rev-parse", "HEAD")).toBe(own);
+  fixtureGit(path, "switch", "-q", "main");
+  await expect(git.fetchPullRequest("origin", 7, "bo/feature")).rejects.toThrow(/rejected.*non-fast-forward/);
+  expect(fixtureGit(path, "rev-parse", "refs/heads/bo/feature")).toBe(own);
+  expect(forced).not.toBe(own);
+
+  // A branch checked out in another worktree is Git's to refuse.
+  fixtureGit(path, "worktree", "add", "-q", join(root, "pull-request-linked"), "bo/feature");
+  await expect(git.fetchPullRequest("origin", 7, "bo/feature")).rejects.toThrow(/refusing to fetch into branch/);
+  // A missing pull request, a bad number and a bad branch name.
+  await expect(git.fetchPullRequest("origin", 8, "pr-8")).rejects.toThrow(/couldn't find remote ref refs\/pull\/8\/head/);
+  await expect(git.fetchPullRequest("origin", 0, "pr-0")).rejects.toThrow("isn’t a pull request number");
+  await expect(git.fetchPullRequest("origin", 7, "bad..name")).rejects.toThrow("isn’t a valid branch name");
+  expect(fixtureGit(remote, "for-each-ref", "--format=%(refname)", "refs/heads")).toBe("refs/heads/main");
+});
