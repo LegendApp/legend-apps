@@ -1,7 +1,8 @@
-import type { StoryHunk } from "./storyHunks";
+import { checkSchema, extractResultJSON, StoryValidationError, storyRefError, type Schema, type StoryHunk, type StoryIssue, type StoryRef } from "@legend-apps/change-story";
+
+export { StoryValidationError, type StoryIssue, type StoryRef } from "@legend-apps/change-story";
 
 export const storyContractVersion = 1;
-export type StoryRef = { hunk: string; side?: "old" | "new"; startLine?: number; endLine?: number };
 export type ChangeStory = {
   contractVersion: 1; kind: "story"; title: string; state: "proposed" | "in-progress" | "delivered" | "blocked";
   risk: { level: "low" | "medium" | "high"; reason: string }; goal: string;
@@ -10,12 +11,9 @@ export type ChangeStory = {
   behaviorChanges: { change: string; before: string; now: string; when: string; why: string }[];
   evidence: { text: string; ran: boolean }[]; notVerified: string[]; decisions: string[];
 };
-export type StoryIssue = { path: string; message: string; ref: StoryRef };
 export type StoryCoverage = { file: string; hunkIds: string[] }[];
 export type ValidatedStory = { story: ChangeStory; issues: StoryIssue[]; uncovered: StoryCoverage; coveredHunkIds: string[] };
 
-type Schema = { type?: "object" | "array" | "string" | "integer" | "boolean"; enum?: readonly unknown[]; const?: unknown;
-  properties?: Record<string, Schema>; required?: string[]; additionalProperties?: false; items?: Schema; minLength?: number };
 const string: Schema = { type: "string" };
 const nonempty: Schema = { type: "string", minLength: 1 };
 const array = (items: Schema): Schema => ({ type: "array", items });
@@ -34,39 +32,6 @@ export const storyContractSchema: Schema = object({
   behaviorChanges: array(object({ change: nonempty, before: string, now: string, when: string, why: string })),
   evidence: array(object({ text: nonempty, ran: { type: "boolean" } })), notVerified: array(string), decisions: array(string),
 });
-
-export class StoryValidationError extends Error {
-  constructor(public readonly errors: string[]) { super(errors.join("\n")); this.name = "StoryValidationError"; }
-}
-
-function checkSchema(value: unknown, schema: Schema, path: string, errors: string[]) {
-  if (schema.const !== undefined && value !== schema.const) errors.push(`${path}: expected ${JSON.stringify(schema.const)}`);
-  if (schema.enum && !schema.enum.includes(value)) errors.push(`${path}: expected ${schema.enum.join(" | ")}`);
-  if (schema.type === "object") {
-    if (!value || typeof value !== "object" || Array.isArray(value)) { errors.push(`${path}: expected object`); return; }
-    const record = value as Record<string, unknown>;
-    for (const key of schema.required ?? []) if (!Object.hasOwn(record, key)) errors.push(`${path}.${key}: required`);
-    for (const key of Object.keys(record)) {
-      if (Object.hasOwn(schema.properties!, key)) checkSchema(record[key], schema.properties![key], `${path}.${key}`, errors);
-      else errors.push(`${path}.${key}: unexpected property`);
-    }
-  } else if (schema.type === "array") {
-    if (!Array.isArray(value)) errors.push(`${path}: expected array`);
-    else value.forEach((item, i) => checkSchema(item, schema.items!, `${path}[${i}]`, errors));
-  } else if (schema.type === "integer") {
-    if (!Number.isSafeInteger(value)) errors.push(`${path}: expected integer`);
-  } else if (schema.type && typeof value !== schema.type) errors.push(`${path}: expected ${schema.type}`);
-  else if (schema.minLength && typeof value === "string" && value.trim().length < schema.minLength) errors.push(`${path}: must not be empty`);
-}
-
-export function storyRefError(ref: StoryRef, hunk: StoryHunk | undefined): string | undefined {
-  if (!hunk) return `Unknown hunk ID: ${ref.hunk}`;
-  if (ref.side === undefined && ref.startLine === undefined && ref.endLine === undefined) return;
-  if (!ref.side || ref.startLine === undefined || ref.endLine === undefined) return "A line range requires side, startLine and endLine";
-  const start = ref.side === "old" ? hunk.oldStart : hunk.newStart;
-  const count = ref.side === "old" ? hunk.oldLines : hunk.newLines;
-  if (!count || ref.startLine < start || ref.endLine < ref.startLine || ref.endLine >= start + count) return `Line range outside ${ref.hunk} (${ref.side}: ${start}–${start + count - 1})`;
-}
 
 export function validateStory(value: unknown, hunks: readonly StoryHunk[]): ValidatedStory {
   const errors: string[] = [];
@@ -97,21 +62,5 @@ export function validateStory(value: unknown, hunks: readonly StoryHunk[]): Vali
 }
 
 export function extractStoryJSON(output: string): unknown {
-  const candidates = [output.trim(), ...Array.from(output.matchAll(/```(?:json)?\s*\n?([\s\S]*?)```/gi), match => match[1].trim())];
-  // Balance braces outside strings so surrounding CLI prose and braces in Markdown are safe.
-  let start = 0, depth = 0, quoted = false, escaped = false;
-  for (let i = 0; i < output.length; i++) {
-    const char = output[i];
-    if (quoted) { if (escaped) escaped = false; else if (char === "\\") escaped = true; else if (char === '"') quoted = false; }
-    else if (depth && char === '"') quoted = true;
-    else if (char === "{") { if (!depth) start = i; depth++; }
-    else if (char === "}" && depth && --depth === 0) candidates.push(output.slice(start, i + 1));
-  }
-  for (const candidate of candidates) {
-    try {
-      const parsed: unknown = JSON.parse(candidate);
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed) && (parsed as Record<string, unknown>).kind === "story") return parsed;
-    } catch { /* Try the next JSON candidate. */ }
-  }
-  throw new StoryValidationError(["No valid story JSON object found in the model output"]);
+  return extractResultJSON(output, "story");
 }

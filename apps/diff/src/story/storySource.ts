@@ -1,6 +1,5 @@
+import type { StorySource } from "@legend-apps/change-story";
 import type { DiffOpenSource } from "../diffFiles";
-
-export type StorySource = { type: "working_tree" | "git_range" | "pull_request" | "commit" | "patch"; base?: string; head?: string };
 
 function rangeSource(range: string): StorySource {
   const match = /^(.*?)\.{2,3}(.*)$/.exec(range);

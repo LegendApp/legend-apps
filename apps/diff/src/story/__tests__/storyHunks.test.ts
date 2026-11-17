@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { DiffOpenSource } from "../../diffFiles";
-import { normalizeStoryDiff, storyHash } from "../storyHash";
+import { normalizeStoryDiff, storyHash } from "@legend-apps/change-story";
 import { buildStoryInput, classifyStoryFile, storyInputContext } from "../storyHunks";
 import { getStoryCwd, getStoryScope, getStorySource } from "../storySource";
 import { fixtureDocument, fixtureInput, patchSource, repoSource } from "./storyFixtures";

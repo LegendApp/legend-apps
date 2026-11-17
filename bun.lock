@@ -9,6 +9,7 @@
         "@legend-apps/appearance-settings": "workspace:*",
         "@legend-apps/apple-music": "workspace:*",
         "@legend-apps/audio-player": "workspace:*",
+        "@legend-apps/change-story": "workspace:*",
         "@legend-apps/chat-history": "workspace:*",
         "@legend-apps/color-picker": "workspace:*",
         "@legend-apps/crypto": "workspace:*",
@@ -127,6 +128,7 @@
       "name": "@legend-apps/app-diff",
       "version": "0.0.4",
       "dependencies": {
+        "@legend-apps/change-story": "workspace:*",
         "@legend-apps/design-system": "workspace:*",
         "@legend-apps/diff-parser": "workspace:*",
         "@legend-apps/file-system-watcher": "workspace:*",
@@ -337,6 +339,10 @@
         "react": "catalog:",
         "react-native": "catalog:",
       },
+    },
+    "packages/change-story": {
+      "name": "@legend-apps/change-story",
+      "version": "0.0.0",
     },
     "packages/chat-history": {
       "name": "@legend-apps/chat-history",
@@ -1441,6 +1447,8 @@
     "@legend-apps/audio-player": ["@legend-apps/audio-player@workspace:packages/audio-player"],
 
     "@legend-apps/auto-updater": ["@legend-apps/auto-updater@workspace:packages/auto-updater"],
+
+    "@legend-apps/change-story": ["@legend-apps/change-story@workspace:packages/change-story"],
 
     "@legend-apps/chat-history": ["@legend-apps/chat-history@workspace:packages/chat-history"],
 

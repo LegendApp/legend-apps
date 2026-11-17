@@ -1,5 +1,5 @@
 import { diffSkillApprovals$ } from "../diffSettings";
-import { storyHash } from "./storyHash";
+import { storyHash } from "@legend-apps/change-story";
 import type { StorySkill } from "./storySkill";
 
 export function repoSkillApprovalKey(repoRoot: string, skill: StorySkill) {

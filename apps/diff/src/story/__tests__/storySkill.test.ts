@@ -1,5 +1,5 @@
 import { builtInStorySkills, changeStoryMarkdown, changeStorySkill, parseStorySkill, serializeStorySkill, SkillValidationError } from "../storySkill";
-import { storyHash } from "../storyHash";
+import { storyHash } from "@legend-apps/change-story";
 
 it("parses bundled prompts with frontmatter, body and exact file hash", () => {
   for (const skill of builtInStorySkills) {

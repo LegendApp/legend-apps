@@ -1,6 +1,6 @@
 import { createStorage, type Storage } from "@legend-apps/storage";
 import { storyContractVersion, validateStory } from "./storyContract";
-import { storyHash } from "./storyHash";
+import { storyHash } from "@legend-apps/change-story";
 import type { StoryInput } from "./storyHunks";
 import type { StoryRunResult, StoryTool } from "./storyRunner";
 import type { StorySkill } from "./storySkill";

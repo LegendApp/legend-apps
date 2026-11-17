@@ -156,6 +156,7 @@
     "@legend-apps/appearance-settings": "workspace:*",
     "@legend-apps/apple-music": "workspace:*",
     "@legend-apps/audio-player": "workspace:*",
+    "@legend-apps/change-story": "workspace:*",
     "@legend-apps/chat-history": "workspace:*",
     "@legend-apps/color-picker": "workspace:*",
     "@legend-apps/crypto": "workspace:*",

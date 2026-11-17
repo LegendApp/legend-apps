@@ -1,5 +1,5 @@
 import { assembleStoryPrompt, changeStoryMarkdown, changeStorySkill, storyContractPrompt } from "../storySkill";
-import { storyHash } from "../storyHash";
+import { storyHash } from "@legend-apps/change-story";
 import { fixtureInput } from "./storyFixtures";
 
 it("bundles Markdown frontmatter and appends the immutable contract, index and native diff", () => {

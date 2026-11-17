@@ -4,6 +4,7 @@
   "private": true,
   "main": "src/index.ts",
   "dependencies": {
+    "@legend-apps/change-story": "workspace:*",
     "@legend-apps/design-system": "workspace:*",
     "@legend-apps/diff-parser": "workspace:*",
     "@legend-apps/file-system-watcher": "workspace:*",
