@@ -3,16 +3,18 @@ import { abortLabel, canContinue, continueLabel } from "./gitOperation";
 import { searchScopes, type SearchScope } from "./gitHistory";
 import { findRef, type WorktreeEntry } from "./gitRefs";
 import { networkVerb, type NetworkOperation } from "./gitNetwork";
+import type { GitHubAccountState } from "./gitHubAccount";
 import { canPushQueueEntry, queuePushTarget, type QueueEntry } from "./gitQueue";
 
 /**
  * A sidebar item: Changes, History, a branch, remote branch or tag by its full ref name, a stash by its oid, a worktree by
  * its path, or a Review Queue entry by its id (`review:worktree:<path>`, `review:branch:<ref>`).
  */
-export type Section = "changes" | "history" | `ref:${string}` | `stash:${string}` | `worktree:${string}` | `review:${QueueEntry["id"]}`;
+export type Section = "changes" | "history" | `ref:${string}` | `stash:${string}` | `worktree:${string}` | `review:${QueueEntry["id"]}` | `pr:${number}`;
 export const sectionRef = (section: Section) => section.startsWith("ref:") ? section.slice(4) : null;
 export const sectionStash = (section: Section) => section.startsWith("stash:") ? section.slice(6) : null;
 export const sectionWorktree = (section: Section) => section.startsWith("worktree:") ? section.slice(9) : null;
+export const sectionPullRequest = (section: Section) => section.startsWith("pr:") ? Number(section.slice(3)) : null;
 export const sectionReview = (section: Section) => section.startsWith("review:") ? section.slice(7) as QueueEntry["id"] : null;
 /** The selected Review Queue entry, if it is still queued. */
 export const queueEntry = (queue: readonly QueueEntry[], section: Section) => {
@@ -75,6 +77,8 @@ export type CommandContext = {
   recents: readonly string[];
   /** The merge, rebase, cherry-pick, revert or bisect Git has paused. */
   operation: GitOperation | null;
+  /** The GitHub account pull requests are read with. */
+  gitHub: GitHubAccountState;
   run: {
     openRepository(): void;
     openRecent(path: string): void;
@@ -119,6 +123,9 @@ export type CommandContext = {
     cancelNetwork(): void;
     /** Pushes (or publishes) a Review Queue entry's branch. */
     pushQueueEntry(id: QueueEntry["id"]): void;
+    /** Uses GitHub CLI's token or a pasted one, after a sheet. */
+    signInToGitHub(): void;
+    signOutOfGitHub(): void;
   };
 };
 
@@ -197,6 +204,12 @@ export const commands = [
     enabled: context => !!context.network, run: context => context.run.cancelNetwork(),
   },
   { id: "refresh", label: "Refresh", shortcut: "Cmd+r", enabled: context => context.hasRepository, run: context => context.run.refresh() },
+  // Also while signed in, to replace a token GitHub stopped accepting.
+  { id: "sign-in-github", label: "Sign In to GitHub…", enabled: context => context.gitHub.status !== "loading", run: context => context.run.signInToGitHub() },
+  {
+    id: "sign-out-github", label: context => context.gitHub.login ? `Sign Out of GitHub (${context.gitHub.login})` : "Sign Out of GitHub",
+    enabled: context => context.gitHub.status === "signed-in", run: context => context.run.signOutOfGitHub(),
+  },
   { id: "copy-sha", label: "Copy SHA", shortcut: "Cmd+Shift+c", enabled: (context, target) => !!commit(context, target), run: (context, target) => context.run.copySha(commit(context, target)!) },
   {
     id: "open-github", label: "Open on GitHub",

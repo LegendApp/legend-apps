@@ -21,6 +21,7 @@ import { setStringAsync } from "@legendapp/spark/clipboard";
 import { showContextMenu } from "@legendapp/spark/context-menu";
 import { openURL } from "@legendapp/spark/links";
 import { openWorktreeWindow } from "../gitWindows";
+import { DiffPane } from "../DiffPane";
 
 jest.mock("@legend-apps/git-core", () => ({ ...jest.requireActual("@legend-apps/git-core"), getGitService: jest.fn() }));
 jest.mock("react-native", () => ({
@@ -38,6 +39,7 @@ jest.mock("@legendapp/spark/ui", () => ({ Button: "Button" }));
 jest.mock("@legendapp/spark/ui/symbol", () => ({ SFSymbol: "SFSymbol" }));
 jest.mock("@legendapp/spark/dialogs", () => ({ openFileDialog: jest.fn(async () => ({ canceled: true })), showMessage: jest.fn(async () => ({ buttonId: "confirm" })), showPrompt: jest.fn(async () => ({ canceled: true })) }));
 jest.mock("@legendapp/spark/menus", () => ({ useMenu: jest.fn() }));
+jest.mock("@legendapp/spark/secure-storage", () => ({ getItemAsync: jest.fn(async () => null), setItemAsync: jest.fn(async () => {}), deleteItemAsync: jest.fn(async () => {}) }));
 jest.mock("@legendapp/spark/app/documents", () => ({
   getRecentDocuments: jest.fn(async () => []), noteRecentDocument: jest.fn(async () => {}), clearRecentDocuments: jest.fn(async () => {}),
   subscribeToOpenRequests: jest.fn(async () => ({ remove: jest.fn() })),
@@ -1161,7 +1163,7 @@ it("fetches, pulls and pushes from the Repository menu with ↓/↑ counts and p
   const menuItem = (id: string) => lastMenu().items.flatMap(entry => entry.items ?? []).find(entry => entry.id === id);
   const toolbarItems = () => jest.mocked(setWindowOptions).mock.calls.filter(call => call[1].macos?.toolbar).at(-1)![1].macos!.toolbar!.items! as any[];
   const repository = lastMenu().items.find(entry => entry.id === "repository").items.map((entry: any) => entry.id ?? "-");
-  expect(repository).toEqual(["fetch", "pull", "push", "cancel-network", "-", "refresh", "-", "open-github"]);
+  expect(repository).toEqual(["fetch", "pull", "push", "cancel-network", "-", "refresh", "-", "open-github", "-", "sign-in-github", "sign-out-github"]);
   expect(menuItem("fetch")).toMatchObject({ label: "Fetch", shortcut: "Cmd+Alt+f", disabled: false });
   expect(menuItem("pull")).toMatchObject({ label: "Pull", shortcut: "Cmd+Shift+Down", disabled: false });
   expect(menuItem("push")).toMatchObject({ label: "Push", shortcut: "Cmd+Shift+Up", disabled: false });
@@ -1384,4 +1386,88 @@ it("lists recents in the empty window, opens Open Recent's requests, shows a pau
   expect(git.abortOperation).toHaveBeenCalledWith("merge", expect.anything());
   expect(renderer.root.findAllByType(StateBar)).toHaveLength(0);
   await act(async () => { renderer.unmount(); });
+});
+
+describe("pull requests", () => {
+  const keychain = new Map<string, string>();
+  beforeAll(() => {
+    const storage = jest.requireMock("@legendapp/spark/secure-storage") as Record<string, jest.Mock>;
+    storage.getItemAsync!.mockImplementation(async (key: string) => keychain.get(key) ?? null);
+    storage.setItemAsync!.mockImplementation(async (key: string, value: string) => { keychain.set(key, value); });
+    storage.deleteItemAsync!.mockImplementation(async (key: string) => { keychain.delete(key); });
+  });
+
+  it("offers Sign In for a GitHub remote, lists open PRs after a pasted token, shows a PR's header, files and diff, reports a 401 with Sign In…, and clears on Sign Out", async () => {
+    jest.clearAllMocks();
+    jest.mocked(watchDirectories).mockReturnValue({ remove: jest.fn() });
+    jest.mocked(loadUnifiedDiff).mockReturnValue(new Promise(() => {}));
+    const git = {
+      resolveRoot: jest.fn(async () => "/repo"), watchLocations: jest.fn(async () => ({ root: "/repo", gitDir: "/repo/.git", commonDir: "/repo/.git", ignoredPaths: [] })),
+      status: jest.fn(async () => ({ branch: { oid: "abc", head: "main", upstream: null, ahead: 0, behind: 0 }, entries: [] })), lastDiscard: jest.fn(async () => null), operationState: jest.fn(async () => null),
+      remoteUrl: jest.fn(async (name: string) => name === "origin" ? "git@github.com:me/app.git" : null), configValue: jest.fn(async () => null),
+    };
+    jest.mocked(getGitService).mockReturnValue(git as unknown as GitService);
+    const token = "github_pat_PASTED";
+    let pullsStatus = 200;
+    const fetch = jest.fn(async (url: string, init: { headers: Record<string, string> }) => {
+      const reply = (status: number, body: unknown) => ({ status, headers: { get: () => null }, json: async () => body, text: async () => JSON.stringify(body) });
+      if (init.headers.Authorization !== `Bearer ${token}`) return reply(401, { message: "Bad credentials" });
+      if (url.endsWith("/user")) return reply(200, { login: "ana" });
+      if (url.includes("/pulls/4/files")) return reply(200, [{ filename: "src/a.ts", status: "modified", additions: 1, deletions: 1, patch: "@@ -1 +1 @@\n-a\n+b" }]);
+      if (url.includes("/pulls?")) return reply(pullsStatus, pullsStatus === 200 ? [{ number: 4, title: "Fix the thing", user: { login: "bo" }, state: "open", draft: false, base: { ref: "main" }, head: { ref: "fix", label: "me:fix", repo: { full_name: "me/app" } }, html_url: "" }] : { message: "Bad credentials" });
+      throw new Error(`unexpected ${url}`);
+    });
+    (globalThis as { fetch?: unknown }).fetch = fetch;
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<App />); });
+    jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
+    await act(async () => { openRepository(); });
+    const sidebar = () => renderer.root.findAllByType(Sidebar)[0]!;
+    const ids = () => sidebar().findAllByType(SidebarItem).map(item => item.props.id);
+    const menuItem = (id: string) => lastMenu().items.flatMap(entry => entry.items ?? []).find(entry => entry.id === id);
+    expect(ids().slice(-2)).toEqual(["group:pulls", "github-sign-in"]);
+    expect(menuItem("sign-out-github")).toMatchObject({ disabled: true });
+    expect(fetch).not.toHaveBeenCalled();
+
+    // gh isn't signed in, so the sheet asks for a token in a secure field.
+    jest.mocked(runCommand).mockResolvedValueOnce({ exit: { type: "exited", code: 1 }, stdout: new Uint8Array(), stderr: new Uint8Array(), timedOut: false, aborted: false, outputTruncated: false });
+    jest.mocked(showPrompt).mockResolvedValueOnce({ canceled: false, value: ` ${token} ` });
+    await act(async () => { sidebar().props.onSelectionChange({ id: "github-sign-in" }); });
+    expect(runCommand).toHaveBeenCalledWith(expect.objectContaining({ target: { type: "command", name: "gh" }, args: ["auth", "token", "--hostname", "github.com"] }));
+    expect(showPrompt).toHaveBeenCalledWith(expect.objectContaining({ title: "Sign In to GitHub", secure: true }));
+    expect(keychain.get("github.com.token")).toBe(token);
+    expect(ids().slice(-2)).toEqual(["group:pulls", "pr:4"]);
+    expect(menuItem("sign-out-github")).toMatchObject({ label: "Sign Out of GitHub (ana)", disabled: false });
+
+    await act(async () => { sidebar().props.onSelectionChange({ id: "pr:4" }); });
+    const text = () => renderer.root.findAllByType(Text).map(node => [node.props.children].flat().join("")).join("\n");
+    expect(text()).toContain("Fix the thing");
+    expect(text()).toContain("#4 · bo · main ← fix · Open");
+    expect(text()).toContain("+1 −1");
+    expect(renderer.root.findByType(DiffPane).props.patch).toMatchObject({ path: "src/a.ts", text: expect.stringContaining("--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1 +1 @@") });
+
+    // A refresh that GitHub refuses keeps the list and shows its message in the red bar with Sign In….
+    pullsStatus = 401;
+    await act(async () => { lastMenu().onAction({ itemId: "refresh" }); });
+    const bar = renderer.root.findAllByType(StateBar).find(entry => entry.props.tone === "error")!;
+    expect(bar.props.text).toBe("GitHub didn’t accept the token: Bad credentials.");
+    expect(bar.findAllByType(Button).map(button => button.props.children)).toEqual(["Sign In…"]);
+    expect(ids()).toContain("pr:4");
+    expect(JSON.stringify(renderer.toJSON())).not.toContain(token);
+
+    // A window opened after sign-in (a worktree window here) lists the PRs too.
+    pullsStatus = 200;
+    let second!: ReactTestRenderer;
+    await act(async () => { second = create(<App windowId="second" initialPath="/repo" repoName="app" />); });
+    expect(second.root.findAllByType(Sidebar)[0]!.findAllByType(SidebarItem).map(item => item.props.id)).toContain("pr:4");
+    await act(async () => { second.unmount(); });
+
+    // Sign Out deletes the token and clears the list; the selected PR gives way to Changes.
+    await act(async () => { lastMenu().onAction({ itemId: "sign-out-github" }); });
+    expect(keychain.has("github.com.token")).toBe(false);
+    expect(ids().slice(-2)).toEqual(["group:pulls", "github-sign-in"]);
+    expect(sidebar().props.selectedId).toBe("changes");
+    expect(renderer.root.findAllByType(StateBar)).toHaveLength(0);
+    await act(async () => { renderer.unmount(); });
+  });
 });

@@ -25,6 +25,7 @@ const manifest = {
       "@legendapp/spark/context-menu",
       "@legendapp/spark/links",
       "@legendapp/spark/app",
+      "@legendapp/spark/secure-storage",
     ],
     ios: [],
     android: [],

@@ -6,7 +6,7 @@ import { Button } from "@legendapp/spark/ui";
 import { conflictedEntries, createGitChanges, emptyChanges, stagedEntries, unstagedEntries } from "./gitChanges";
 import { DiffPane, type DiffLineTarget } from "./DiffPane";
 import { CommitDetails, HistoryList, type BlameTarget, type HistoryActions } from "./HistoryView";
-import { commandEnabled, commandLabel, commandMenuItem, queueEntry, runCommand, sectionRef, sectionReview, sectionShowsHistory, sectionStash, sectionWorktree, type CommandContext, type CommandId, type Section } from "./commands";
+import { commandEnabled, commandLabel, commandMenuItem, queueEntry, runCommand, sectionPullRequest, sectionRef, sectionReview, sectionShowsHistory, sectionStash, sectionWorktree, type CommandContext, type CommandId, type Section } from "./commands";
 import { queueDetail, queuePushTarget, reviewQueue, type QueueEntry } from "./gitQueue";
 import { createGitRefs, emptyRefs, findRef, recentBranches, resolveBranchName, type WorktreeEntry } from "./gitRefs";
 import { createWorktreePreview, emptyWorktreePreview, worktreeDetail, worktreeName, type WorktreePreviewState } from "./gitWorktrees";
@@ -20,6 +20,9 @@ import { showContextMenu } from "@legendapp/spark/context-menu";
 import { openURL } from "@legendapp/spark/links";
 import { subscribeToOpenRequests } from "@legendapp/spark/app/documents";
 import { EmptyState } from "./EmptyState";
+import { gitHubAccount, gitHubCliToken, useGitHubAccount } from "./gitHubAccount";
+import { createPullRequests, emptyPullRequests, type PullRequestsState } from "./gitPullRequests";
+import type { GitHubPullRequest } from "./github";
 import { StateBar } from "./StateBar";
 import { abortLabel, abortWarning, canContinue, operationText } from "./gitOperation";
 import { recentLabels, recentRepositories, useRecentRepositories } from "./gitRecents";
@@ -64,6 +67,10 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
   const worktreeController = useRef<ReturnType<typeof createWorktreePreview> | null>(null);
   const [network, setNetwork] = useState(emptyNetwork);
   const networkController = useRef<ReturnType<typeof createGitNetwork> | null>(null);
+  const [pulls, setPulls] = useState(emptyPullRequests);
+  const pullsController = useRef<ReturnType<typeof createPullRequests> | null>(null);
+  const gitHub = useGitHubAccount();
+  const signingIn = useRef(false);
   const root = changes.root;
   const recents = useRecentRepositories();
   const operation = root ? changes.operation : null;
@@ -74,6 +81,9 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
   const showsHistory = sectionShowsHistory(section);
   const selectedStash = sectionStash(section);
   const selectedWorktree = sectionWorktree(section);
+  const selectedPullNumber = sectionPullRequest(section);
+  // Rows are listed only while signed in (the list is cleared just after a sign-out).
+  const selectedPull = root && selectedPullNumber !== null && gitHub.status === "signed-in" ? pulls.pulls?.find(pull => pull.number === selectedPullNumber) ?? null : null;
   const selectedCommit = root && showsHistory ? history.selectedOid : null;
   const unstaged = unstagedEntries(changes.status);
   const staged = stagedEntries(changes.status);
@@ -382,6 +392,39 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     await runNetwork("publish", current => current.publish(remote));
   }
 
+  /**
+   * Sign In to GitHub: GitHub CLI's token when `gh` is signed in (after a sheet that also offers pasting one), else a
+   * pasted token in a secure field. The token is checked with GET /user before it goes in the keychain; it's never shown.
+   */
+  async function signInToGitHub() {
+    if (signingIn.current) return;
+    signingIn.current = true;
+    try { await signIn(); } finally { signingIn.current = false; }
+  }
+  async function signIn() {
+    const cliToken = await gitHubCliToken();
+    let token = cliToken;
+    if (cliToken) {
+      const choice = await showMessage({
+        windowId, kind: "info", title: "Sign In to GitHub",
+        message: "Legend Git reads pull requests with a GitHub token kept in your keychain. Use the account GitHub CLI (gh) is signed in with, or paste a fine-grained personal access token.",
+        buttons: [{ id: "cli", label: "Use GitHub CLI" }, { id: "paste", label: "Paste Token…" }, { id: "cancel", label: "Cancel" }], defaultButtonId: "cli", cancelButtonId: "cancel",
+      }).catch((error: unknown) => { console.error(error); return { buttonId: "cancel" }; });
+      if (choice.buttonId === "cancel") return;
+      if (choice.buttonId === "paste") token = null;
+    }
+    if (!token) {
+      const result = await showPrompt({
+        windowId, title: "Sign In to GitHub", secure: true, placeholder: "github_pat_…", confirmLabel: "Sign In",
+        message: "Paste a fine-grained personal access token with read access to the repository’s pull requests and contents. Legend Git keeps it in your keychain.",
+      }).catch((error: unknown) => { console.error(error); return { canceled: true as const }; });
+      if (result.canceled || !result.value.trim()) return;
+      token = result.value.trim();
+    }
+    try { await gitHubAccount.signIn(token, pullsController.current?.apiUrl()); }
+    catch (error) { await reportBranchError("Couldn’t Sign In to GitHub", error); }
+  }
+
   const currentBranch = refs.refs?.branches.find(branch => branch.current)?.name ?? null;
   const context: CommandContext = {
     hasRepository: !!root,
@@ -418,6 +461,7 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     queue,
     recents,
     operation,
+    gitHub,
     run: {
       openRepository: () => void chooseRepository(),
       openRecent,
@@ -425,7 +469,7 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
       continueOperation: () => { if (canContinue(operation)) void controller.current?.continueOperation(operation.kind); },
       toggleSidebar: () => setSidebarCollapsed(value => !value),
       showSection: setSection,
-      refresh: () => { void controller.current?.refresh(); void historyController.current?.refresh(); },
+      refresh: () => { void controller.current?.refresh(); void historyController.current?.refresh(); void pullsController.current?.refresh(); },
       copySha: oid => { setStringAsync(oid).catch(console.error); },
       openOnGitHub: oid => {
         const url = commitGitHubUrl(historyRef.current, oid);
@@ -467,6 +511,8 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
       push: () => void push(),
       cancelNetwork: () => networkController.current?.cancel(),
       pushQueueEntry: id => void pushQueueEntry(id),
+      signInToGitHub: () => void signInToGitHub(),
+      signOutOfGitHub: () => { gitHubAccount.signOut().catch((error: unknown) => reportBranchError("Couldn’t Sign Out of GitHub", error)); },
     },
   };
   const contextRef = useRef(context);
@@ -484,7 +530,7 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
       { type: "submenu", id: "edit", label: "Edit", target: { menu: "edit" }, items: [item("copy-sha"), { type: "separator" }, item("blame-line")] },
       // AppKit's own View ▸ Show/Hide Sidebar drives the split view, so the menu has no second one.
       { type: "submenu", id: "view", label: "View", target: { menu: "view" }, items: [item("show-changes"), item("show-history"), item("show-review"), { type: "separator" }, item("show-file-history"), item("show-all-history")] },
-      { type: "submenu", id: "repository", label: "Repository", placement: { before: { menu: "window" } }, items: [item("fetch"), item("pull"), item("push"), item("cancel-network"), { type: "separator" }, item("refresh"), { type: "separator" }, item("open-github")] },
+      { type: "submenu", id: "repository", label: "Repository", placement: { before: { menu: "window" } }, items: [item("fetch"), item("pull"), item("push"), item("cancel-network"), { type: "separator" }, item("refresh"), { type: "separator" }, item("open-github"), { type: "separator" }, item("sign-in-github"), item("sign-out-github")] },
       { type: "submenu", id: "branch", label: "Branch", placement: { before: { menu: "window" } }, items: [item("switch-branch"), item("new-branch"), { type: "separator" }, item("rename-branch"), item("delete-branch"), { type: "separator" }, item("abort-operation"), item("continue-operation")] },
       { type: "submenu", id: "worktree", label: "Worktree", placement: { before: { menu: "window" } }, items: [item("new-worktree"), item("open-review-worktree"), { type: "separator" }, item("reveal-worktree"), item("remove-worktree")] },
       {
@@ -511,6 +557,7 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     stashController.current?.setRoot(root);
     worktreeController.current?.setRoot(root);
     networkController.current?.setRoot(root);
+    void pullsController.current?.setRoot(root);
     if (!root) setSection("changes");
     // Worktree windows open from the main one, so only repositories opened by the user become recents.
     if (root && !initialPath) void recentRepositories.note(root);
@@ -530,6 +577,9 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
   // Changes re-reads status on every ref or HEAD change its watcher sees; the refs follow it.
   useEffect(() => { if (changes.status) void refsController.current?.refresh(); }, [changes.status]);
   useEffect(() => { void stashController.current?.show(selectedStash); }, [selectedStash, root]);
+  // Signing in reads the list; signing out clears it. (The mount effect below hands over the token for a window opened later.)
+  useEffect(() => { pullsController.current?.setToken(gitHubAccount.token()); }, [gitHub]);
+  useEffect(() => { pullsController.current?.select(selectedPullNumber); }, [selectedPullNumber, pulls.pulls]);
   // The selected worktree's files are re-read when it is selected and whenever its count or HEAD changes.
   // Rows are listed only while there are linked worktrees, so a selected main worktree has no row once they are gone.
   const worktreeEntry = selectedWorktree && (refs.worktrees?.length ?? 0) > 1 ? refs.worktrees?.find(entry => entry.path === selectedWorktree) ?? null : null;
@@ -569,6 +619,8 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     // So does a removed worktree.
     if (sectionWorktree(section) && refs.worktrees && !worktreeEntry) setSection("changes");
   }, [refs.refs, refs.stashes, refs.worktrees, section]); // eslint-disable-line react-hooks/exhaustive-deps -- worktreeEntry follows refs.worktrees
+  // A pull request that closed (or a sign-out) falls back to Changes.
+  useEffect(() => { if (selectedPullNumber !== null && !selectedPull && !pulls.loading) setSection("changes"); }, [selectedPullNumber, selectedPull, pulls.loading]);
 
   const [historyActions] = useState<HistoryActions>(() => ({
     select: oid => void historyController.current?.select(oid),
@@ -657,7 +709,8 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
   const sidebarSection = sectionRef(section) && !findRef(refs.refs, sectionRef(section)) ? "history"
     : selectedStash && !refs.stashes?.some(entry => entry.oid === selectedStash) ? "changes"
     : selectedWorktree && !worktreeEntry ? "changes"
-    : sectionReview(section) && !selectedQueue ? "changes" : section;
+    : sectionReview(section) && !selectedQueue ? "changes"
+    : selectedPullNumber !== null && !selectedPull ? "changes" : section;
   const branch = changes.status?.branch;
   const branchLabel = !branch?.head ? null : branch.head === "(detached)" ? `${branch.oid?.slice(0, 7) ?? "HEAD"} (detached)` : branch.head;
   const button = (id: CommandId, symbol: string) => {
@@ -741,6 +794,9 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     worktreeController.current = worktreeOwner;
     const networkOwner = createGitNetwork(setNetwork);
     networkController.current = networkOwner;
+    const pullsOwner = createPullRequests(setPulls);
+    pullsController.current = pullsOwner;
+    pullsOwner.setToken(gitHubAccount.token());
     const registration = addMacOSWindowListener(windowId, event => {
       if (disposed) return;
       if (event.type === "toolbarAction") runCommand(event.itemId, contextRef.current);
@@ -765,20 +821,26 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
       if (disposed) return;
       disposed = true;
       generator.current?.reset();
-      for (const disposable of [owner, historyOwner, refsOwner, stashOwner, worktreeOwner, networkOwner]) disposable.dispose();
+      for (const disposable of [owner, historyOwner, refsOwner, stashOwner, worktreeOwner, networkOwner, pullsOwner]) disposable.dispose();
       controller.current = null;
       historyController.current = null;
       refsController.current = null;
       stashController.current = null;
       worktreeController.current = null;
       networkController.current = null;
+      pullsController.current = null;
       closeMenuWindow(windowId);
       if (initialPath) openWorktreePaths.delete(initialPath);
       for (const pending of [registration, closeRegistration, focusRegistration, ...openRequests ? [openRequests] : []]) void pending.then(listener => listener.remove()).catch(console.error);
     };
     registerMenuRunner(windowId, itemId => { if (!disposed) runCommand(itemId, contextRef.current); });
     const closeRegistration = addWindowListener(windowId, "closed", close);
-    const focusRegistration = addWindowListener(windowId, "focusChanged", event => { if (!disposed && event.focused) setMenuWindow(windowId); });
+    // Pull requests re-read when the window comes to the front (and on ⌘R), never on a timer.
+    const focusRegistration = addWindowListener(windowId, "focusChanged", event => {
+      if (disposed || !event.focused) return;
+      setMenuWindow(windowId);
+      void pullsOwner.refresh();
+    });
     // File ▸ Open Recent (AppKit's, filled from the system's recent documents) and folders opened from Finder arrive as
     // open requests; the main window opens them, so a worktree window keeps its worktree.
     const openRequests = windowId === mainWindowId ? subscribeToOpenRequests(event => {
@@ -832,6 +894,12 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     : <EmptyState title={worktreePreview.loading ? "Loading Worktree…" : worktreePreview.error ? "Couldn’t Read the Worktree" : worktreePreview.files.length ? "No Selection" : "Working Tree Clean"}
       symbol={!worktreePreview.loading && !worktreePreview.error && !worktreePreview.files.length ? "checkmark.circle" : undefined} message={worktreePreview.error ?? undefined} />;
 
+  const pullFile = selectedPull && pulls.number === selectedPull.number ? pulls.files?.find(file => file.path === pulls.selectedPath) : undefined;
+  const pullDetail = pullFile?.text
+    ? <DiffPane readOnly disabled patch={{ path: pullFile.path, text: pullFile.text, file: pullFile.file, section: "unstaged", conflicted: false }} onApply={() => {}} />
+    : <EmptyState title={pulls.filesLoading && !pulls.files ? "Loading Pull Request…" : pulls.filesError ? "Couldn’t Read the Pull Request" : pullFile?.error ? "Couldn’t Show the Diff" : pullFile ? "No Diff to Show" : pulls.files?.length === 0 ? "No Changes" : "No Selection"}
+      message={pulls.filesError ?? pullFile?.error ?? (pullFile ? "GitHub doesn’t show a diff for this file (binary, or too large)." : undefined)} />;
+
   const changesDetail = changes.patch ? <DiffPane patch={changes.patch} disabled={busy} applyRef={applyLines} discardRef={discardLines}
     onLineChange={target => setBlameTarget(changesBlameTarget(target))}
     onLineContextMenu={(target, position) => { const blame = changesBlameTarget(target); if (blame) showLineMenu(blame, position); }}
@@ -857,8 +925,9 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
       sidebar={
         <Sidebar style={styles.root} selectedId={root ? sidebarSection : null} onSelectionChange={event => {
           if (event.id?.startsWith("recent:")) runCommand("open-recent", contextRef.current, event.id.slice(7));
+          else if (event.id === "github-sign-in") runCommand("sign-in-github", contextRef.current);
           else if (event.id === "review") runCommand("show-review", contextRef.current);
-          else if (event.id === "changes" || event.id === "history" || event.id?.startsWith("ref:") || event.id?.startsWith("stash:") || event.id?.startsWith("worktree:") || event.id?.startsWith("review:")) setSection(event.id as Section);
+          else if (event.id === "changes" || event.id === "history" || event.id?.startsWith("ref:") || event.id?.startsWith("stash:") || event.id?.startsWith("worktree:") || event.id?.startsWith("review:") || event.id?.startsWith("pr:")) setSection(event.id as Section);
         }} contentInsetTop={58}>
           <SidebarItem id="repositories" selectable={false}>
             <Text style={styles.section}>{root?.split("/").pop() ?? (recents.length ? "Recent" : "Repositories")}</Text>
@@ -870,6 +939,7 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
             ...refSidebarItems(refs.refs, ref => showRefMenu(ref)),
             ...stashSidebarItems(refs.stashes, showStashMenu),
             ...worktreeSidebarItems(refs.worktrees, root, showWorktreeMenu),
+            ...pullRequestSidebarItems(pulls, gitHub.status),
           ] : recents.length ? recentLabels(recents).map((label, index) => <SidebarItem key={recents[index]} id={`recent:${recents[index]}`}>
             <SidebarRow symbol="folder" label={label} />
           </SidebarItem>) :
@@ -891,6 +961,7 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
             <Button style={styles.discard} disabled={!commandEnabled("commit", context)} onPress={() => runCommand("commit", contextRef.current)}>Commit…</Button>
           </View>
         </View> : null}
+        {selectedPull ? <View style={styles.listPane}><PullRequestFiles pull={selectedPull} state={pulls} filter={filter} onSelect={path => pullsController.current?.selectFile(path)} /></View> : null}
         {queueBranch ? <View style={styles.listPane}>
           <View style={[styles.heading, styles.tallHeading]}>
             <View style={styles.headingStack}>
@@ -910,7 +981,11 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
             {operation.kind !== "bisect" ? <Button style={styles.barButton} disabled={!commandEnabled("continue-operation", context)} onPress={() => runCommand("continue-operation", contextRef.current)}>Continue</Button> : null}
           </StateBar> : null}
           {changes.error ? <StateBar tone="error" text={changes.error} /> : null}
-          {root ? <View style={styles.detail}>{showsHistory || queueBranch ? <CommitDetails history={history} actions={historyActions} /> : stashEntry ? stashDetail : worktreeEntry || queueWorktree ? worktreeDetailPane : changesDetail}</View>
+          {root && pulls.error ? <StateBar tone="error" text={pulls.error.message}>
+            {pulls.error.kind === "unauthorized" ? <Button style={styles.barButton} onPress={() => runCommand("sign-in-github", contextRef.current)}>Sign In…</Button>
+              : <Button style={styles.barButton} disabled={pulls.loading} onPress={() => void pullsController.current?.refresh()}>Try Again</Button>}
+          </StateBar> : null}
+          {root ? <View style={styles.detail}>{showsHistory || queueBranch ? <CommitDetails history={history} actions={historyActions} /> : stashEntry ? stashDetail : worktreeEntry || queueWorktree ? worktreeDetailPane : selectedPull ? pullDetail : changesDetail}</View>
             : changes.loading ? <EmptyState title="Opening Repository…" />
             : <EmptyState symbol="folder" title="No Repository Open" message="Open a Git repository to see its changes and commit them.">
               <Button style={styles.open} onPress={() => void chooseRepository()}>Open Repository…</Button>
@@ -990,6 +1065,57 @@ function queueSidebarItems(queue: readonly QueueEntry[], onContextMenu: (event: 
       <SidebarRow symbol={entry.kind === "worktree" ? "folder" : "arrow.triangle.branch"} label={entry.name} detail={queueDetail(entry)} indent />
     </SidebarItem>),
   ];
+}
+
+/** Pull Requests (for a repository on github.com): open PRs, or Sign In to GitHub… when signed out. */
+function pullRequestSidebarItems(state: PullRequestsState, status: "loading" | "signed-out" | "signed-in") {
+  if (!state.repo || status === "loading") return [];
+  const note = (text: string) => <SidebarItem key="pulls:note" id="pulls:note" selectable={false}><Text style={styles.sidebarNote}>{text}</Text></SidebarItem>;
+  return [
+    <SidebarItem key="group:pulls" id="group:pulls" selectable={false}><Text style={styles.section} accessibilityRole="header">Pull Requests</Text></SidebarItem>,
+    ...status === "signed-out" ? [<SidebarItem key="github-sign-in" id="github-sign-in"><SidebarRow symbol="person.crop.circle" label="Sign In to GitHub…" /></SidebarItem>]
+      : state.pulls?.length ? state.pulls.map(pull => <SidebarItem key={`pr:${pull.number}`} id={`pr:${pull.number}`} rowHeight={40}><PullRequestRow pull={pull} /></SidebarItem>)
+      : [note(state.pulls ? "No open pull requests" : state.error && !state.loading ? "Couldn’t load pull requests" : "Loading…")],
+  ];
+}
+
+/** "#12 Title" over the author (plain secondary text; a draft says so after the author). */
+function PullRequestRow({ pull }: { pull: GitHubPullRequest }) {
+  const color = useSymbolColor("blue");
+  const secondary = useSymbolColor("secondary");
+  const detail = pull.draft ? `${pull.author} · Draft` : pull.author;
+  return <View style={styles.pullRow} accessible accessibilityLabel={`Pull request ${pull.number}, ${pull.title}, by ${detail}`}>
+    <View style={styles.sidebarIcon}><SFSymbol name="arrow.triangle.pull" color={color} size={15} /></View>
+    <View style={styles.headingStack}>
+      <Text style={styles.pullRowTitle} numberOfLines={1}><Text style={{ color: secondary }}>{`#${pull.number} `}</Text>{pull.title}</Text>
+      <Text style={[styles.pullAuthor, { color: secondary }]} numberOfLines={1}>{detail}</Text>
+    </View>
+  </View>;
+}
+
+const pullState = (pull: GitHubPullRequest) => pull.merged ? "Merged" : pull.state === "closed" ? "Closed" : pull.draft ? "Draft" : "Open";
+
+/** The selected pull request's header (title, number, author, base ← head, state) over its changed files. */
+function PullRequestFiles({ pull, state, filter, onSelect }: { pull: GitHubPullRequest; state: PullRequestsState; filter: string; onSelect: (path: string) => void }) {
+  const files = state.number === pull.number ? state.files?.filter(file => !filter || file.path === state.selectedPath || pathParts(file.path).name.toLowerCase().includes(filter.toLowerCase())) ?? [] : [];
+  return <View style={styles.listSection}>
+    <View style={styles.pullHeader}>
+      <Text style={styles.pullTitle} accessibilityRole="header" selectable numberOfLines={3}>{pull.title}</Text>
+      <Text style={styles.headingNote} selectable numberOfLines={2}>{`#${pull.number} · ${pull.author} · ${pull.base} ← ${pull.head} · ${pullState(pull)}`}</Text>
+    </View>
+    {files.length ? <Sidebar style={[styles.root, styles.separated]} selectedId={files.some(file => file.path === state.selectedPath) ? state.selectedPath : null} onSelectionChange={event => { if (event.id) onSelect(event.id); }} defaultRowHeight={24}>
+      {files.map(file => {
+        const { name, folder } = pathParts(file.path);
+        return <SidebarItem key={file.path} id={file.path}>
+          <View style={styles.fileRow} accessible accessibilityLabel={`${name}${folder ? `, ${folder}` : ""}, ${file.additions} added, ${file.deletions} removed`}>
+            <Text style={styles.fileName} numberOfLines={1}>{name}</Text>
+            <Text style={styles.fileFolder} numberOfLines={1} ellipsizeMode="head">{folder}</Text>
+            <Text style={styles.count}>{`+${file.additions} −${file.deletions}`}</Text>
+          </View>
+        </SidebarItem>;
+      })}
+    </Sidebar> : <View style={[styles.emptyList, styles.separated]}><Text style={styles.emptyListText}>{state.filesLoading ? "Loading…" : state.filesError ? "Couldn’t read the files" : filter ? "No matching files" : "No files"}</Text></View>}
+  </View>;
 }
 
 /** The selected worktree's changed files, read-only, with Open in New Window; selecting a file shows its diff. */
@@ -1116,6 +1242,11 @@ const styles = StyleSheet.create({
   count: { fontSize: 12, color: PlatformColor("secondaryLabelColor"), fontVariant: ["tabular-nums"] },
   sidebarNote: { paddingHorizontal: 10, paddingVertical: 6, fontSize: 13, color: PlatformColor("secondaryLabelColor") },
   barButton: { width: 84, height: 24 },
+  pullRow: { height: 40, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 8 },
+  pullRowTitle: { fontSize: 13, color: PlatformColor("labelColor") },
+  pullAuthor: { fontSize: 11, marginTop: 1 },
+  pullHeader: { paddingLeft: 16, paddingRight: 12, paddingTop: 10, paddingBottom: 10, gap: 2 },
+  pullTitle: { fontSize: 13, fontWeight: "600", color: PlatformColor("labelColor") },
 });
 
 export default App;

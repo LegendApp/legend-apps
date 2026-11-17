@@ -434,9 +434,15 @@ export function countStatusEntries(output: string) {
   return count;
 }
 
-export function githubCommitUrl(remoteUrl: string | null, oid: string) {
+/** The owner and name of a repository on github.com from a remote URL (https, ssh, git or scp-like); null for other hosts. */
+export function githubRepository(remoteUrl: string | null | undefined) {
   const match = remoteUrl?.trim().match(/^(?:(?:https?|ssh|git):\/\/(?:[^@/]+@)?github\.com(?::\d+)?\/|[^@/]+@github\.com:)([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/i);
-  return match ? `https://github.com/${match[1]}/${match[2]}/commit/${oid}` : null;
+  return match ? { owner: match[1]!, name: match[2]! } : null;
+}
+
+export function githubCommitUrl(remoteUrl: string | null, oid: string) {
+  const repo = githubRepository(remoteUrl);
+  return repo ? `https://github.com/${repo.owner}/${repo.name}/commit/${oid}` : null;
 }
 
 export class GitService {
@@ -1425,6 +1431,11 @@ export class GitService {
   /** The checked-out branch's short name, or null when HEAD is detached. */
   currentBranch(options: GitReadOptions = {}) {
     return this.read(["symbolic-ref", "-q", "--short", "HEAD"], options, 5_000, false, [0, 1]).then(value => value.trim() || null);
+  }
+
+  /** A config value as Git resolves it (repository, global, system), or null when unset. */
+  configValue(key: string, options: GitReadOptions = {}) {
+    return this.read(["config", "--get", key], options, 5_000, false, [0, 1]).then(value => value.trim() || null);
   }
 
   /** The fetch URL of a remote, or null when it is not configured. */
