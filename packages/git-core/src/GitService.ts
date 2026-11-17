@@ -48,6 +48,13 @@ export type GitRefList = { branches: GitBranch[]; remotes: { name: string; branc
 /** A stash entry: its commit, its current `stash@{n}` index, its reflog subject ("On main: message") and when it was made. */
 export type GitStash = { oid: string; index: number; message: string; time: number };
 export type GitStashPushOptions = GitReadOptions & { includeUntracked?: boolean };
+/**
+ * A worktree from `git worktree list --porcelain`: `head` is null for a bare repository or an unborn branch, `branch` is
+ * the short name of the checked-out branch (null when detached), `locked`/`prunable` hold Git's reason ("" without one).
+ */
+export type GitWorktree = { path: string; head: string | null; branch: string | null; detached: boolean; bare: boolean; locked: string | null; prunable: string | null; main: boolean };
+/** `branch` checks out an existing local branch; `newBranch` creates one at `startPoint` (HEAD when omitted). */
+export type GitAddWorktreeOptions = GitReadOptions & ({ branch: string; newBranch?: undefined; startPoint?: undefined } | { branch?: undefined; newBranch: string; startPoint?: string });
 export type GitStagedFile = { path: string; originalPath: string | null; binary: boolean; added: number; deleted: number };
 /** The staged changes as `git diff --cached` text; files past the size cap are listed but left out of `patch`. */
 export type GitStagedDiff = { files: GitStagedFile[]; patch: string; truncated: boolean; omitted: string[] };
@@ -142,6 +149,8 @@ export class GitIndexLockedError extends GitServiceError {
 }
 
 const discoveryQueues = new Map<string, Promise<void>>();
+// Worktree writes change the shared repository, so they also serialize on its common dir across every worktree's service.
+const commonQueues = new Map<string, Promise<void>>();
 const repoQueues = new Map<string, Promise<void>>();
 const stateProbe = `cat "$1/HEAD" || exit
 printf '\\0'
@@ -277,6 +286,41 @@ export function parseStashList(output: string): GitStash[] {
     if (oid && position) stashes.push({ oid, index: Number(position[1]), message, time: Number(time) || 0 });
   }
   return stashes;
+}
+
+/** Parses `git worktree list --porcelain -z`: attribute fields, each record ended by an empty field; the main worktree comes first. */
+export function parseWorktreeList(output: string): GitWorktree[] {
+  const worktrees: GitWorktree[] = [];
+  let current: GitWorktree | null = null;
+  for (const field of output.split("\0")) {
+    if (!field) { current = null; continue; }
+    const space = field.indexOf(" ");
+    const [key, value] = space < 0 ? [field, ""] : [field.slice(0, space), field.slice(space + 1)];
+    if (key === "worktree") {
+      current = { path: value, head: null, branch: null, detached: false, bare: false, locked: null, prunable: null, main: !worktrees.length };
+      worktrees.push(current);
+    } else if (!current) continue;
+    else if (key === "HEAD") current.head = /^0+$/.test(value) ? null : value;
+    else if (key === "branch") current.branch = value.replace(/^refs\/heads\//, "");
+    else if (key === "detached") current.detached = true;
+    else if (key === "bare") current.bare = true;
+    else if (key === "locked") current.locked = value;
+    else if (key === "prunable") current.prunable = value;
+  }
+  return worktrees;
+}
+
+/** The number of changed paths in `git status --porcelain -z` output; a rename or copy carries its old path as an extra field. */
+export function countStatusEntries(output: string) {
+  const fields = output.split("\0");
+  let count = 0;
+  for (let index = 0; index < fields.length; index += 1) {
+    const field = fields[index]!;
+    if (field.length < 4) continue;
+    count += 1;
+    if (/^[RC]|^.[RC]/.test(field)) index += 1;
+  }
+  return count;
 }
 
 export function githubCommitUrl(remoteUrl: string | null, oid: string) {
@@ -976,6 +1020,82 @@ export class GitService {
         throw error;
       }
     });
+  }
+
+  /** The repository's worktrees, the main one first. */
+  listWorktrees(options: GitReadOptions = {}) {
+    return this.read(["worktree", "list", "--porcelain", "-z"], options, 10_000).then(parseWorktreeList);
+  }
+
+  /** Runs a worktree write on this worktree's queue and the repository's common-dir queue, after checking index.lock. */
+  private worktreeWrite<T>(options: GitReadOptions, write: () => Promise<T>) {
+    return this.enqueue(options, async (gitDir, commit) => {
+      await this.inspect(gitDir, options);
+      const commonDir = (await this.git(["rev-parse", "--path-format=absolute", "--git-common-dir"], options, 5_000)).replace(/\n$/, "");
+      return serialize(commonQueues, commonDir, async () => {
+        checkAborted(options.signal);
+        commit();
+        return write();
+      });
+    });
+  }
+
+  /**
+   * Adds a worktree at absolute `path` (`git worktree add`, never forced): checking out existing local branch `branch`,
+   * or creating `newBranch` at `startPoint`; resolves with the worktree's path as Git lists it. Git refuses a branch checked out in another worktree and a non-empty folder.
+   */
+  async addWorktree(path: string, { branch, newBranch, startPoint, ...options }: GitAddWorktreeOptions) {
+    if (!path.startsWith("/") || path.includes("\0")) throw new Error("Expected an absolute folder path.");
+    const name = newBranch ?? branch;
+    if (!name) throw new Error("Choose a branch for the worktree.");
+    await this.validateBranchName(name, options);
+    return this.worktreeWrite(options, async () => {
+      if (branch !== undefined && !(await this.git(["rev-parse", "--verify", "-q", "--end-of-options", `refs/heads/${branch}^{commit}`], options, 5_000, undefined, [0, 1])).trim()) {
+        throw new Error(`There’s no local branch named “${branch}”.`);
+      }
+      // The short name of a local branch checks it out (a full ref would detach); its existence was checked above.
+      const args = newBranch !== undefined ? ["-b", newBranch, "--", path, ...startPoint ? [startPoint] : []] : ["--", path, branch!];
+      await this.git(["worktree", "add", "--no-guess-remote", ...args], options, 300_000);
+      // As `git worktree list` shows it: symbolic links in `path` resolved.
+      return (await this.git(["-C", path, "rev-parse", "--show-toplevel"], {}, 5_000)).replace(/\n$/, "");
+    });
+  }
+
+  /**
+   * Removes the linked worktree at `path` (`git worktree remove`). Git refuses a worktree with changes or a lock and
+   * leaves it intact; `force` removes it anyway (twice forced, which also overrides a lock). A worktree whose folder
+   * is gone is just unregistered.
+   */
+  removeWorktree(path: string, { force = false, ...options }: GitReadOptions & { force?: boolean } = {}) {
+    if (!path.startsWith("/") || path.includes("\0")) return Promise.reject(new Error("Expected an absolute folder path."));
+    return this.worktreeWrite(options, async () => {
+      const lock = (await this.git(["-C", path, "rev-parse", "--path-format=absolute", "--git-path", "index.lock"], options, 5_000).catch(() => "")).replace(/\n$/, "");
+      if (lock && (await this.process("sh", ["-c", "test -e \"$1\" && echo locked", "legend-git-lock", lock], options, 5_000, undefined, [0, 1])).trim()) throw new GitIndexLockedError(lock);
+      await this.git(["worktree", "remove", ...force ? ["--force", "--force"] : [], "--", path], options, 300_000);
+    });
+  }
+
+  /** How many paths have changes in the worktree at `path` (`git status --porcelain`, untracked folders counted once). */
+  worktreeChangeCount(path: string, options: GitReadOptions = {}) {
+    return this.git(["-C", path, "status", "--porcelain", "-z", "--untracked-files=normal", "--ignore-submodules=dirty"], options, 30_000).then(countStatusEntries);
+  }
+
+  /** The status of the worktree at `path`, every untracked file listed. */
+  worktreeStatus(path: string, options: GitReadOptions = {}) {
+    return this.git(["-C", path, "status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all", "--ignored=no"], options, 60_000).then(parseGitStatus);
+  }
+
+  /**
+   * One changed file of the worktree at `path`, staged and unstaged together (HEAD → worktree; an unborn HEAD diffs from
+   * the empty tree), or an untracked file against /dev/null, in `fileDiff`'s format.
+   */
+  async worktreeFileDiff(path: string, file: { path: string; untracked?: boolean }, options: GitReadOptions = {}) {
+    if (!isRepoPath(file.path)) throw new Error("Expected a repository-relative file path.");
+    const prefix = ["-C", path, "-c", "diff.submodule=short"];
+    if (file.untracked) return this.git([...prefix, ...diffFormat, "--no-index", "--", "/dev/null", file.path], options, 60_000, undefined, [0, 1]);
+    const head = (await this.git(["-C", path, "rev-parse", "--verify", "-q", "HEAD"], options, 5_000, undefined, [0, 1])).trim()
+      || (await this.git(["hash-object", "-t", "tree", "--stdin"], options, 5_000, "")).trim();
+    return this.git([...prefix, "--literal-pathspecs", ...diffFormat, "--no-renames", head, "--", file.path], options);
   }
 
   /** The checked-out branch's short name, or null when HEAD is detached. */

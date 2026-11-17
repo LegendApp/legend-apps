@@ -23,7 +23,7 @@ it("finds refs by full name and typed branch names, and orders recent branches b
 it("resolves a write only after the newest ref read lands, also one started by the watcher meanwhile", async () => {
   const reads: ((refs: GitRefList) => void)[] = [];
   const git = {
-    listRefs: jest.fn(() => new Promise<GitRefList>(resolve => reads.push(resolve))), listStashes: jest.fn(async () => []),
+    listRefs: jest.fn(() => new Promise<GitRefList>(resolve => reads.push(resolve))), listStashes: jest.fn(async () => []), listWorktrees: jest.fn(async () => []),
     renameBranch: jest.fn(async () => {}),
   };
   let state!: RefsState;
@@ -48,7 +48,7 @@ it("resolves a write only after the newest ref read lands, also one started by t
 });
 
 it("runs one write at a time and re-reads the refs after a failed write", async () => {
-  const git = { listRefs: jest.fn(async () => list("main")), listStashes: jest.fn(async () => []), deleteBranch: jest.fn(() => new Promise((_resolve, reject) => setTimeout(() => reject(new Error("refused")), 5))) };
+  const git = { listRefs: jest.fn(async () => list("main")), listStashes: jest.fn(async () => []), listWorktrees: jest.fn(async () => []), deleteBranch: jest.fn(() => new Promise((_resolve, reject) => setTimeout(() => reject(new Error("refused")), 5))) };
   const refs = createGitRefs(() => {}, () => git as unknown as GitService);
   refs.setRoot("/repo");
   const first = refs.delete("a");

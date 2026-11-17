@@ -1,11 +1,12 @@
 import type { GitRefList, GitStash } from "@legend-apps/git-core";
 import { searchScopes, type SearchScope } from "./gitHistory";
-import { findRef } from "./gitRefs";
+import { findRef, type WorktreeEntry } from "./gitRefs";
 
-/** A sidebar item: Changes, History, a branch, remote branch or tag by its full ref name, or a stash by its oid. */
-export type Section = "changes" | "history" | `ref:${string}` | `stash:${string}`;
+/** A sidebar item: Changes, History, a branch, remote branch or tag by its full ref name, a stash by its oid, or a worktree by its path. */
+export type Section = "changes" | "history" | `ref:${string}` | `stash:${string}` | `worktree:${string}`;
 export const sectionRef = (section: Section) => section.startsWith("ref:") ? section.slice(4) : null;
 export const sectionStash = (section: Section) => section.startsWith("stash:") ? section.slice(6) : null;
+export const sectionWorktree = (section: Section) => section.startsWith("worktree:") ? section.slice(9) : null;
 /** History lists commits: HEAD's, or a ref's. */
 export const sectionShowsHistory = (section: Section) => section === "history" || section.startsWith("ref:");
 
@@ -44,6 +45,10 @@ export type CommandContext = {
   stashes: GitStash[] | null;
   /** The worktree or index has changes to stash. */
   hasChanges: boolean;
+  /** The repository's worktrees, the main one first; null until read. */
+  worktrees: WorktreeEntry[] | null;
+  /** The path of the worktree this window shows. */
+  root: string | null;
   run: {
     openRepository(): void;
     toggleSidebar(): void;
@@ -73,6 +78,10 @@ export type CommandContext = {
     applyStash(oid: string): void;
     popStash(oid: string): void;
     dropStash(oid: string): void;
+    openWorktree(path: string): void;
+    newWorktree(): void;
+    removeWorktree(path: string): void;
+    revealInFinder(path: string): void;
   };
 };
 
@@ -99,6 +108,16 @@ const canWriteBranch = (context: CommandContext) => context.hasRepository && !co
 const stash = (context: CommandContext, target?: string) => {
   const oid = target ?? sectionStash(context.section);
   return context.stashes?.find(entry => entry.oid === oid) ?? null;
+};
+/** The worktree a worktree command acts on: the context menu's, else the selected one. */
+const worktree = (context: CommandContext, target?: string) => {
+  const path = target ?? sectionWorktree(context.section);
+  return context.worktrees?.find(entry => entry.path === path) ?? null;
+};
+/** Another worktree whose folder is there to open. */
+const openable = (context: CommandContext, target?: string) => {
+  const entry = worktree(context, target);
+  return entry && !entry.bare && entry.prunable === null && entry.path !== context.root ? entry : null;
 };
 const canStash = (context: CommandContext) => canWriteBranch(context) && context.hasChanges && !context.busy;
 
@@ -175,6 +194,19 @@ export const commands = [
   { id: "apply-stash", label: "Apply Stash", enabled: (context, target) => canWriteBranch(context) && !!stash(context, target), run: (context, target) => context.run.applyStash(stash(context, target)!.oid) },
   { id: "pop-stash", label: "Pop Stash", enabled: (context, target) => canWriteBranch(context) && !!stash(context, target), run: (context, target) => context.run.popStash(stash(context, target)!.oid) },
   { id: "drop-stash", label: "Drop Stash…", enabled: (context, target) => context.hasRepository && !context.branchBusy && !!stash(context, target), run: (context, target) => context.run.dropStash(stash(context, target)!.oid) },
+  { id: "open-worktree", label: "Open Worktree in New Window", shortcut: "Cmd+Shift+o", enabled: (context, target) => !!openable(context, target), run: (context, target) => context.run.openWorktree(openable(context, target)!.path) },
+  { id: "new-worktree", label: "New Worktree…", enabled: context => canWriteBranch(context) && !!context.worktrees, run: context => context.run.newWorktree() },
+  {
+    id: "remove-worktree", label: "Remove Worktree…",
+    // Not the main worktree, and not the one this window shows (one open in another window is refused when run).
+    enabled: (context, target) => { const entry = worktree(context, target); return context.hasRepository && !context.branchBusy && !!entry && !entry.main && entry.path !== context.root; },
+    run: (context, target) => context.run.removeWorktree(worktree(context, target)!.path),
+  },
+  {
+    id: "reveal-worktree", label: "Reveal in Finder",
+    enabled: (context, target) => { const entry = worktree(context, target); return !!entry && entry.prunable === null; },
+    run: (context, target) => context.run.revealInFinder(worktree(context, target)!.path),
+  },
 ] as const satisfies readonly Command[];
 
 export type CommandId = (typeof commands)[number]["id"];

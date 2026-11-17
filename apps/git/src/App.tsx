@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { PlatformColor, StyleSheet, Text, View } from "react-native";
 import { watchDirectories } from "@legend-apps/file-system-watcher";
 import { GitBranchNotMergedError, GitLocalChangesError, GitStashDropError, type GitRefList, type GitStash, type GitStatusEntry } from "@legend-apps/git-core";
@@ -6,8 +6,11 @@ import { Button } from "@legendapp/spark/ui";
 import { conflictedEntries, createGitChanges, emptyChanges, stagedEntries, unstagedEntries } from "./gitChanges";
 import { DiffPane, type DiffLineTarget } from "./DiffPane";
 import { CommitDetails, HistoryList, type BlameTarget, type HistoryActions } from "./HistoryView";
-import { commandEnabled, commandLabel, commandMenuItem, runCommand, sectionRef, sectionShowsHistory, sectionStash, type CommandContext, type CommandId, type Section } from "./commands";
-import { createGitRefs, emptyRefs, findRef, recentBranches, resolveBranchName } from "./gitRefs";
+import { commandEnabled, commandLabel, commandMenuItem, runCommand, sectionRef, sectionShowsHistory, sectionStash, sectionWorktree, type CommandContext, type CommandId, type Section } from "./commands";
+import { createGitRefs, emptyRefs, findRef, recentBranches, resolveBranchName, type WorktreeEntry } from "./gitRefs";
+import { createWorktreePreview, emptyWorktreePreview, worktreeDetail, worktreeName, type WorktreePreviewState } from "./gitWorktrees";
+import { closeMenuWindow, mainWindowId, registerMenuRunner, runMenuAction, useMenuBar, openWorktreePaths, openWorktreeWindow, publishMenu, setMenuWindow, type GitWindowProps } from "./gitWindows";
+import { runCommand as runProcess } from "@legendapp/spark/processes";
 import { commitGitHubUrl, createGitHistory, emptyHistory, searchScopes, type SearchScope } from "./gitHistory";
 import { createStashPreview, emptyStashPreview, sidebarDate, stashLabel, type StashPreviewState } from "./gitStashes";
 import { setStringAsync } from "@legendapp/spark/clipboard";
@@ -17,7 +20,7 @@ import { EmptyState } from "./EmptyState";
 import { FileRow, pathParts, useSymbolColor } from "./FileRow";
 import { CommitComposer, type CommitMessageGenerator } from "./CommitComposer";
 import { openFileDialog, showMessage, showPrompt } from "@legendapp/spark/dialogs";
-import { useMenu } from "@legendapp/spark/menus";
+import { useMenu, type UseMenuOptions } from "@legendapp/spark/menus";
 import { Sidebar, SidebarItem } from "@legendapp/spark/ui/sidebar";
 import { SFSymbol } from "@legendapp/spark/ui/symbol";
 import { SidebarSplitView } from "@legendapp/spark/ui/split-view";
@@ -26,7 +29,8 @@ import { addMacOSWindowListener, type MacOSToolbarItem } from "@legendapp/spark/
 
 const contentInset = 52;
 
-export function App() {
+/** The main window, or (with `initialPath`) a window opened for one worktree, titled `<repoName> — <branch>`. */
+export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindowProps = {}) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [changes, setChanges] = useState(emptyChanges);
   const controller = useRef<ReturnType<typeof createGitChanges> | null>(null);
@@ -50,9 +54,12 @@ export function App() {
   refsRef.current = refs;
   const [stashPreview, setStashPreview] = useState(emptyStashPreview);
   const stashController = useRef<ReturnType<typeof createStashPreview> | null>(null);
+  const [worktreePreview, setWorktreePreview] = useState(emptyWorktreePreview);
+  const worktreeController = useRef<ReturnType<typeof createWorktreePreview> | null>(null);
   const root = changes.root;
   const showsHistory = sectionShowsHistory(section);
   const selectedStash = sectionStash(section);
+  const selectedWorktree = sectionWorktree(section);
   const selectedCommit = root && showsHistory ? history.selectedOid : null;
   const unstaged = unstagedEntries(changes.status);
   const staged = stagedEntries(changes.status);
@@ -75,7 +82,7 @@ export function App() {
   async function chooseRepository() {
     const owner = controller.current;
     try {
-      const result = await openFileDialog({ windowId: "main", selection: "directories", multiple: false, title: "Open Repository" });
+      const result = await openFileDialog({ windowId, selection: "directories", multiple: false, title: "Open Repository" });
       if (!result.canceled && controller.current === owner) await owner?.open(result.paths[0]!);
     } catch (error) { console.error(error); }
   }
@@ -84,7 +91,7 @@ export function App() {
     const entry = selectedEntry;
     if (!canDiscardFile || !entry) return;
     const what = entry.kind === "untracked" ? `untracked file “${entry.path}”` : `changes to “${entry.path}”`;
-    if (await confirmDestructive(`Discard ${what}?`, "Discard")) await controller.current?.discardFile(entry.path);
+    if (await confirmDestructive(windowId, `Discard ${what}?`, "Discard")) await controller.current?.discardFile(entry.path);
   }
 
   /** Shows History for the line's file with the commit that last changed the line selected. */
@@ -96,14 +103,14 @@ export function App() {
       // Another repository opened while the blame ran.
       if (!hunk || historyController.current !== owner || historyRef.current.root !== root) return;
       if (!hunk.oid) {
-        await showMessage({ windowId: "main", kind: "info", title: "Not Committed Yet", message: `Line ${target.line} of “${target.path}” has changes that are not committed yet.` });
+        await showMessage({ windowId, kind: "info", title: "Not Committed Yet", message: `Line ${target.line} of “${target.path}” has changes that are not committed yet.` });
         return;
       }
       showHistory();
       await owner.showFileHistory(target.path, hunk.oid);
     } catch (error) {
       if (error instanceof Error && error.name === "GitHistoryCancelledError") return;
-      await showMessage({ windowId: "main", kind: "warning", title: "Couldn’t Blame the Line", message: error instanceof Error ? error.message : String(error) }).catch(console.error);
+      await showMessage({ windowId, kind: "warning", title: "Couldn’t Blame the Line", message: error instanceof Error ? error.message : String(error) }).catch(console.error);
     }
   }
 
@@ -115,7 +122,7 @@ export function App() {
     const message = names.length === 1
       ? `Legend Git writes ${files} back as it was before the last discard. Its current contents are backed up first, under refs/legend-git/replaced/.`
       : `Legend Git writes ${files} back as they were before the last discard. Their current contents are backed up first, under refs/legend-git/replaced/.`;
-    if (await confirmDestructive(`Restore ${files}?`, "Restore", message)) await controller.current?.restoreLastDiscard();
+    if (await confirmDestructive(windowId, `Restore ${files}?`, "Restore", message)) await controller.current?.restoreLastDiscard();
   }
 
   /** Shows HEAD's History now, so a file history started next isn't closed when History leaves a ref. */
@@ -126,7 +133,7 @@ export function App() {
 
   /** Shows a branch write's failure (Git's own message) in a warning sheet. */
   const reportBranchError = (title: string, error: unknown) => showMessage({
-    windowId: "main", kind: "warning", title,
+    windowId, kind: "warning", title,
     message: (error instanceof Error ? error.message : String(error)).replace(/^(error|fatal): /gm, "").trim(),
   }).catch(console.error);
 
@@ -140,7 +147,7 @@ export function App() {
       switched(await owner.checkout(entry));
     } catch (error) {
       if (!(error instanceof GitLocalChangesError)) { await reportBranchError(`Couldn’t Switch to “${entry.ref.name}”`, error); return; }
-      if (!await confirmStashAndSwitch(error.branch, error.message)) return;
+      if (!await confirmStashAndSwitch(windowId, error.branch, error.message)) return;
       try { switched(await owner.stashAndCheckout(entry)); } catch (failed) { await reportBranchError(`Couldn’t Switch to “${entry.ref.name}”`, failed); }
     }
   }
@@ -151,7 +158,7 @@ export function App() {
     const untracked = changes.status?.entries.filter(entry => entry.kind === "untracked").length ?? 0;
     const message = includeUntracked ? "Your changes and untracked files are saved as a stash and removed from the working tree."
       : `Your changes are saved as a stash and removed from the working tree.${untracked ? " Untracked files stay; use Stash Changes Including Untracked… to stash them too." : ""}`;
-    const result = await showPrompt({ windowId: "main", title: "Stash Changes", message, placeholder: "Message (optional)", confirmLabel: "Stash" })
+    const result = await showPrompt({ windowId, title: "Stash Changes", message, placeholder: "Message (optional)", confirmLabel: "Stash" })
       .catch((error: unknown) => { console.error(error); return { canceled: true as const }; });
     if (result.canceled) return;
     try { await owner.stash(result.value.trim(), includeUntracked); } catch (error) { await reportBranchError("Couldn’t Stash the Changes", error); }
@@ -161,7 +168,7 @@ export function App() {
   async function stashWrite(oid: string, action: "apply" | "pop" | "drop") {
     const owner = refsController.current, entry = refsRef.current.stashes?.find(stash => stash.oid === oid);
     if (!owner || !entry) return;
-    if (action === "drop" && !await confirmDestructive(`Drop the stash “${stashLabel(entry.message)}”?`, "Drop", "Its changes are deleted from the stash list.", true)) return;
+    if (action === "drop" && !await confirmDestructive(windowId, `Drop the stash “${stashLabel(entry.message)}”?`, "Drop", "Its changes are deleted from the stash list.", true)) return;
     try {
       if (action === "apply") await owner.applyStash(oid);
       else if (action === "pop") await owner.popStash(oid);
@@ -173,10 +180,71 @@ export function App() {
     }
   }
 
+  /** The repository's name: its main worktree's folder. */
+  const repositoryName = () => worktreeName(refsRef.current.worktrees?.[0]?.path ?? root ?? "");
+
+  function openWorktree(path: string) {
+    const entry = refsRef.current.worktrees?.find(worktree => worktree.path === path);
+    if (!entry) return;
+    const name = repositoryName();
+    openWorktreeWindow(path, name, `${name} — ${entry.branch ?? entry.head?.slice(0, 7) ?? worktreeName(path)}`)
+      .catch((error: unknown) => reportBranchError("Couldn’t Open the Worktree", error));
+  }
+
+  /**
+   * Asks for a branch (an existing local branch is checked out, any other name becomes a new branch from HEAD), then for
+   * the folder to put the worktree in; the worktree goes in a new subfolder named after the branch.
+   */
+  async function newWorktree() {
+    const owner = refsController.current;
+    if (!owner) return;
+    const result = await showPrompt({
+      windowId, title: "New Worktree", confirmLabel: "Continue", placeholder: "Branch name",
+      message: `Enter an existing branch to check out in the new worktree, or a new branch name to create from ${currentBranch ? `“${currentBranch}”` : "the current commit"}. Next, choose where to put it.`,
+    }).catch((error: unknown) => { console.error(error); return { canceled: true as const }; });
+    const name = result.canceled ? "" : result.value.trim();
+    if (!name) return;
+    const existing = refsRef.current.refs?.branches.some(branch => branch.name === name);
+    const parent = await openFileDialog({ windowId, selection: "directories", multiple: false, title: "Choose the Folder for the New Worktree" })
+      .catch((error: unknown) => { console.error(error); return { canceled: true as const, paths: [] }; });
+    if (parent.canceled || !parent.paths[0]) return;
+    const path = `${parent.paths[0].replace(/\/+$/, "")}/${name.replace(/\//g, "-")}`;
+    try {
+      setSection(`worktree:${await owner.addWorktree(path, existing ? { branch: name } : { newBranch: name })}`);
+    } catch (error) { await reportBranchError("Couldn’t Create the Worktree", error); }
+  }
+
+  /** Asks first; when Git refuses (changes or a lock), shows its message and asks again before forcing. */
+  async function removeWorktree(path: string) {
+    const owner = refsController.current, entry = refsRef.current.worktrees?.find(worktree => worktree.path === path);
+    if (!owner || !entry) return;
+    const name = worktreeName(path);
+    if (openWorktreePaths.has(path)) {
+      await reportBranchError(`“${name}” Is Open in Another Window`, "Close its window, then remove the worktree.");
+      return;
+    }
+    const missing = entry.prunable !== null;
+    if (!await confirmDestructive(windowId, `Remove the worktree “${name}”?`, "Remove", missing ? "Its folder is gone already; Git forgets it." : `Its folder ${path} is deleted. Its branch${entry.branch ? ` “${entry.branch}”` : ""} stays.`, true)) return;
+    try {
+      await owner.removeWorktree(path);
+    } catch (error) {
+      // Only Git's refusals over changes or a lock can be overridden; anything else is just reported.
+      if (!(error instanceof Error) || !/use --force|remove -f -f/.test(error.message)) { await reportBranchError(`Couldn’t Remove “${name}”`, error); return; }
+      const reason = error.message.replace(/^(error|fatal): /gm, "").trim();
+      if (!await confirmDestructive(windowId, `Git didn’t remove “${name}”.`, "Remove Anyway", `${reason}\n\nRemoving it anyway deletes its uncommitted changes and untracked files.`, true)) return;
+      try { await owner.removeWorktree(path, true); } catch (forced) { await reportBranchError(`Couldn’t Remove “${name}”`, forced); }
+    }
+  }
+
+  function revealInFinder(path: string) {
+    runProcess({ target: { type: "command", name: "open" }, args: ["-R", "--", path], timeoutMs: 10_000 })
+      .then(result => { if (result.exit.type !== "exited" || result.exit.code !== 0) console.error("open -R failed", result.exit); }, console.error);
+  }
+
   async function switchBranch() {
     const selectedRef = findRef(refsRef.current.refs, sectionRef(section));
     const result = await showPrompt({
-      windowId: "main", title: "Switch Branch", message: "Enter the name of a local branch, or of a remote branch to check out as a new tracking branch.",
+      windowId, title: "Switch Branch", message: "Enter the name of a local branch, or of a remote branch to check out as a new tracking branch.",
       placeholder: "Branch name", defaultValue: selectedRef && selectedRef.kind !== "tag" ? selectedRef.ref.name : undefined, confirmLabel: "Switch",
     }).catch((error: unknown) => { console.error(error); return { canceled: true as const }; });
     if (result.canceled || !result.value.trim()) return;
@@ -191,7 +259,7 @@ export function App() {
     if (!owner) return;
     const entry = findRef(refsRef.current.refs, start);
     const from = entry ? `“${entry.ref.name}”` : start ? `commit ${start.slice(0, 7)}` : currentBranch ? `“${currentBranch}”` : "the current commit";
-    const result = await showPrompt({ windowId: "main", title: "New Branch", message: `The new branch starts at ${from} and is checked out.`, placeholder: "Branch name", confirmLabel: "Create" })
+    const result = await showPrompt({ windowId, title: "New Branch", message: `The new branch starts at ${from} and is checked out.`, placeholder: "Branch name", confirmLabel: "Create" })
       .catch((error: unknown) => { console.error(error); return { canceled: true as const }; });
     const name = result.canceled ? "" : result.value.trim();
     if (!name) return;
@@ -201,7 +269,7 @@ export function App() {
   async function renameBranch(ref: string) {
     const entry = findRef(refsRef.current.refs, ref), owner = refsController.current;
     if (entry?.kind !== "branch" || !owner) return;
-    const result = await showPrompt({ windowId: "main", title: `Rename “${entry.ref.name}”`, message: "Enter a new name for the branch.", defaultValue: entry.ref.name, confirmLabel: "Rename" })
+    const result = await showPrompt({ windowId, title: `Rename “${entry.ref.name}”`, message: "Enter a new name for the branch.", defaultValue: entry.ref.name, confirmLabel: "Rename" })
       .catch((error: unknown) => { console.error(error); return { canceled: true as const }; });
     const name = result.canceled ? "" : result.value.trim();
     if (!name || name === entry.ref.name) return;
@@ -216,13 +284,13 @@ export function App() {
     const entry = findRef(refsRef.current.refs, ref), owner = refsController.current;
     if (entry?.kind !== "branch" || !owner) return;
     const name = entry.ref.name;
-    if (!await confirmDestructive(`Delete the branch “${name}”?`, "Delete", "Its commits stay in the repository only while another branch or tag contains them.")) return;
+    if (!await confirmDestructive(windowId, `Delete the branch “${name}”?`, "Delete", "Its commits stay in the repository only while another branch or tag contains them.")) return;
     try {
       await owner.delete(name);
     } catch (error) {
       if (!(error instanceof GitBranchNotMergedError)) { await reportBranchError(`Couldn’t Delete “${name}”`, error); return; }
       const upstream = entry.ref.upstream;
-      if (!await confirmDestructive(`“${name}” isn’t fully merged.`, "Delete Anyway", `It has commits that aren’t on ${upstream ? `its upstream “${upstream}”` : "the current branch"}. Deleting it may lose them.`, true)) return;
+      if (!await confirmDestructive(windowId, `“${name}” isn’t fully merged.`, "Delete Anyway", `It has commits that aren’t on ${upstream ? `its upstream “${upstream}”` : "the current branch"}. Deleting it may lose them.`, true)) return;
       try { await owner.delete(name, true); } catch (forced) { await reportBranchError(`Couldn’t Delete “${name}”`, forced); }
     }
   }
@@ -253,6 +321,8 @@ export function App() {
     branchBusy: refs.writing,
     stashes: root ? refs.stashes : null,
     hasChanges: !!changes.status?.entries.length,
+    worktrees: root ? refs.worktrees : null,
+    root,
     run: {
       openRepository: () => void chooseRepository(),
       toggleSidebar: () => setSidebarCollapsed(value => !value),
@@ -290,22 +360,27 @@ export function App() {
       applyStash: oid => void stashWrite(oid, "apply"),
       popStash: oid => void stashWrite(oid, "pop"),
       dropStash: oid => void stashWrite(oid, "drop"),
+      openWorktree,
+      newWorktree: () => void newWorktree(),
+      removeWorktree: path => void removeWorktree(path),
+      revealInFinder,
     },
   };
   const contextRef = useRef(context);
   contextRef.current = context;
   const item = (id: CommandId) => commandMenuItem(id, context);
 
-  useMenu({
+  const menu: UseMenuOptions = {
     id: "legend-git",
     items: [
       { type: "submenu", id: "app", label: "Legend Git", target: { menu: "app" }, items: [] },
-      { type: "submenu", id: "file", label: "File", target: { menu: "file" }, items: [item("open-repository")] },
+      { type: "submenu", id: "file", label: "File", target: { menu: "file" }, items: [item("open-repository"), item("open-worktree")] },
       { type: "submenu", id: "edit", label: "Edit", target: { menu: "edit" }, items: [item("copy-sha"), { type: "separator" }, item("blame-line")] },
       // AppKit's own View ▸ Show/Hide Sidebar drives the split view, so the menu has no second one.
       { type: "submenu", id: "view", label: "View", target: { menu: "view" }, items: [item("show-changes"), item("show-history"), { type: "separator" }, item("show-file-history"), item("show-all-history")] },
       { type: "submenu", id: "repository", label: "Repository", placement: { before: { menu: "window" } }, items: [item("refresh"), { type: "separator" }, item("open-github")] },
       { type: "submenu", id: "branch", label: "Branch", placement: { before: { menu: "window" } }, items: [item("switch-branch"), item("new-branch"), { type: "separator" }, item("rename-branch"), item("delete-branch")] },
+      { type: "submenu", id: "worktree", label: "Worktree", placement: { before: { menu: "window" } }, items: [item("new-worktree"), { type: "separator" }, item("reveal-worktree"), item("remove-worktree")] },
       {
         type: "submenu", id: "changes", label: "Changes", placement: { before: { menu: "window" } },
         items: [
@@ -316,8 +391,9 @@ export function App() {
         ],
       },
     ],
-    onAction: action => { runCommand(action.itemId, contextRef.current); },
-  });
+    onAction: action => runMenuAction(action.itemId),
+  };
+  useEffect(() => { if (windowId !== mainWindowId) publishMenu(windowId, menu); });
 
   // A search ended by something other than the field (a file's history, a blame) clears the field too.
   useEffect(() => {
@@ -327,11 +403,17 @@ export function App() {
     historyController.current?.setRoot(root);
     refsController.current?.setRoot(root);
     stashController.current?.setRoot(root);
+    worktreeController.current?.setRoot(root);
     if (!root) setSection("changes");
   }, [root]);
   // Changes re-reads status on every ref or HEAD change its watcher sees; the refs follow it.
   useEffect(() => { if (changes.status) void refsController.current?.refresh(); }, [changes.status]);
   useEffect(() => { void stashController.current?.show(selectedStash); }, [selectedStash, root]);
+  // The selected worktree's files are re-read when it is selected and whenever its count or HEAD changes.
+  // Rows are listed only while there are linked worktrees, so a selected main worktree has no row once they are gone.
+  const worktreeEntry = selectedWorktree && (refs.worktrees?.length ?? 0) > 1 ? refs.worktrees?.find(entry => entry.path === selectedWorktree) ?? null : null;
+  // The selected worktree's files are re-read whenever the worktrees are re-read (any change the watcher sees).
+  useEffect(() => { void worktreeController.current?.show(worktreeEntry ? selectedWorktree : null); }, [selectedWorktree, root, refs.worktrees]); // eslint-disable-line react-hooks/exhaustive-deps -- worktreeEntry follows refs.worktrees
   useEffect(() => {
     if (!sectionShowsHistory(section)) return;
     historyController.current?.setRef(sectionRef(section));
@@ -344,7 +426,9 @@ export function App() {
     // A stash that was popped or dropped falls back to Changes, where popped work shows up.
     const stash = sectionStash(section);
     if (stash && refs.stashes && !refs.stashes.some(entry => entry.oid === stash)) setSection("changes");
-  }, [refs.refs, refs.stashes, section]);
+    // So does a removed worktree.
+    if (sectionWorktree(section) && refs.worktrees && !worktreeEntry) setSection("changes");
+  }, [refs.refs, refs.stashes, refs.worktrees, section]); // eslint-disable-line react-hooks/exhaustive-deps -- worktreeEntry follows refs.worktrees
 
   const [historyActions] = useState<HistoryActions>(() => ({
     select: oid => void historyController.current?.select(oid),
@@ -360,7 +444,7 @@ export function App() {
         { ...commandMenuItem("new-branch", menuContext, { target: oid, shortcut: false }), label: "New Branch from Commit…" }, { type: "separator" as const },
         ...(["copy-sha", "open-github"] as const).map(id => commandMenuItem(id, menuContext, { target: oid, shortcut: false })),
       ];
-      showContextMenu({ windowId: "main", position, items })
+      showContextMenu({ windowId, position, items })
         .then(result => { if (!result.canceled) runCommand(result.itemId, contextRef.current, oid); }, console.error);
     },
     fileContextMenu: (path, position) => { historyController.current?.selectFile(path); showFileMenu(path, position); },
@@ -374,7 +458,7 @@ export function App() {
 
   function showLineMenu(target: BlameTarget, position: { x: number; y: number }) {
     setBlameTarget(target);
-    showContextMenu({ windowId: "main", position, items: [commandMenuItem("blame-line", { ...contextRef.current, canBlame: true }, { shortcut: false })] })
+    showContextMenu({ windowId, position, items: [commandMenuItem("blame-line", { ...contextRef.current, canBlame: true }, { shortcut: false })] })
       .then(result => { if (!result.canceled) runCommand(result.itemId, { ...contextRef.current, canBlame: !!blameTargetRef.current }); }, console.error);
   }
 
@@ -385,15 +469,26 @@ export function App() {
   };
 
   function showFileMenu(path: string, position: { x: number; y: number }) {
-    showContextMenu({ windowId: "main", position, items: [commandMenuItem("show-file-history", contextRef.current, { target: path, shortcut: false })] })
+    showContextMenu({ windowId, position, items: [commandMenuItem("show-file-history", contextRef.current, { target: path, shortcut: false })] })
       .then(result => { if (!result.canceled) runCommand(result.itemId, contextRef.current, path); }, console.error);
   }
 
   function showStashMenu({ oid, position }: { oid: string; position: { x: number; y: number } }) {
     const menuContext = contextRef.current;
     const items = [...(["apply-stash", "pop-stash"] as const).map(id => commandMenuItem(id, menuContext, { target: oid, shortcut: false })), { type: "separator" as const }, commandMenuItem("drop-stash", menuContext, { target: oid, shortcut: false })];
-    showContextMenu({ windowId: "main", position, items })
+    showContextMenu({ windowId, position, items })
       .then(result => { if (!result.canceled) runCommand(result.itemId, contextRef.current, oid); }, console.error);
+  }
+
+  function showWorktreeMenu({ path, position }: { path: string; position: { x: number; y: number } }) {
+    const menuContext = contextRef.current;
+    const items = [
+      { ...commandMenuItem("open-worktree", menuContext, { target: path, shortcut: false }), label: "Open in New Window" },
+      commandMenuItem("reveal-worktree", menuContext, { target: path, shortcut: false }), { type: "separator" as const },
+      { ...commandMenuItem("remove-worktree", menuContext, { target: path, shortcut: false }), label: "Remove…" },
+    ];
+    showContextMenu({ windowId, position, items })
+      .then(result => { if (!result.canceled) runCommand(result.itemId, contextRef.current, path); }, console.error);
   }
 
   function showRefMenu({ ref, position }: { ref: string; position: { x: number; y: number } }) {
@@ -403,13 +498,14 @@ export function App() {
     const ids: (CommandId | null)[] = entry.kind === "branch" ? ["checkout-ref", "new-branch", null, "rename-branch", "delete-branch", null, "copy-ref-name"]
       : entry.kind === "remote" ? ["checkout-ref", "new-branch", null, "copy-ref-name"] : ["new-branch", null, "copy-ref-name"];
     const items = ids.map(id => id ? { ...commandMenuItem(id, menuContext, { target: ref, shortcut: false }), ...id === "new-branch" ? { label: `New Branch from “${entry.ref.name}”…` } : {} } : { type: "separator" as const });
-    showContextMenu({ windowId: "main", position, items })
+    showContextMenu({ windowId, position, items })
       .then(result => { if (!result.canceled) runCommand(result.itemId, contextRef.current, ref); }, console.error);
   }
 
   // A ref deleted or renamed since it was selected has no row; History is shown until the effect above moves there.
   const sidebarSection = sectionRef(section) && !findRef(refs.refs, sectionRef(section)) ? "history"
-    : selectedStash && !refs.stashes?.some(entry => entry.oid === selectedStash) ? "changes" : section;
+    : selectedStash && !refs.stashes?.some(entry => entry.oid === selectedStash) ? "changes"
+    : selectedWorktree && !worktreeEntry ? "changes" : section;
   const branch = changes.status?.branch;
   const branchLabel = !branch?.head ? null : branch.head === "(detached)" ? `${branch.oid?.slice(0, 7) ?? "HEAD"} (detached)` : branch.head;
   const button = (id: CommandId, symbol: string) => {
@@ -446,25 +542,27 @@ export function App() {
   toolbarRef.current = toolbar;
   // Title bar options go once: re-sending them grows the window by 20 pt each time (Spark ask).
   useEffect(() => {
-    void setWindowOptions("main", { appearance: "system", macos: { titleBar: { contentLayout: "fullSize", transparent: true, titleVisibility: "visible" } } }).catch(console.error);
+    void setWindowOptions(windowId, { appearance: "system", macos: { titleBar: { contentLayout: "fullSize", transparent: true, titleVisibility: "visible" } } }).catch(console.error);
   }, []);
   useEffect(() => {
-    void setWindowOptions("main", {
-      title: root ? `${root.split("/").pop()} — Legend Git` : "Legend Git",
+    void setWindowOptions(windowId, {
+      // A worktree window is titled after the repository and its branch, so the Window menu tells worktrees apart.
+      title: root && repoName ? `${repoName} — ${branchLabel ?? worktreeName(root)}` : root ? `${root.split("/").pop()} — Legend Git` : "Legend Git",
       macos: {
-        // Omitted, not null, without a repository: a null URI also clears the window title.
-        ...(root ? { representedUri: `file://${root.split("/").map(encodeURIComponent).join("/")}` } : {}),
+        // Omitted, not null, without a repository: a null URI also clears the window title. A worktree window has none,
+        // since AppKit then titles the window with the folder's name instead of "<repo> — <branch>".
+        ...(root && !repoName ? { representedUri: `file://${root.split("/").map(encodeURIComponent).join("/")}` } : {}),
         toolbar: toolbarRef.current,
       },
     }).catch(console.error);
-  }, [root]);
+  }, [root, repoName ? branchLabel : null]); // eslint-disable-line react-hooks/exhaustive-deps -- the branch only titles worktree windows
   // Item changes (section, labels, availability) update only the toolbar.
   const toolbarKey = JSON.stringify([toolbarItems, searchEpoch]);
   const toolbarShown = useRef(toolbarKey);
   useEffect(() => {
     if (toolbarShown.current === toolbarKey) return;
     toolbarShown.current = toolbarKey;
-    void setWindowOptions("main", { macos: { toolbar: toolbarRef.current } }).catch(console.error);
+    void setWindowOptions(windowId, { macos: { toolbar: toolbarRef.current } }).catch(console.error);
   }, [toolbarKey]);
 
   useEffect(() => {
@@ -477,7 +575,9 @@ export function App() {
     refsController.current = refsOwner;
     const stashOwner = createStashPreview(setStashPreview);
     stashController.current = stashOwner;
-    const registration = addMacOSWindowListener("main", event => {
+    const worktreeOwner = createWorktreePreview(setWorktreePreview);
+    worktreeController.current = worktreeOwner;
+    const registration = addMacOSWindowListener(windowId, event => {
       if (disposed) return;
       if (event.type === "toolbarAction") runCommand(event.itemId, contextRef.current);
       else if (event.type === "toolbarMenuAction") {
@@ -496,37 +596,28 @@ export function App() {
         }
       }
     });
-    const closeRegistration = addWindowListener("main", "closed", () => {
-      disposed = true;
-      generator.current?.reset();
-      owner.dispose();
-      historyOwner.dispose();
-      refsOwner.dispose();
-      stashOwner.dispose();
-      controller.current = null;
-      historyController.current = null;
-      refsController.current = null;
-      stashController.current = null;
-      void registration.then(listener => listener.remove()).catch(console.error);
-      void closeRegistration.then(listener => listener.remove()).catch(console.error);
-    });
-    void registration.catch(console.error);
-    void closeRegistration.catch(console.error);
-    return () => {
+    // Closing the window (or unmounting) cancels its reads and removes its watchers.
+    const close = () => {
       if (disposed) return;
       disposed = true;
-      owner.dispose();
-      historyOwner.dispose();
-      refsOwner.dispose();
-      stashOwner.dispose();
+      generator.current?.reset();
+      for (const disposable of [owner, historyOwner, refsOwner, stashOwner, worktreeOwner]) disposable.dispose();
       controller.current = null;
       historyController.current = null;
       refsController.current = null;
       stashController.current = null;
-      void registration.then(listener => listener.remove()).catch(console.error);
-      void closeRegistration.then(listener => listener.remove()).catch(console.error);
+      worktreeController.current = null;
+      closeMenuWindow(windowId);
+      if (initialPath) openWorktreePaths.delete(initialPath);
+      for (const pending of [registration, closeRegistration, focusRegistration]) void pending.then(listener => listener.remove()).catch(console.error);
     };
-  }, []);
+    registerMenuRunner(windowId, itemId => { if (!disposed) runCommand(itemId, contextRef.current); });
+    const closeRegistration = addWindowListener(windowId, "closed", close);
+    const focusRegistration = addWindowListener(windowId, "focusChanged", event => { if (!disposed && event.focused) setMenuWindow(windowId); });
+    for (const pending of [registration, closeRegistration, focusRegistration]) void pending.catch(console.error);
+    if (initialPath) { openWorktreePaths.add(initialPath); setMenuWindow(windowId); void owner.open(initialPath); }
+    return close;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- one window, one set of controllers
 
   // Stays mounted (hidden) in History so the commit message draft and a running generation survive a section switch.
   const changesList = <View style={[styles.listPane, section !== "changes" && styles.hidden]}>
@@ -540,7 +631,7 @@ export function App() {
     <CommitComposer disabled={busy} stagedCount={staged.length} conflictCount={conflicts} merging={changes.merging} unborn={changes.status?.branch.oid === "(initial)"} root={root!}
       commitRef={commit} onCommit={input => controller.current?.commit(input) ?? Promise.resolve(false)} headMessage={() => controller.current?.headMessage() ?? Promise.resolve(null)}
       readStaged={signal => controller.current?.stagedDiff(signal) ?? Promise.reject(new Error("Open a repository first."))}
-      confirmReplace={() => confirmDestructive("Replace the commit message?", "Replace", "The generated message replaces the summary and description you wrote.")}
+      confirmReplace={() => confirmDestructive(windowId, "Replace the commit message?", "Replace", "The generated message replaces the summary and description you wrote.")}
       generatorRef={generator} onGeneratingChange={setGenerating} />
   </View>;
 
@@ -555,16 +646,25 @@ export function App() {
       {stashPreview.loading ? null : <View style={styles.stashButtons}>{stashButtons}</View>}
     </EmptyState>;
 
+  const worktreeOpenButton = worktreeEntry && commandEnabled("open-worktree", context, worktreeEntry.path)
+    ? <Button style={styles.openWindow} onPress={() => runCommand("open-worktree", contextRef.current, worktreeEntry.path)}>Open in New Window</Button> : null;
+  const worktreePatch = worktreePreview.path === selectedWorktree ? worktreePreview.patch : null;
+  const worktreeDetailPane = worktreePatch
+    ? <DiffPane readOnly disabled patch={{ path: worktreePatch.path, text: worktreePatch.text, file: worktreePatch.file, section: "unstaged", conflicted: false }} onApply={() => {}} />
+    : <EmptyState title={worktreePreview.loading ? "Loading Worktree…" : worktreePreview.error ? "Couldn’t Read the Worktree" : worktreePreview.files.length ? "No Selection" : "Working Tree Clean"}
+      symbol={!worktreePreview.loading && !worktreePreview.error && !worktreePreview.files.length ? "checkmark.circle" : undefined} message={worktreePreview.error ?? undefined} />;
+
   const changesDetail = changes.patch ? <DiffPane patch={changes.patch} disabled={busy} applyRef={applyLines} discardRef={discardLines}
     onLineChange={target => setBlameTarget(changesBlameTarget(target))}
     onLineContextMenu={(target, position) => { const blame = changesBlameTarget(target); if (blame) showLineMenu(blame, position); }}
     onApply={(keys, text) => void controller.current?.changeLines(keys, text)}
-    onDiscard={async (keys, text, what) => { if (await confirmDestructive(`Discard ${what}?`, "Discard")) await controller.current?.discardLines(keys, text); }} />
+    onDiscard={async (keys, text, what) => { if (await confirmDestructive(windowId, `Discard ${what}?`, "Discard")) await controller.current?.discardLines(keys, text); }} />
     : selected ? <EmptyState title="Loading Diff…" />
     : unstaged.length || staged.length ? <EmptyState title="No Selection" message="Select a file to view its changes." />
     : <EmptyState symbol="checkmark.circle" title="Working Tree Clean" message="There are no changes to commit." />;
 
-  return (
+  return (<>
+    {windowId === mainWindowId ? <GitMenu menu={menu} /> : null}
     <SidebarSplitView
       appearance="system"
       style={styles.root}
@@ -577,7 +677,7 @@ export function App() {
       onSidebarCollapsedChange={setSidebarCollapsed}
       titleBar={{ content: { height: contentInset, material: "titlebar" } }}
       sidebar={
-        <Sidebar style={styles.root} selectedId={root ? sidebarSection : null} onSelectionChange={event => { if (event.id === "changes" || event.id === "history" || event.id?.startsWith("ref:") || event.id?.startsWith("stash:")) setSection(event.id as Section); }} contentInsetTop={58}>
+        <Sidebar style={styles.root} selectedId={root ? sidebarSection : null} onSelectionChange={event => { if (event.id === "changes" || event.id === "history" || event.id?.startsWith("ref:") || event.id?.startsWith("stash:") || event.id?.startsWith("worktree:")) setSection(event.id as Section); }} contentInsetTop={58}>
           <SidebarItem id="repositories" selectable={false}>
             <Text style={styles.section}>{root?.split("/").pop() ?? "Repositories"}</Text>
           </SidebarItem>
@@ -586,6 +686,7 @@ export function App() {
             <SidebarItem key="history" id="history"><SidebarRow symbol="clock" label="History" /></SidebarItem>,
             ...refSidebarItems(refs.refs, ref => showRefMenu(ref)),
             ...stashSidebarItems(refs.stashes, showStashMenu),
+            ...worktreeSidebarItems(refs.worktrees, root, showWorktreeMenu),
           ] :
             <SidebarItem id="empty" selectable={false}><Text style={styles.sidebarNote}>No repository open</Text></SidebarItem>}
         </Sidebar>
@@ -594,11 +695,12 @@ export function App() {
         {changesList}
         {showsHistory ? <View style={styles.listPane}><HistoryList history={history} actions={historyActions} /></View> : null}
         {stashEntry ? <View style={styles.listPane}><StashFiles stash={stashEntry} preview={stashPreview} filter={filter} onSelect={path => stashController.current?.selectFile(path)} /></View> : null}
+        {worktreeEntry ? <View style={styles.listPane}><WorktreeFiles worktree={worktreeEntry} preview={worktreePreview} filter={filter} accessory={worktreeOpenButton} onSelect={path => worktreeController.current?.selectFile(path)} /></View> : null}
       </> : undefined}
       content={
         <View style={styles.content}>
           {changes.error ? <Text accessibilityRole="alert" selectable style={styles.error}>{changes.error}</Text> : null}
-          {root ? <View style={styles.detail}>{showsHistory ? <CommitDetails history={history} actions={historyActions} /> : stashEntry ? stashDetail : changesDetail}</View>
+          {root ? <View style={styles.detail}>{showsHistory ? <CommitDetails history={history} actions={historyActions} /> : stashEntry ? stashDetail : worktreeEntry ? worktreeDetailPane : changesDetail}</View>
             : changes.loading ? <EmptyState title="Opening Repository…" />
             : <EmptyState symbol="folder" title="No Repository Open" message="Open a Git repository to see its changes and commit them.">
               <Button style={styles.open} onPress={() => void chooseRepository()}>Open Repository…</Button>
@@ -606,17 +708,24 @@ export function App() {
         </View>
       }
     />
-  );
+  </>);
+}
+
+/** The app's menu bar, installed once by the main window for the Git window focused last (see useMenuBar). */
+function GitMenu({ menu }: { menu: UseMenuOptions }) {
+  useMenu(useMenuBar(menu));
+  return null;
 }
 
 function SidebarRow({ symbol, label, count, current, indent, detail }: { symbol: string; label: string; count?: number; current?: boolean; indent?: boolean; detail?: string }) {
   const color = useSymbolColor("blue");
   const secondary = useSymbolColor("secondary");
-  return <View style={[styles.sidebarRow, indent && styles.indented]} accessible accessibilityLabel={count ? `${label}, ${count}` : current ? `${label}, current branch` : detail ? `${label}, ${detail}` : label}>
+  return <View style={[styles.sidebarRow, indent && styles.indented]} accessible accessibilityLabel={count ? `${label}, ${count}` : current ? `${label}${detail ? `, ${detail}, current` : ", current branch"}` : detail ? `${label}, ${detail}` : label}>
     <View style={styles.sidebarIcon}><SFSymbol name={symbol} color={color} size={15} /></View>
     <Text style={styles.label} numberOfLines={1}>{label}</Text>
-    {count ? <Text style={styles.count}>{count}</Text> : null}
-    {detail ? <Text style={styles.count} numberOfLines={1}>{detail}</Text> : null}
+    {/* A concrete color: secondaryLabelColor nearly vanishes on the main window's vibrant sidebar. */}
+    {count ? <Text style={[styles.count, { color: secondary }]}>{count}</Text> : null}
+    {detail ? <Text style={[styles.count, { color: secondary }]} numberOfLines={1}>{detail}</Text> : null}
     {current ? <SFSymbol name="checkmark" color={secondary} size={12} /> : null}
   </View>;
 }
@@ -651,6 +760,31 @@ function stashSidebarItems(stashes: GitStash[] | null, onContextMenu: (event: { 
   ];
 }
 
+/** Linked worktrees under a group row (left out when there is only the main one); this window's worktree has a checkmark. */
+function worktreeSidebarItems(worktrees: WorktreeEntry[] | null, root: string | null, onContextMenu: (event: { path: string; position: { x: number; y: number } }) => void) {
+  if (!worktrees || worktrees.length < 2) return [];
+  return [
+    <SidebarItem key="group:worktrees" id="group:worktrees" selectable={false}><Text style={styles.section} accessibilityRole="header">Worktrees</Text></SidebarItem>,
+    ...worktrees.map(worktree => <SidebarItem key={`worktree:${worktree.path}`} id={`worktree:${worktree.path}`} onContextMenu={event => onContextMenu({ path: worktree.path, position: event.windowPosition })}>
+      <SidebarRow symbol="folder" label={worktreeName(worktree.path)} detail={worktreeDetail(worktree)} current={worktree.path === root} />
+    </SidebarItem>),
+  ];
+}
+
+/** The selected worktree's changed files, read-only, with Open in New Window; selecting a file shows its diff. */
+function WorktreeFiles({ worktree, preview, filter, accessory, onSelect }: { worktree: WorktreeEntry; preview: WorktreePreviewState; filter: string; accessory: ReactNode; onSelect: (path: string) => void }) {
+  const files = preview.path === worktree.path ? preview.files.filter(file => !filter || file.path === preview.selectedPath || pathParts(file.path).name.toLowerCase().includes(filter.toLowerCase())) : [];
+  return <View style={styles.listSection}>
+    <View style={styles.heading}>
+      <Text style={styles.headingLabel} accessibilityRole="header" numberOfLines={1} ellipsizeMode="head">{worktree.path}</Text>
+      {accessory}
+    </View>
+    {files.length ? <Sidebar style={styles.root} selectedId={files.some(file => file.path === preview.selectedPath) ? preview.selectedPath : null} onSelectionChange={event => { if (event.id) onSelect(event.id); }} defaultRowHeight={24}>
+      {files.map(entry => <SidebarItem key={entry.path} id={entry.path}><FileRow entry={entry} staged={entry.worktreeStatus === "."} /></SidebarItem>)}
+    </Sidebar> : <View style={styles.emptyList}><Text style={styles.emptyListText}>{preview.loading ? "Loading…" : preview.error ? "Couldn’t read the worktree" : filter ? "No matching files" : "No changes"}</Text></View>}
+  </View>;
+}
+
 /** The selected stash's message and files; selecting a file shows its diff. */
 function StashFiles({ stash, preview, filter, onSelect }: { stash: GitStash; preview: StashPreviewState; filter: string; onSelect: (path: string) => void }) {
   const files = preview.oid === stash.oid ? preview.files.filter(file => !filter || file.path === preview.selectedPath || pathParts(file.path).name.toLowerCase().includes(filter.toLowerCase())) : [];
@@ -673,11 +807,11 @@ function StashFiles({ stash, preview, filter, onSelect }: { stash: GitStash; pre
 }
 
 /** Offers to stash the changes Git refused to carry along, then switch. */
-async function confirmStashAndSwitch(branch: string, gitMessage: string) {
+async function confirmStashAndSwitch(windowId: string, branch: string, gitMessage: string) {
   const files = gitMessage.split("\n").filter(line => line.startsWith("\t")).length;
   try {
     const result = await showMessage({
-      windowId: "main", kind: "warning",
+      windowId, kind: "warning",
       title: files ? `You have uncommitted changes in ${files === 1 ? "1 file" : `${files} files`} that switching to “${branch}” would overwrite.` : `Switching to “${branch}” would overwrite your uncommitted changes.`,
       message: `Stash and Switch saves all your changes, untracked files included, as the stash “auto-stash before switching to ${branch}”. Apply or pop it from Stashes later.`,
       buttons: [{ id: "stash", label: "Stash and Switch" }, { id: "cancel", label: "Cancel" }], defaultButtonId: "stash", cancelButtonId: "cancel",
@@ -690,9 +824,9 @@ async function confirmStashAndSwitch(branch: string, gitMessage: string) {
  * A native warning sheet on the main window; resolves true when the user picks the action. With `safeDefault`,
  * Return picks Cancel (for actions that can lose work without a backup).
  */
-async function confirmDestructive(title: string, action: string, message = "Legend Git saves a backup first. Use Changes ▸ Restore Last Discard to bring the changes back.", safeDefault = false) {
+async function confirmDestructive(windowId: string, title: string, action: string, message = "Legend Git saves a backup first. Use Changes ▸ Restore Last Discard to bring the changes back.", safeDefault = false) {
   try {
-    const result = await showMessage({ windowId: "main", kind: "warning", title, message, buttons: [{ id: "confirm", label: action }, { id: "cancel", label: "Cancel" }], defaultButtonId: safeDefault ? "cancel" : "confirm", cancelButtonId: "cancel" });
+    const result = await showMessage({ windowId, kind: "warning", title, message, buttons: [{ id: "confirm", label: action }, { id: "cancel", label: "Cancel" }], defaultButtonId: safeDefault ? "cancel" : "confirm", cancelButtonId: "cancel" });
     return result.buttonId === "confirm";
   } catch (error) { console.error(error); return false; }
 }
@@ -728,6 +862,7 @@ const styles = StyleSheet.create({
   headingLabel: { flex: 1, fontSize: 11, fontWeight: "600", color: PlatformColor("secondaryLabelColor") },
   action: { width: 72, height: 24 },
   stashButtons: { flexDirection: "row", gap: 8 },
+  openWindow: { width: 150, height: 24 },
   fileRow: { height: 24, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 6 },
   fileName: { flexShrink: 0, maxWidth: "70%", fontSize: 13, color: PlatformColor("labelColor") },
   fileFolder: { flex: 1, fontSize: 11, color: PlatformColor("secondaryLabelColor") },

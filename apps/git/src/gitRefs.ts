@@ -1,7 +1,9 @@
-import { getGitService, type GitBranch, type GitRefList, type GitRemoteBranch, type GitService, type GitStash, type GitTag } from "@legend-apps/git-core";
+import { getGitService, type GitAddWorktreeOptions, type GitBranch, type GitRefList, type GitRemoteBranch, type GitService, type GitStash, type GitTag, type GitWorktree } from "@legend-apps/git-core";
 
-export type RefsState = { root: string | null; refs: GitRefList | null; stashes: GitStash[] | null; writing: boolean; error: string | null };
-export const emptyRefs: RefsState = { root: null, refs: null, stashes: null, writing: false, error: null };
+/** A worktree and its number of changed paths (null until counted, or when its folder can't be read). */
+export type WorktreeEntry = GitWorktree & { changes: number | null };
+export type RefsState = { root: string | null; refs: GitRefList | null; stashes: GitStash[] | null; worktrees: WorktreeEntry[] | null; writing: boolean; error: string | null };
+export const emptyRefs: RefsState = { root: null, refs: null, stashes: null, worktrees: null, writing: false, error: null };
 
 /** A sidebar ref: a local branch, a remote branch or a tag, found by its full ref name. */
 export type RefEntry = { kind: "branch"; ref: GitBranch } | { kind: "remote"; ref: GitRemoteBranch } | { kind: "tag"; ref: GitTag };
@@ -49,8 +51,17 @@ export function createGitRefs(onChange: (state: RefsState) => void, serviceFor: 
 
   const read = async (git: GitService, controller: AbortController, current: number) => {
     try {
-      const [refs, stashes] = await Promise.all([git.listRefs({ signal: controller.signal }), git.listStashes({ signal: controller.signal })]);
-      if (current === run && active === controller && !closed) publish({ refs, stashes, error: null });
+      const [refs, stashes, listed] = await Promise.all([git.listRefs({ signal: controller.signal }), git.listStashes({ signal: controller.signal }), git.listWorktrees({ signal: controller.signal })]);
+      if (current !== run || active !== controller || closed) return;
+      // Counts from the last read stay shown until the new ones land; a missing folder has none.
+      const previous = new Map(state.worktrees?.map(entry => [entry.path, entry.changes]));
+      publish({ refs, stashes, worktrees: listed.map(entry => ({ ...entry, changes: previous.get(entry.path) ?? null })), error: null });
+      if (listed.length < 2) return;
+      // Counted after the refs land, so writes and refreshes don't wait for every worktree's status.
+      void Promise.all(listed.map(entry => entry.bare || entry.prunable !== null ? null
+        : git.worktreeChangeCount(entry.path, { signal: controller.signal }).catch(() => null))).then(counts => {
+        if (current === run && active === controller && !closed) publish({ worktrees: listed.map((entry, index) => ({ ...entry, changes: counts[index] ?? null })) });
+      });
     } catch (error) {
       if (current === run && active === controller && !closed && !controller.signal.aborted) publish({ error: error instanceof Error ? error.message : String(error) });
     }
@@ -120,6 +131,14 @@ export function createGitRefs(onChange: (state: RefsState) => void, serviceFor: 
     },
     rename(from: string, to: string) {
       return write((git, signal) => git.renameBranch(from, to, { signal }));
+    },
+    /** Adds a worktree at `path` for an existing branch or a new one (see GitService.addWorktree); resolves with its path as Git lists it. */
+    addWorktree(path: string, options: Omit<GitAddWorktreeOptions, "signal">) {
+      return write((git, signal) => git.addWorktree(path, { ...options, signal } as GitAddWorktreeOptions));
+    },
+    /** Without `force`, Git refuses a worktree with changes or a lock and its message is the error. */
+    removeWorktree(path: string, force = false) {
+      return write((git, signal) => git.removeWorktree(path, { force, signal }));
     },
     /** Rejects with GitBranchNotMergedError when `force` is off and the branch has unmerged commits. */
     delete(name: string, force = false) {

@@ -16,6 +16,7 @@ import { blameLine, loadUnifiedDiff, openGitHistory } from "@legend-apps/diff-pa
 import { setStringAsync } from "@legendapp/spark/clipboard";
 import { showContextMenu } from "@legendapp/spark/context-menu";
 import { openURL } from "@legendapp/spark/links";
+import { openWorktreeWindow } from "../gitWindows";
 
 jest.mock("@legend-apps/git-core", () => ({ ...jest.requireActual("@legend-apps/git-core"), getGitService: jest.fn() }));
 jest.mock("react-native", () => ({
@@ -51,6 +52,7 @@ jest.mock("@legendapp/spark/ui/split-view", () => ({
   SidebarSplitView: ({ sidebar, list, content }: any) => <>{sidebar}{list}{content}</>,
 }));
 jest.mock("@legendapp/spark/windows", () => ({ setWindowOptions: jest.fn(async () => {}), addWindowListener: jest.fn(async () => ({ remove: jest.fn(async () => {}) })) }));
+jest.mock("../gitWindows", () => ({ ...jest.requireActual("../gitWindows"), openWorktreeWindow: jest.fn(async () => ({})) }));
 jest.mock("@legendapp/spark/windows/macos", () => ({
   addMacOSWindowListener: jest.fn(async () => ({ remove: jest.fn(async () => {}) })),
 }));
@@ -596,7 +598,7 @@ it("lists Branches, Remotes and Tags in the sidebar, scopes History to a ref, an
     commitDetails: jest.fn(async (oid: string) => ({ oid, parents: [], author: { name: "Ada", email: "a@x", time: 1 }, committer: { name: "Ada", email: "a@x", time: 1 }, message: "m" })),
     commitPatch: jest.fn(async () => "diff --git a/a.txt b/a.txt\n--- a/a.txt\n+++ b/a.txt\n@@ -1 +1 @@\n-a\n+b\n"),
     fileHistory: jest.fn(async () => ({ commits: [{ oid: head, parents: [], authorName: "Ada", authorEmail: "a@x", time: 1, summary: "On HEAD", status: "M", path: "a.txt", oldPath: null }], done: true })),
-    listRefs: jest.fn(async () => refs), listStashes: jest.fn(async () => []),
+    listRefs: jest.fn(async () => refs), listStashes: jest.fn(async () => []), listWorktrees: jest.fn(async () => []),
     checkoutBranch: jest.fn(async () => {}), checkoutRemoteBranch: jest.fn(async () => "fix/x"), createBranch: jest.fn(async () => {}), renameBranch: jest.fn(async () => {}),
     deleteBranch: jest.fn(async (_name: string, { force }: { force?: boolean }) => { if (!force) throw new GitBranchNotMergedError("old", "error: the branch 'old' is not fully merged"); }) };
   jest.mocked(getGitService).mockReturnValue(git as unknown as GitService);
@@ -734,7 +736,7 @@ it("has no branches and no New Branch on an unborn HEAD", async () => {
   jest.mocked(watchDirectories).mockReturnValue({ remove: jest.fn() });
   const git = { resolveRoot: jest.fn(async () => "/repo"), watchLocations: jest.fn(async () => ({ root: "/repo", gitDir: "/repo/.git", commonDir: "/repo/.git", ignoredPaths: [] })),
     status: jest.fn(async () => ({ branch: { oid: "(initial)", head: "main", upstream: null, ahead: 0, behind: 0 }, entries: [] })), lastDiscard: jest.fn(async () => null), repoState: jest.fn(async () => ({ merging: false })),
-    listRefs: jest.fn(async () => ({ branches: [], remotes: [], tags: [] })), listStashes: jest.fn(async () => []) };
+    listRefs: jest.fn(async () => ({ branches: [], remotes: [], tags: [] })), listStashes: jest.fn(async () => []), listWorktrees: jest.fn(async () => []) };
   jest.mocked(getGitService).mockReturnValue(git as unknown as GitService);
   jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
   let renderer!: ReactTestRenderer;
@@ -754,7 +756,7 @@ it("leaves a selected ref when another repository opens, without walking that re
   const service = (root: string) => ({ repoRoot: root, resolveRoot: jest.fn(async () => root), watchLocations: jest.fn(async () => ({ root, gitDir: `${root}/.git`, commonDir: `${root}/.git`, ignoredPaths: [] })),
     status: jest.fn(async () => ({ branch: { oid: head, head: "main", upstream: null, ahead: 0, behind: 0 }, entries: [] })), lastDiscard: jest.fn(async () => null), repoState: jest.fn(async () => ({ merging: false })),
     revParse: jest.fn(async () => head), refDecorations: jest.fn(async () => new Map()), remoteUrl: jest.fn(async () => null), currentBranch: jest.fn(async () => "main"),
-    listRefs: jest.fn(async () => ({ branches: [{ name: "main", ref: "refs/heads/main", oid: head, current: true, upstream: null, time: 1 }, { name: "only-in-a", ref: "refs/heads/only-in-a", oid: head, current: false, upstream: null, time: 1 }], remotes: [], tags: [] })), listStashes: jest.fn(async () => []) });
+    listRefs: jest.fn(async () => ({ branches: [{ name: "main", ref: "refs/heads/main", oid: head, current: true, upstream: null, time: 1 }, { name: "only-in-a", ref: "refs/heads/only-in-a", oid: head, current: false, upstream: null, time: 1 }], remotes: [], tags: [] })), listStashes: jest.fn(async () => []), listWorktrees: jest.fn(async () => []) });
   const services = new Map([["/a", service("/a")], ["/b", service("/b")]]);
   jest.mocked(getGitService).mockImplementation(path => services.get(path.startsWith("/b") ? "/b" : "/a") as unknown as GitService);
   let renderer!: ReactTestRenderer;
@@ -787,7 +789,7 @@ it("lists Stashes in the sidebar, previews one with Apply, Pop and Drop…, stas
     status: jest.fn(async () => ({ branch: { oid: head, head: "main", upstream: null, ahead: 0, behind: 0 }, entries })), lastDiscard: jest.fn(async () => null), repoState: jest.fn(async () => ({ merging: false })),
     fileDiff: jest.fn(async () => ""),
     listRefs: jest.fn(async () => ({ branches: [{ name: "main", ref: "refs/heads/main", oid: head, current: true, upstream: null, time: 2 }, { name: "other", ref: "refs/heads/other", oid: head, current: false, upstream: null, time: 1 }], remotes: [], tags: [] })),
-    listStashes: jest.fn(async () => stashes),
+    listStashes: jest.fn(async () => stashes), listWorktrees: jest.fn(async () => []),
     stashPatch: jest.fn(async () => "diff --git a/dir/a.txt b/dir/a.txt\n--- a/dir/a.txt\n+++ b/dir/a.txt\n@@ -1 +1 @@\n-a\n+b\ndiff --git a/new.txt b/new.txt\nnew file mode 100644\n--- /dev/null\n+++ b/new.txt\n@@ -0,0 +1 @@\n+n\n"),
     stashPush: jest.fn(async () => newer), stashApply: jest.fn(async () => {}), stashPop: jest.fn(async () => {}), stashDrop: jest.fn(async () => {}),
     checkoutBranch: jest.fn(async () => {}), stashAndSwitch: jest.fn(async () => ({ branch: "other", stash: newer })) };
@@ -912,7 +914,7 @@ it("disables stashing on an unborn HEAD, with nothing to stash, and leaves out S
   let oid = "(initial)";
   const git = { repoRoot: "/repo", resolveRoot: jest.fn(async () => "/repo"), watchLocations: jest.fn(async () => ({ root: "/repo", gitDir: "/repo/.git", commonDir: "/repo/.git", ignoredPaths: [] })),
     status: jest.fn(async () => ({ branch: { oid, head: "main", upstream: null, ahead: 0, behind: 0 }, entries })), lastDiscard: jest.fn(async () => null), repoState: jest.fn(async () => ({ merging: false })),
-    listRefs: jest.fn(async () => ({ branches: [], remotes: [], tags: [] })), listStashes: jest.fn(async () => []) };
+    listRefs: jest.fn(async () => ({ branches: [], remotes: [], tags: [] })), listStashes: jest.fn(async () => []), listWorktrees: jest.fn(async () => []) };
   jest.mocked(getGitService).mockReturnValue(git as unknown as GitService);
   jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
   let renderer!: ReactTestRenderer;
@@ -928,4 +930,197 @@ it("disables stashing on an unborn HEAD, with nothing to stash, and leaves out S
   await act(async () => { lastMenu().onAction({ itemId: "refresh" }); });
   expect(menuItem("stash-changes")).toMatchObject({ disabled: true });
   await act(async () => { renderer.unmount(); });
+});
+
+describe("worktrees", () => {
+  const head = "a".repeat(40), other = "b".repeat(40);
+  const main = { path: "/repo", head, branch: "main", detached: false, bare: false, locked: null, prunable: null, main: true };
+  const linked = { path: "/work/fëature ✓", head: other, branch: "feature", detached: false, bare: false, locked: null, prunable: null, main: false };
+  const detached = { path: "/work/detached", head: other, branch: null, detached: true, bare: false, locked: "on a disk", prunable: null, main: false };
+  const files = [{ kind: "ordinary" as const, path: "dir/a.txt", indexStatus: ".", worktreeStatus: "M" }, { kind: "untracked" as const, path: "new.txt", indexStatus: "?", worktreeStatus: "?" }];
+  const patch = "diff --git a/dir/a.txt b/dir/a.txt\n--- a/dir/a.txt\n+++ b/dir/a.txt\n@@ -1 +1 @@\n-a\n+b\n";
+  function service(root: string, worktrees: () => unknown[]) {
+    return { repoRoot: root, resolveRoot: jest.fn(async () => root), watchLocations: jest.fn(async () => ({ root, gitDir: `${root}/.git`, commonDir: "/repo/.git", ignoredPaths: [] })),
+      status: jest.fn(async () => ({ branch: { oid: head, head: root === "/repo" ? "main" : "feature", upstream: null, ahead: 0, behind: 0 }, entries: [] })), lastDiscard: jest.fn(async () => null), repoState: jest.fn(async () => ({ merging: false })),
+      fileDiff: jest.fn(async () => ""),
+      listRefs: jest.fn(async () => ({ branches: [{ name: "main", ref: "refs/heads/main", oid: head, current: root === "/repo", upstream: null, time: 2 }, { name: "feature", ref: "refs/heads/feature", oid: other, current: root !== "/repo", upstream: null, time: 1 }], remotes: [], tags: [] })),
+      listStashes: jest.fn(async () => []), listWorktrees: jest.fn(async () => worktrees()),
+      worktreeChangeCount: jest.fn(async (path: string) => path === linked.path ? 2 : 0),
+      worktreeStatus: jest.fn(async () => ({ branch: { oid: other, head: "feature", upstream: null, ahead: 0, behind: 0 }, entries: files })),
+      worktreeFileDiff: jest.fn(async () => patch), addWorktree: jest.fn(async (): Promise<string> => ""), removeWorktree: jest.fn(async () => {}) };
+  }
+
+  it("lists linked worktrees with branch and count, previews one read-only, and opens, creates, reveals and removes worktrees", async () => {
+    jest.clearAllMocks();
+    jest.mocked(watchDirectories).mockReturnValue({ remove: jest.fn() });
+    jest.mocked(loadUnifiedDiff).mockReturnValue(new Promise(() => {}));
+    let worktrees: unknown[] = [main];
+    const git = service("/repo", () => worktrees);
+    jest.mocked(getGitService).mockReturnValue(git as unknown as GitService);
+    jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<App />); });
+    await act(async () => { openRepository(); });
+    const sidebar = () => renderer.root.findAllByType(Sidebar)[0]!;
+    const items = () => sidebar().findAllByType(SidebarItem);
+    const row = (id: string) => items().find(item => item.props.id === id)!;
+    const menuItem = (id: string) => lastMenu().items.flatMap(entry => entry.items ?? []).find(entry => entry.id === id);
+    const button = (label: string) => renderer.root.findAllByType(Button).find(node => node.props.children === label);
+    const texts = (node: { findAllByType: typeof renderer.root.findAllByType }) => node.findAllByType(Text).map(text => [text.props.children].flat().join(""));
+
+    // Only the main worktree: no Worktrees section, and no count is read.
+    expect(items().some(item => item.props.id === "group:worktrees")).toBe(false);
+    expect(git.worktreeChangeCount).not.toHaveBeenCalled();
+    expect(lastMenu().items.find(entry => entry.id === "worktree").items.map((entry: any) => entry.id ?? "-")).toEqual(["new-worktree", "-", "reveal-worktree", "remove-worktree"]);
+    // Spark refuses a menu bar whose item ids repeat (Open Worktree in New Window lives in File only).
+    const ids = lastMenu().items.flatMap(entry => [entry.id, ...(entry.items ?? []).map((child: any) => child.id)]).filter(Boolean);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(menuItem("open-worktree")).toMatchObject({ label: "Open Worktree in New Window", shortcut: "Cmd+Shift+o", disabled: true });
+    expect(lastMenu().items.find(entry => entry.id === "file").items.map((entry: any) => entry.id)).toEqual(["open-repository", "open-worktree"]);
+
+    worktrees = [main, detached, linked];
+    await act(async () => { lastMenu().onAction({ itemId: "refresh" }); });
+    expect(items().map(item => item.props.id).slice(-4)).toEqual(["group:worktrees", "worktree:/repo", "worktree:/work/detached", `worktree:${linked.path}`]);
+    expect(row(`worktree:${linked.path}`).findAllByType("SFSymbol" as any).map(symbol => symbol.props.name)).toEqual(["folder"]);
+    expect(texts(row(`worktree:${linked.path}`))).toEqual(["fëature ✓", "feature · 2"]);
+    expect(texts(row("worktree:/work/detached"))).toEqual(["detached", "bbbbbbb"]);
+    // This window's worktree carries the checkmark.
+    expect(row("worktree:/repo").findAllByType("SFSymbol" as any).map(symbol => symbol.props.name)).toEqual(["folder", "checkmark"]);
+    expect(menuItem("remove-worktree")).toMatchObject({ disabled: true });
+
+    // Selecting one lists its changed files read-only with Open in New Window, and shows the first file's diff.
+    await act(async () => { sidebar().props.onSelectionChange({ id: `worktree:${linked.path}` }); });
+    expect(git.worktreeStatus).toHaveBeenLastCalledWith(linked.path, expect.anything());
+    expect(git.worktreeFileDiff).toHaveBeenLastCalledWith(linked.path, { path: "dir/a.txt", untracked: false }, expect.anything());
+    const fileList = renderer.root.findAllByType(Sidebar).at(-1)!;
+    expect(fileList.findAllByType(SidebarItem).map(item => item.props.id)).toEqual(["dir/a.txt", "new.txt"]);
+    expect(fileList.props.selectedId).toBe("dir/a.txt");
+    expect(renderer.root.findAllByProps({ readOnly: true }).some(node => node.props.patch?.path === "dir/a.txt")).toBe(true);
+    await act(async () => { fileList.props.onSelectionChange({ id: "new.txt" }); });
+    expect(git.worktreeFileDiff).toHaveBeenLastCalledWith(linked.path, { path: "new.txt", untracked: true }, expect.anything());
+    expect(menuItem("open-worktree")).toMatchObject({ disabled: false });
+    expect(menuItem("remove-worktree")).toMatchObject({ disabled: false });
+
+    // Open in New Window (button, ⌘⇧O) opens it as its own window titled "<repo> — <branch>".
+    await act(async () => { button("Open in New Window")!.props.onPress(); });
+    expect(openWorktreeWindow).toHaveBeenLastCalledWith(linked.path, "repo", "repo — feature");
+    await act(async () => { lastMenu().onAction({ itemId: "open-worktree" }); });
+    expect(openWorktreeWindow).toHaveBeenCalledTimes(2);
+
+    // Refreshes keep the selection by path and the selected file.
+    await act(async () => { lastMenu().onAction({ itemId: "refresh" }); });
+    expect(sidebar().props.selectedId).toBe(`worktree:${linked.path}`);
+    expect(renderer.root.findAllByType(Sidebar).at(-1)!.props.selectedId).toBe("new.txt");
+
+    // The row's context menu: Open in New Window, Reveal in Finder, Remove….
+    jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: false, itemId: "reveal-worktree" });
+    await act(async () => { row(`worktree:${linked.path}`).props.onContextMenu({ windowPosition: { x: 1, y: 2 } }); });
+    expect(jest.mocked(showContextMenu).mock.calls.at(-1)![0].items.map((entry: any) => entry.label ?? "-")).toEqual(["Open in New Window", "Reveal in Finder", "-", "Remove…"]);
+    expect(runCommand).toHaveBeenLastCalledWith(expect.objectContaining({ target: { type: "command", name: "open" }, args: ["-R", "--", linked.path] }));
+    jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: false, itemId: "open-worktree" });
+    await act(async () => { row("worktree:/repo").props.onContextMenu({ windowPosition: { x: 1, y: 2 } }); });
+    // The window's own worktree can't be opened again or removed.
+    expect(jest.mocked(showContextMenu).mock.calls.at(-1)![0].items.map((entry: any) => entry.disabled ?? false)).toEqual([true, false, false, true]);
+    expect(openWorktreeWindow).toHaveBeenCalledTimes(2);
+
+    // Remove… asks first (Cancel default); Git refusing a dirty worktree shows its message and asks again before forcing.
+    jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "cancel" });
+    await act(async () => { lastMenu().onAction({ itemId: "remove-worktree" }); });
+    expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "warning", title: "Remove the worktree “fëature ✓”?", defaultButtonId: "cancel", buttons: [{ id: "confirm", label: "Remove" }, { id: "cancel", label: "Cancel" }] }));
+    expect(git.removeWorktree).not.toHaveBeenCalled();
+    git.removeWorktree.mockRejectedValueOnce(new Error("fatal: '/work/fëature ✓' contains modified or untracked files, use --force to delete it"));
+    jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "confirm" }).mockResolvedValueOnce({ buttonId: "cancel" });
+    await act(async () => { lastMenu().onAction({ itemId: "remove-worktree" }); });
+    expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ title: "Git didn’t remove “fëature ✓”.", defaultButtonId: "cancel", buttons: [{ id: "confirm", label: "Remove Anyway" }, { id: "cancel", label: "Cancel" }], message: expect.stringContaining("contains modified or untracked files") }));
+    expect(git.removeWorktree).toHaveBeenCalledTimes(1);
+    git.removeWorktree.mockRejectedValueOnce(new Error("fatal: '/work/fëature ✓' contains modified or untracked files, use --force to delete it"));
+    git.removeWorktree.mockImplementationOnce(async () => { worktrees = [main, detached]; });
+    jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "confirm" }).mockResolvedValueOnce({ buttonId: "confirm" });
+    await act(async () => { lastMenu().onAction({ itemId: "remove-worktree" }); });
+    expect(git.removeWorktree).toHaveBeenLastCalledWith(linked.path, expect.objectContaining({ force: true }));
+    // The removed worktree's row is gone and the selection falls back to Changes without the sidebar throwing.
+    expect(sidebar().props.selectedId).toBe("changes");
+    expect(items().some(item => item.props.id === `worktree:${linked.path}`)).toBe(false);
+
+    // Selecting the main worktree, then losing the last linked one, hides the rows and falls back to Changes too.
+    await act(async () => { sidebar().props.onSelectionChange({ id: "worktree:/repo" }); });
+    worktrees = [main];
+    await act(async () => { lastMenu().onAction({ itemId: "refresh" }); });
+    expect(sidebar().props.selectedId).toBe("changes");
+    expect(items().some(item => item.props.id === "group:worktrees")).toBe(false);
+    worktrees = [main, detached];
+    await act(async () => { lastMenu().onAction({ itemId: "refresh" }); });
+
+    // Errors other than Git's refusals are reported without offering to force.
+    git.removeWorktree.mockRejectedValueOnce(new Error("Another branch or stash operation is still running."));
+    jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "confirm" });
+    await act(async () => { lastMenu().onAction({ itemId: "refresh" }); });
+    jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: false, itemId: "remove-worktree" });
+    await act(async () => { row("worktree:/work/detached").props.onContextMenu({ windowPosition: { x: 1, y: 2 } }); });
+    expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ title: "Couldn’t Remove “detached”", message: "Another branch or stash operation is still running." }));
+
+    // New Worktree… asks for a branch, then for the parent folder: an existing branch is checked out, another name is created.
+    git.addWorktree.mockImplementationOnce(async () => { worktrees = [main, detached, { ...linked, path: "/private/work/feature" }]; return "/private/work/feature"; });
+    jest.mocked(showPrompt).mockResolvedValueOnce({ canceled: false, value: " feature " });
+    jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/work/"] });
+    await act(async () => { lastMenu().onAction({ itemId: "new-worktree" }); });
+    expect(showPrompt).toHaveBeenLastCalledWith(expect.objectContaining({ title: "New Worktree", windowId: "main" }));
+    expect(openFileDialog).toHaveBeenLastCalledWith(expect.objectContaining({ selection: "directories", title: "Choose the Folder for the New Worktree" }));
+    expect(git.addWorktree).toHaveBeenLastCalledWith("/work/feature", expect.objectContaining({ branch: "feature" }));
+    // The new worktree is selected by the path Git lists.
+    expect(sidebar().props.selectedId).toBe("worktree:/private/work/feature");
+    jest.mocked(showPrompt).mockResolvedValueOnce({ canceled: false, value: "topic/new" });
+    jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/work"] });
+    git.addWorktree.mockRejectedValueOnce(new Error("fatal: '/work/topic-new' already exists"));
+    await act(async () => { lastMenu().onAction({ itemId: "new-worktree" }); });
+    expect(git.addWorktree).toHaveBeenLastCalledWith("/work/topic-new", expect.objectContaining({ newBranch: "topic/new" }));
+    expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ title: "Couldn’t Create the Worktree", message: "'/work/topic-new' already exists" }));
+    // Cancelling the folder chooser creates nothing.
+    jest.mocked(showPrompt).mockResolvedValueOnce({ canceled: false, value: "x" });
+    await act(async () => { lastMenu().onAction({ itemId: "new-worktree" }); });
+    expect(git.addWorktree).toHaveBeenCalledTimes(2);
+    await act(async () => { renderer.unmount(); });
+  });
+
+  it("opens a worktree window on its path, titles it after the repository and branch, owns the menu bar while focused, and stops its watcher on close", async () => {
+    jest.clearAllMocks();
+    const removes: jest.Mock[] = [];
+    jest.mocked(watchDirectories).mockImplementation(() => { const remove = jest.fn(); removes.push(remove); return { remove }; });
+    const services = new Map([["/repo", service("/repo", () => [main, linked])], [linked.path, service(linked.path, () => [main, linked])]]);
+    jest.mocked(getGitService).mockImplementation(root => services.get(root) as unknown as GitService);
+    jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
+    let mainWindow!: ReactTestRenderer, worktreeWindow!: ReactTestRenderer;
+    await act(async () => { mainWindow = create(<App />); });
+    await act(async () => { openRepository(); });
+    const menuCalls = () => jest.mocked(useMenu).mock.calls.length;
+    const id = "worktree-test";
+    await act(async () => { worktreeWindow = create(<App windowId={id} initialPath={linked.path} repoName="repo" />); });
+    expect(services.get(linked.path)!.resolveRoot).toHaveBeenCalled();
+    expect(jest.mocked(setWindowOptions).mock.calls.filter(call => call[0] === id).map(call => call[1].title).filter(Boolean).at(-1)).toBe("repo — feature");
+    // No represented folder: AppKit would title the window with the folder's name instead.
+    expect(jest.mocked(setWindowOptions).mock.calls.filter(call => call[0] === id).some(call => call[1].macos && "representedUri" in call[1].macos)).toBe(false);
+    expect(jest.mocked(addMacOSWindowListener).mock.calls.map(call => call[0])).toEqual(["main", id]);
+    // The new window owns the menu bar: menu actions act on its repository.
+    const before = menuCalls();
+    await act(async () => { lastMenu().onAction({ itemId: "refresh" }); });
+    expect(services.get(linked.path)!.status.mock.calls.length).toBeGreaterThan(1);
+    const sidebar = worktreeWindow.root.findAllByType(Sidebar)[0]!;
+    expect(sidebar.findAllByType(SidebarItem).find(item => item.props.id === `worktree:${linked.path}`)!.findAllByType("SFSymbol" as any).map(symbol => symbol.props.name)).toEqual(["folder", "checkmark"]);
+    // Focusing the main window hands it the menu bar.
+    const focus = (windowId: string) => jest.mocked(addWindowListener).mock.calls.find(call => call[0] === windowId && call[1] === "focusChanged")![2] as (event: { windowId: string; focused: boolean }) => void;
+    await act(async () => { focus("main")({ windowId: "main", focused: true }); });
+    expect(menuCalls()).toBeGreaterThan(before);
+    const mainStatus = services.get("/repo")!.status.mock.calls.length;
+    await act(async () => { lastMenu().onAction({ itemId: "refresh" }); });
+    expect(services.get("/repo")!.status.mock.calls.length).toBeGreaterThan(mainStatus);
+    // Closing the worktree window removes its watcher and leaves the main window's alone.
+    await act(async () => { focus(id)({ windowId: id, focused: true }); });
+    const closed = jest.mocked(addWindowListener).mock.calls.find(call => call[0] === id && call[1] === "closed")![2] as (event: { windowId: string }) => void;
+    await act(async () => { closed({ windowId: id }); });
+    expect(removes.map(remove => remove.mock.calls.length)).toEqual([0, 1]);
+    // The menu bar went back to the main window.
+    await act(async () => { lastMenu().onAction({ itemId: "refresh" }); });
+    expect(services.get("/repo")!.status.mock.calls.length).toBeGreaterThan(mainStatus + 1);
+    await act(async () => { worktreeWindow.unmount(); mainWindow.unmount(); });
+  });
 });
