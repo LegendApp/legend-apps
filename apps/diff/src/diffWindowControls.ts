@@ -13,7 +13,6 @@ export const diffViewModeToolbarItemId = "diff-view-mode";
 export const diffSidebarToolbarItemId = "diff-toggle-sidebar";
 export const diffCompareToolbarItemId = "diff-compare-target";
 export const diffNavigatorToolbarItemId = "diff-navigator";
-export const diffStoryToolbarItemId = "diff-change-story";
 export const diffSearchToolbarItemId = "diff-global-search";
 const diffViewModeToolbarIconByValue: Record<DiffViewMode, string> = {
     blocks: "rectangle.split.2x1",
@@ -93,7 +92,7 @@ function createDiffViewerToolbarItems({ showSidebarControl, showViewModeToolbar,
         ...(showSidebarControl ? [createDiffSidebarToolbarItem(sidebarCollapsed)] : []),
         ...(showViewModeToolbar ? [createDiffNavigatorToolbarItem(navigatorTab), createDiffSearchToolbarItem()] : []),
         ...(compareToolbarItem ? [compareToolbarItem] : []),
-        ...(showViewModeToolbar ? [createDiffViewModeToolbarItem(viewMode), { id: diffStoryToolbarItemId, label: "Change Story", tooltip: "Change Story (⌘⇧S)", symbol: "text.book.closed", type: "button" as const, bordered: true }] : []),
+        ...(showViewModeToolbar ? [createDiffViewModeToolbarItem(viewMode)] : []),
     ];
 }
 export const diffContentMinWidth = 420;

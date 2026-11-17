@@ -30,7 +30,6 @@ import { registerDiffViewerActionHandlers } from "../diffViewerActions";
 import {
   diffCompareToolbarItemId,
   diffSearchToolbarItemId,
-  diffStoryToolbarItemId,
   diffNavigatorToolbarItemId,
   diffSidebarToolbarItemId,
   diffViewModeToolbarItemId,
@@ -205,7 +204,6 @@ export function DiffNativeMenuController({
 
 export function DiffWindowToolbarItemController({
   onNavigatorTab,
-  openStory,
   compareCurrentSource,
   onSearchChange,
   onSearchSubmit,
@@ -213,7 +211,6 @@ export function DiffWindowToolbarItemController({
   toggleSidebar,
 }: {
   onNavigatorTab: (tab: DiffViewerTab) => void;
-  openStory: () => boolean;
   compareCurrentSource: (selection: string) => boolean;
   onSearchChange: (value: string) => void;
   onSearchSubmit: (value: string, direction: 1 | -1) => void;
@@ -225,7 +222,6 @@ export function DiffWindowToolbarItemController({
   useEffect(() => {
     const subscription = ownRegistration(addMacOSWindowListener(windowIdentifier, event => {
       if (event.type === "toolbarSelectionChanged" && event.itemId === diffNavigatorToolbarItemId && (event.value === "files" || event.value === "story")) onNavigatorTab(event.value);
-      if (event.type === "toolbarAction" && event.itemId === diffStoryToolbarItemId) openStory();
       if (event.type === "toolbarAction" && event.itemId === diffSidebarToolbarItemId) toggleSidebar();
       if (event.type === "toolbarMenuAction" && event.itemId === diffCompareToolbarItemId) {
         if (event.action.itemId === diffCompareToolbarTargetChooseRef) openCompareRefPrompt();
@@ -238,7 +234,7 @@ export function DiffWindowToolbarItemController({
       }
     }));
     return () => { void subscription.remove().catch(console.error); };
-  }, [onNavigatorTab, openStory, compareCurrentSource, openCompareRefPrompt, toggleSidebar, windowIdentifier, onSearchChange, onSearchSubmit]);
+  }, [onNavigatorTab, compareCurrentSource, openCompareRefPrompt, toggleSidebar, windowIdentifier, onSearchChange, onSearchSubmit]);
 
   return null;
 }

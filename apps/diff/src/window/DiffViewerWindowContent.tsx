@@ -624,9 +624,10 @@ export function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, so
     const nextReviewItem = useCallback(() => storyController.tab === "story" ? storyPaneRef.current?.navigate(1) ?? false : navigateToNextHunk(), [storyController.tab, navigateToNextHunk]);
     const previousReviewItem = useCallback(() => storyController.tab === "story" ? storyPaneRef.current?.navigate(-1) ?? false : navigateToPreviousHunk(), [storyController.tab, navigateToPreviousHunk]);
     const handleSidebarFilePress = useCallback((file: DiffFileSummary) => {
+        storyController.setTab("files");
         activeFileIndex$.set(file.index);
         scrollToFile(file);
-    }, [activeFileIndex$, scrollToFile]);
+    }, [activeFileIndex$, scrollToFile, storyController.setTab]);
     const toggleSidebarFolder = useCallback((title: string) => {
         setCollapsedSidebarFolders((currentFolders) => {
             const nextFolders = new Set(currentFolders);
@@ -786,7 +787,7 @@ export function DiffViewerWindowContent({ focusUrlInputRequestId, folderPath, so
     return (<>
       <DiffWindowChromeController navigatorTab={storyController.tab} hasUnsavedMergeDrafts={hasUnsavedMergeDrafts}/>
       <DiffNativeMenuSavingStateController hasUnsavedMergeDrafts={hasUnsavedMergeDrafts} resolvingMergeConflictKeys$={resolvingMergeConflictKeys$}/>
-      <DiffWindowToolbarItemController onNavigatorTab={storyController.setTab} openStory={storyController.openStory} compareCurrentSource={compareCurrentSource} onSearchChange={handleSearchChange} onSearchSubmit={handleSearchSubmit} openCompareRefPrompt={openCompareRefPrompt} toggleSidebar={toggleSidebar}/>
+      <DiffWindowToolbarItemController onNavigatorTab={storyController.setTab} compareCurrentSource={compareCurrentSource} onSearchChange={handleSearchChange} onSearchSubmit={handleSearchSubmit} openCompareRefPrompt={openCompareRefPrompt} toggleSidebar={toggleSidebar}/>
       <DiffLaunchController focusUrlInputRequestId={focusUrlInputRequestId} folderPath={folderPath} loadRequestIdRef={loadRequestIdRef} loadSource={loadSource} loadTraceRef={loadTraceRef} source={source} urlInputRef={urlInputRef}/>
       <DiffLoadCompletionController loadTraceRef={loadTraceRef} loggedTraceDocumentRef={loggedTraceDocumentRef}/>
       <DiffRepositoryController onBannerChange={setRepoStateBanner} loadSource={loadSource} suppressReloadUntilRef={suppressFileWatcherReloadUntilRef}/>

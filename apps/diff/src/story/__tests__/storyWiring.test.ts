@@ -2,14 +2,14 @@ import { diffHotkeyDefinitions } from "../../diffHotkeys";
 import { diffMenuConfig } from "../../diffMenus";
 import { diffActiveMenuWindow$ } from "../../diffMenuState";
 import { dispatchDiffViewerAction, registerDiffViewerActionHandlers } from "../../diffViewerActions";
-import { createDiffViewerWindowStyle, diffStoryToolbarItemId, diffNavigatorToolbarItemId } from "../../diffWindowControls";
+import { createDiffViewerWindowStyle, diffNavigatorToolbarItemId } from "../../diffWindowControls";
 import { storyOpenAction } from "../useDiffStory";
 
-it("routes the menu/shortcut command to the focused viewer and exposes the toolbar button", () => {
+it("routes the menu/shortcut command to the focused viewer and offers one toolbar entry point", () => {
   expect(diffHotkeyDefinitions.find(item => item.id === "changeStory")?.defaultBindings).toEqual(["Cmd+Shift+S"]);
   expect(JSON.stringify(diffMenuConfig)).toContain('"id":"changeStory"');
   const window = createDiffViewerWindowStyle({ includeFrame: false, showViewModeToolbar: true });
-  expect(window.macos?.toolbar?.items).toEqual(expect.arrayContaining([expect.objectContaining({ id: diffStoryToolbarItemId, label: "Change Story" })]));
+  expect(window.macos?.toolbar?.items?.filter(item => JSON.stringify(item).includes("text.book.closed")).map(item => item.id)).toEqual([diffNavigatorToolbarItemId]);
   const selected = createDiffViewerWindowStyle({ includeFrame: false, showViewModeToolbar: true, navigatorTab: "story" });
   expect(selected.macos?.toolbar?.items).toEqual(expect.arrayContaining([expect.objectContaining({
     id: diffNavigatorToolbarItemId, type: "segmented", value: "story",

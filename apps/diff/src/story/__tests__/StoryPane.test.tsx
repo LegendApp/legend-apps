@@ -86,14 +86,15 @@ it("shows stale state and exposes cancellation and validator raw output as text"
   const screen = await render(<StoryPane {...test.props} />);
   await act(async () => {});
   expect(screen.getByText(/Out of date/)).toBeTruthy();
-  expect(screen.getByText("output · 123 bytes received")).toBeTruthy();
+  expect(screen.getByText("Writing the story…")).toBeTruthy();
+  expect(screen.queryByText(/bytes received/)).toBeNull();
   await fireEvent.press(screen.getByLabelText("Cancel"));
   expect(test.controller.cancel).toHaveBeenCalled();
   const error = setup({ status: "error" });
   await screen.rerender(<StoryPane {...error.props} />);
   expect(screen.getByText("Validator: title required")).toBeTruthy();
   expect(screen.queryByText("<script>bad()</script>")).toBeNull();
-  await fireEvent.press(screen.getByLabelText("Show raw output"));
+  await fireEvent.press(screen.getByLabelText("Show Output"));
   expect(screen.getByText("<script>bad()</script>")).toBeTruthy();
   await screen.unmount();
 });
@@ -121,18 +122,54 @@ it("keeps cached review marks but clears them for regenerated sections with reus
   await screen.unmount();
 });
 
-it("exposes the skill picker, editor, preview banner and repository prompt approval", async () => {
+it("keeps generation settings in the Options menu and shows the preview banner and repository prompt approval", async () => {
   const { changeStorySkill } = require("../storySkill");
+  const { showContextMenu } = require("@legendapp/spark/context-menu");
   const test = setup();
-  Object.assign(test.controller, { skills: [changeStorySkill], skill: changeStorySkill, selectSkill: jest.fn(), editSkill: jest.fn(), preview: true, dismissPreview: jest.fn(), approve: jest.fn(),
+  Object.assign(test.controller, { windowId: "main", skills: [changeStorySkill], skill: changeStorySkill, selectSkill: jest.fn(), editSkill: jest.fn(), enable: jest.fn(), generationEnabled: true, preview: true, dismissPreview: jest.fn(), approve: jest.fn(),
     trustNotice: { skill: { ...changeStorySkill, layer: "repo", repoRoot: "/repo", path: "/repo/.legend-diff/skills/story.md" } } });
   const screen = await render(<StoryPane {...test.props} />);
-  await fireEvent.press(screen.getByText("change-story · built-in"));
-  expect(test.controller.selectSkill).toHaveBeenCalledWith("change-story");
-  await fireEvent.press(screen.getByLabelText("Edit skill…")); expect(test.controller.editSkill).toHaveBeenCalled();
+  expect(screen.queryByText("change-story · built-in")).toBeNull();
+  expect(screen.queryByText(/Generation settings/)).toBeNull();
+  const choose = async (itemId: string) => {
+    jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: false, itemId });
+    await fireEvent.press(screen.getByLabelText("Options…"));
+    await act(async () => {});
+  };
+  await choose("skill:change-story"); expect(test.controller.selectSkill).toHaveBeenCalledWith("change-story");
+  expect(jest.mocked(showContextMenu).mock.calls[0][0]).toEqual(expect.objectContaining({ windowId: "main", items: expect.arrayContaining([expect.objectContaining({ id: "tool:codex", checked: true }), expect.objectContaining({ id: "disable" })]) }));
+  await choose("tool:claude"); expect(test.controller.setTool).toHaveBeenCalledWith("claude");
+  await choose("editSkill"); expect(test.controller.editSkill).toHaveBeenCalled();
+  await choose("disable"); expect(test.controller.disable).toHaveBeenCalled();
   expect(screen.getByText("Preview — saved story unchanged")).toBeTruthy();
   expect(screen.getByText(/from this repository/)).toBeTruthy();
   await fireEvent.press(screen.getByLabelText("Approve this skill")); expect(test.controller.approve).toHaveBeenCalledWith(true);
   await fireEvent.press(screen.getByLabelText("Close preview")); expect(test.controller.dismissPreview).toHaveBeenCalled();
+  await screen.unmount();
+});
+
+it("shows one sentence and one primary action instead of a blank story screen", async () => {
+  const test = setup();
+  test.controller.story$.set({ status: "idle", result: null, input: null, progress: null, error: null });
+  Object.assign(test.controller, { windowId: "main", skills: [], generationEnabled: false, generationDisabled: false, enable: jest.fn() });
+  const screen = await render(<StoryPane {...test.props} />);
+  expect(screen.getByText("Get a guided walkthrough of these changes, written by Codex.")).toBeTruthy();
+  await fireEvent.press(screen.getByLabelText("Generate Story"));
+  expect(test.controller.generate).toHaveBeenCalledWith(true);
+  await act(() => test.controller.story$.assign({ status: "progress", progress: { phase: "output", receivedBytes: 315 } }));
+  expect(screen.getByText("Writing the story…")).toBeTruthy();
+  expect(screen.queryByText(/315/)).toBeNull();
+  await fireEvent.press(screen.getByLabelText("Cancel"));
+  expect(test.controller.cancel).toHaveBeenCalled();
+  await act(() => test.controller.story$.assign({ status: "error", progress: null, error: { message: "Codex is not signed in.", rawOutput: "login required" } }));
+  expect(screen.getByText("Codex is not signed in.")).toBeTruthy();
+  await fireEvent.press(screen.getByLabelText("Try Again"));
+  expect(test.controller.generate).toHaveBeenCalledTimes(2);
+  await act(() => test.controller.story$.assign({ status: "idle", error: null }));
+  Object.assign(test.controller, { generationDisabled: true });
+  await screen.rerender(<StoryPane {...test.props} controller={{ ...test.controller }} />);
+  expect(screen.getByText("Story generation is off for this repository.")).toBeTruthy();
+  await fireEvent.press(screen.getByLabelText("Turn On…"));
+  expect(test.controller.enable).toHaveBeenCalled();
   await screen.unmount();
 });

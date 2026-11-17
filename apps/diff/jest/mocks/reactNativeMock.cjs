@@ -4,8 +4,15 @@ const createComponent = (name) => (
   React.forwardRef(({ children, ...props }, ref) => React.createElement(name, { ...props, ref }, children))
 );
 
+// Host Views have no native node in tests; give refs a measurable stand-in.
+const View = React.forwardRef(({ children, ...props }, ref) => {
+  React.useImperativeHandle(ref, () => ({ measureInWindow: (callback) => callback(0, 0, 0, 0) }), []);
+  return React.createElement("View", props, children);
+});
+
 module.exports = {
   __esModule: true,
+  ActivityIndicator: createComponent("ActivityIndicator"),
   Linking: {
     addEventListener: jest.fn(() => ({ remove: jest.fn() })),
     getInitialURL: jest.fn(async () => null),
@@ -45,5 +52,5 @@ module.exports = {
       stopMonitoringKeyboard: jest.fn(async () => true),
     })),
   },
-  View: createComponent("View"),
+  View,
 };

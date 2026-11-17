@@ -36,8 +36,10 @@ export function createStoryCache(storage: Pick<Storage, "read" | "write"> = crea
   }
   return {
     isEnabled(scope: string, tool: StoryTool) {
-      const value = storage.read(`${storyHash(scope)}/consent-${tool}.json`, { format: "text" });
-      return value === "true";
+      return storage.read(`${storyHash(scope)}/consent-${tool}.json`, { format: "text" }) === "true";
+    },
+    isDisabled(scope: string, tool: StoryTool) {
+      return storage.read(`${storyHash(scope)}/consent-${tool}.json`, { format: "text" }) === "false";
     },
     setEnabled(scope: string, tool: StoryTool, enabled: boolean) {
       storage.write(`${storyHash(scope)}/consent-${tool}.json`, String(enabled), { format: "text" });

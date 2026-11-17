@@ -3,9 +3,9 @@ import { LegendList, type LegendListRef } from "@legendapp/list/react-native";
 import { useObservable, useValue } from "@legendapp/state/react";
 import type { Observable } from "@legendapp/state";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import { SegmentedControl, Select } from "@legendapp/spark/ui";
+import { showContextMenu } from "@legendapp/spark/context-menu";
 import { SFSymbol } from "@legendapp/spark/ui/symbol";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { runCommand } from "@legendapp/spark/processes";
 import type { DiffViewMode } from "../diffSettings";
 import { DiffUnifiedRow, DiffSideBySideRow, type DiffRowRenderState } from "../viewer/DiffRows";
@@ -13,7 +13,7 @@ import { requestDiffTokenizedFiles } from "../viewer/diffLoadedDocumentModel";
 import type { DiffSplitPaneMetrics } from "../viewer/diffViewerModel";
 import { DiffNativeRowConfigView } from "../window/DiffViewerPane";
 import type { DiffNativeRowConfigProps } from "../window/diffWindowTypes";
-import { DiffButton, DiffCheckbox, DiffNotice, segmentedControlWidth } from "../window/DiffControls";
+import { DiffButton, DiffCheckbox, DiffNotice } from "../window/DiffControls";
 import { diffSymbolColors, diffSystemColor } from "../window/diffSystemColors";
 import { buildStoryInput, type StoryHunk, type StoryInput } from "./storyHunks";
 import { storyToMarkdown } from "./storyMarkdown";
@@ -24,12 +24,12 @@ import { useStoryAppearance } from "./storyAppearance";
 import { repoSkillNotice } from "./skillTrust";
 import { storyPrivacyNotice } from "./storyStore";
 import type { useDiffStory } from "./useDiffStory";
+import { parseStoryOptionsAction, storyOptionsMenu, storyProgressLabel, storyViewState } from "./storyView";
 
 export type StoryPaneRef = { navigate: (direction: -1 | 1) => boolean; scrollToSection: (index: number) => void };
 type PaneRow = StoryRow | { type: "header"; key: string };
 type Snapshot = { document: DiffDocument; input: StoryInput; projection: DiffSideBySideProjection };
 const headerRow: PaneRow = { type: "header", key: "header" };
-const toolOptions = [{ label: "Codex", value: "codex" }, { label: "Claude", value: "claude" }];
 function noop() {}
 function keyExtractor(row: PaneRow) { return row.key; }
 function getItemType(row: PaneRow) { return row.type; }
@@ -50,7 +50,6 @@ export const StoryPane = forwardRef<StoryPaneRef, {
   const [showDetails, setShowDetails] = useState(false);
   const [showRaw, setShowRaw] = useState(false);
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
-  const [privacyStatus, setPrivacyStatus] = useState<string | null>(null);
   const listRef = useRef<LegendListRef | null>(null);
   const currentSection = useRef(-1);
   const appearance = useStoryAppearance();
@@ -115,6 +114,33 @@ export const StoryPane = forwardRef<StoryPaneRef, {
       setCopyStatus(response.exit.type === "exited" && response.exit.code === 0 ? "Copied" : "Unable to copy");
     }).catch((reason: unknown) => setCopyStatus(String(reason)));
   }, [result, input]);
+  const optionsRef = useRef<View | null>(null);
+  const showOptions = useCallback(() => {
+    const items = storyOptionsMenu({ skills: controller.skills, skill: controller.skill, tool: controller.tool, running, enabled: controller.generationEnabled });
+    optionsRef.current?.measureInWindow((x, y, _width, height) => {
+      void showContextMenu({ windowId: controller.windowId, position: { x, y: y + height + 4 }, items }).then(result => {
+        const action = result.canceled ? null : parseStoryOptionsAction(result.itemId);
+        if (action?.type === "skill") controller.selectSkill(action.name);
+        else if (action?.type === "tool") controller.setTool(action.tool);
+        else if (action?.type === "editSkill") controller.editSkill();
+        else if (action?.type === "disable") controller.disable();
+        else if (action?.type === "enable") controller.enable();
+      }).catch((reason: unknown) => setCopyStatus(String(reason)));
+    });
+  }, [controller, running]);
+  const optionsButton = <View ref={optionsRef} collapsable={false}><DiffButton title="Options…" label="Options" variant="borderless" onPress={showOptions} /></View>;
+  const failure = error ?? story.error?.message ?? snapshotError;
+  const rawOutput = story.error?.rawOutput !== undefined ? <>
+    <View className="flex-row items-center"><SFSymbol name={showRaw ? "chevron.down" : "chevron.right"} size={10} color={mutedColor} /><DiffButton title={showRaw ? "Hide Output" : "Show Output"} label="Output" variant="borderless" onPress={() => setShowRaw(value => !value)} /></View>
+    {showRaw ? <Text selectable style={{ color: mutedColor, fontFamily: "Menlo", fontSize: 11 }}>{story.error.rawOutput}</Text> : null}
+  </> : null;
+  const previewBanner = controller.preview ? <View className="flex-row items-center gap-2"><Text style={{ color: accent }}>Preview — saved story unchanged</Text><DiffButton title="Close preview" onPress={controller.dismissPreview} /></View> : null;
+  const notices = <>
+    {controller.skillErrors.map((message, index) => <Text key={index} selectable style={{ color: foregroundColor }}>{message}</Text>)}
+    {controller.trustNotice?.skill ? <DiffNotice symbol="exclamationmark.triangle.fill" symbolColor={diffSymbolColors.orange}><Text style={{ color: foregroundColor }}>{repoSkillNotice(controller.trustNotice.skill)}</Text><Text selectable style={{ color: mutedColor, fontFamily: "Menlo" }}>{controller.trustNotice.skill.markdown}</Text><View className="flex-row gap-2"><DiffButton title="Approve this skill" onPress={() => controller.approve(true)} /><DiffButton title="Don't run" onPress={() => controller.approve(false)} /></View></DiffNotice> : null}
+    {notice ? <DiffNotice symbol="hand.raised.fill" symbolColor={diffSymbolColors.blue}><Text style={{ color: foregroundColor }}>{storyPrivacyNotice(notice.tool)}</Text><View className="flex-row gap-2"><DiffButton title="Enable and generate" onPress={() => controller.consent(true)} /><DiffButton title="Keep disabled" onPress={() => controller.consent(false)} /></View></DiffNotice> : null}
+  </>;
+  const view = storyViewState({ hasResult: !!result, running, preparing, failed: !!failure, consent: !!notice, trust: !!controller.trustNotice?.skill, disabled: controller.generationDisabled });
   const renderItem = useCallback(({ item }: { item: PaneRow }) => {
     if (item.type === "line" && config) {
       return item.item
@@ -124,33 +150,23 @@ export const StoryPane = forwardRef<StoryPaneRef, {
     let content;
     if (item.type === "header") content = <>
       <Text accessibilityRole="header" style={{ color: foregroundColor, fontSize: appearance.titleSize ?? 24, fontWeight: "600" }}>{result?.story.title ?? "Change Story"}</Text>
-      <View className="flex-row flex-wrap gap-2">
-        {controller.skill && controller.skills.some(skill => skill.name === controller.skill?.name) ? <Select accessibilityLabel="Story skill" options={controller.skills.map(skill => ({ label: `${skill.name} · ${skill.layer}`, value: skill.name }))} value={controller.skill.name} disabled={running} onValueChange={controller.selectSkill} style={{ width: Math.max(...controller.skills.map(skill => `${skill.name} · ${skill.layer}`.length)) * 7 + 48, height: 24 }} /> : null}
-        <DiffButton title="Edit skill…" onPress={controller.editSkill} />
-      </View>
-      {controller.preview ? <View className="flex-row items-center gap-2"><Text style={{ color: accent }}>Preview — saved story unchanged</Text><DiffButton title="Close preview" onPress={controller.dismissPreview} /></View> : null}
-      <View className="flex-row flex-wrap gap-2">
-        <DiffButton title={controller.preview ? "Generate saved story" : result ? "Regenerate" : "Generate story"} disabled={running || preparing || !controller.request} onPress={() => controller.generate(true)} />
+      {previewBanner}
+      {result ? <><Text style={{ color: mutedColor }}>{result.story.state} · {result.story.risk.level} risk — {result.story.risk.reason}{stale ? " · Out of date" : ""}</Text><Text style={{ color: foregroundColor }}>{result.story.goal}</Text></> : null}
+      <View className="flex-row flex-wrap items-center gap-2">
+        {running ? <><ActivityIndicator size="small" /><Text accessibilityLiveRegion="polite" style={{ color: mutedColor }}>{storyProgressLabel(story.progress?.phase)}</Text><DiffButton title="Cancel" onPress={controller.cancel} /></>
+          : <DiffButton title={controller.preview ? "Generate saved story" : "Regenerate"} disabled={preparing || !controller.request} onPress={() => controller.generate(true)} />}
         {result ? <DiffButton title="Copy as Markdown" onPress={copy} /> : null}
-        {running ? <DiffButton title="Cancel" onPress={controller.cancel} /> : null}
+        {optionsButton}
       </View>
-      <Text style={{ color: mutedColor }}>{result ? `${result.story.state} · ${result.story.risk.level} risk — ${result.story.risk.reason}` : "Generate a guided review with your signed-in AI CLI. Stories are never generated automatically."}</Text>
-      {result ? <><Text style={{ color: foregroundColor }}>{result.story.goal}</Text>{stale ? <Text style={{ color: mutedColor }}>Out of date — Regenerate for the current diff</Text> : null}
-        <View className="flex-row items-center"><SFSymbol name={showDetails ? "chevron.down" : "chevron.right"} size={10} color={mutedColor} /><DiffButton title={showDetails ? "Hide Details" : "Show Details"} label="Details" variant="borderless" onPress={() => setShowDetails(value => !value)} /></View>
+      {result ? <><View className="flex-row items-center"><SFSymbol name={showDetails ? "chevron.down" : "chevron.right"} size={10} color={mutedColor} /><DiffButton title={showDetails ? "Hide Details" : "Show Details"} label="Details" variant="borderless" onPress={() => setShowDetails(value => !value)} /></View>
         {showDetails ? <View className="gap-2"><Text style={{ color: mutedColor }}>{result.skillName} · {result.tool} / {result.model}</Text><Text selectable style={{ color: mutedColor, fontSize: 11 }}>{result.diffHash}</Text></View> : null}
         <Text style={{ color: mutedColor }}>{model?.coverage.covered ?? result.coveredHunkIds.length}/{model?.coverage.total ?? input?.hunks.length} hunks covered · {reviewedCount}/{result.story.sections.length} sections reviewed</Text><View accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: result.story.sections.length, now: reviewedCount }} className="h-1 overflow-hidden rounded" style={{ backgroundColor: mutedColor }}><View className="h-1" style={{ backgroundColor: accent, width: `${result.story.sections.length ? reviewedCount / result.story.sections.length * 100 : 0}%` }} /></View></> : null}
-      {running ? <Text accessibilityLiveRegion="polite" style={{ color: foregroundColor }}>{story.progress?.phase ?? "starting"} · {story.progress?.receivedBytes ?? 0} bytes received</Text> : null}
-      {preparing ? <Text style={{ color: mutedColor }}>Preparing story…</Text> : null}
       {result && !snapshot && !snapshotError ? <Text style={{ color: mutedColor }}>Loading native hunks…</Text> : null}
-      {error || story.error || snapshotError ? <Text selectable style={{ color: foregroundColor }}>{error ?? story.error?.message ?? snapshotError}</Text> : null}
-      {story.error?.rawOutput !== undefined ? <><DiffButton title={showRaw ? "Hide raw output" : "Show raw output"} onPress={() => setShowRaw(value => !value)} />{showRaw ? <Text selectable style={{ color: mutedColor, fontFamily: "Menlo" }}>{story.error.rawOutput}</Text> : null}</> : null}
+      {failure ? <Text selectable style={{ color: foregroundColor }}>{failure}</Text> : null}
+      {rawOutput}
       {result?.issues.map((issue, index) => <Text key={index} style={{ color: mutedColor }}>Reference dropped: {issue.path}: {issue.message}</Text>)}
-      <Text style={{ color: mutedColor }}>Generation settings for this {controller.request?.repoRoot ? "repository" : "source"}</Text>
-      <View className="flex-row flex-wrap items-center gap-2">{controller.tool ? <SegmentedControl accessibilityLabel="AI tool" options={toolOptions} value={controller.tool} disabled={running || (controller.skill?.tool ?? "auto") !== "auto"} onValueChange={tool => { controller.setTool(tool as "codex" | "claude"); setPrivacyStatus(null); }} style={{ width: segmentedControlWidth(toolOptions.map(option => option.label)), height: 24 }} /> : null}<DiffButton title="Disable generation" disabled={running || !controller.request} onPress={() => { controller.disable(); setPrivacyStatus("Generation disabled for this source. Cached stories remain available."); }} /></View>
-      {controller.skillErrors.map((message, index) => <Text key={index} selectable style={{ color: foregroundColor }}>{message}</Text>)}
-      {controller.trustNotice?.skill ? <DiffNotice symbol="exclamationmark.triangle.fill" symbolColor={diffSymbolColors.orange}><Text style={{ color: foregroundColor }}>{repoSkillNotice(controller.trustNotice.skill)}</Text><Text selectable style={{ color: mutedColor, fontFamily: "Menlo" }}>{controller.trustNotice.skill.markdown}</Text><View className="flex-row gap-2"><DiffButton title="Approve this skill" onPress={() => controller.approve(true)} /><DiffButton title="Don't run" onPress={() => controller.approve(false)} /></View></DiffNotice> : null}
-      {notice ? <DiffNotice symbol="hand.raised.fill" symbolColor={diffSymbolColors.blue}><Text style={{ color: foregroundColor }}>{storyPrivacyNotice(notice.tool)}</Text><View className="flex-row gap-2"><DiffButton title="Enable and generate" onPress={() => controller.consent(true)} /><DiffButton title="Keep disabled" onPress={() => { controller.consent(false); setPrivacyStatus("Generation remains disabled."); }} /></View></DiffNotice> : null}
-      {privacyStatus ? <Text style={{ color: mutedColor }}>{privacyStatus}</Text> : null}{copyStatus ? <Text style={{ color: mutedColor }}>{copyStatus}</Text> : null}
+      {notices}
+      {copyStatus ? <Text style={{ color: mutedColor }}>{copyStatus}</Text> : null}
     </>;
     else if (item.type === "section" && result) content = <>
       <View className="flex-row items-center gap-2">{item.section.lookHere ? <SFSymbol color={diffSymbolColors.orange} name="flag.fill" size={15} /> : null}<Text accessibilityRole="header" className="flex-1" style={{ color: foregroundColor, fontSize: 18, fontWeight: "600" }}>{item.section.lookHere ? "Look here · " : ""}{item.section.title}</Text></View>
@@ -166,7 +182,29 @@ export const StoryPane = forwardRef<StoryPaneRef, {
     else if (item.type === "uncovered") content = <><Text accessibilityRole="header" style={{ color: foregroundColor, fontSize: 18, fontWeight: "600" }}>Not covered by the story</Text>{item.full ? <Text style={{ color: mutedColor }}>Full coverage</Text> : null}</>;
     else if (item.type === "file") content = <><Text style={{ color: foregroundColor, fontWeight: "600" }}>{item.path}</Text>{item.note ? <Text style={{ color: mutedColor }}>{item.note}</Text> : null}</>;
     return <View className="gap-2 px-5 py-3" style={item.type === "section" || item.type === "uncovered" ? { borderTopWidth: StyleSheet.hairlineWidth, borderColor: diffSystemColor("separatorColor"), marginTop: 8 } : undefined}>{content}</View>;
-  }, [accent, appearance.titleSize, collapsedFileIndexes$, config, controller, copy, copyStatus, error, foregroundColor, input, model, mutedColor, notice, onJumpToHunk, preparing, privacyStatus, result, reviewKey, reviewStore, reviewed, reviewedCount, rowHeight, rowRender$, running, showDetails, showRaw, snapshot, snapshotError, stale, story]);
+  }, [accent, appearance.titleSize, collapsedFileIndexes$, config, controller, copy, copyStatus, failure, foregroundColor, input, model, mutedColor, notices, onJumpToHunk, optionsButton, preparing, previewBanner, rawOutput, result, reviewKey, reviewStore, reviewed, reviewedCount, rowHeight, rowRender$, running, showDetails, showRaw, snapshot, snapshotError, stale, story]);
+  if (view !== "story") {
+    const toolName = controller.tool === "claude" ? "Claude" : "Codex";
+    return <View className="flex-1 items-center justify-center gap-4 px-10" style={{ backgroundColor }}>
+      {previewBanner}
+      {view === "loading" || view === "generating" ? <ActivityIndicator size="large" /> : null}
+      {view === "consent" || view === "trust" ? <View style={{ width: "100%", maxWidth: 520 }}>{notices}</View> : <Text accessibilityLiveRegion="polite" selectable={view === "failed"} style={{ color: view === "failed" ? foregroundColor : mutedColor, fontSize: 13, textAlign: "center", maxWidth: 420 }}>{
+        view === "loading" ? "Preparing the diff…"
+          : view === "generating" ? storyProgressLabel(story.progress?.phase)
+          : view === "failed" ? failure
+          : view === "disabled" ? "Story generation is off for this repository."
+          : `Get a guided walkthrough of these changes, written by ${toolName}.`}</Text>}
+      <View className="flex-row items-center gap-2">
+        {view === "empty" ? <DiffButton title="Generate Story" disabled={!controller.request} onPress={() => controller.generate(true)} /> : null}
+        {view === "failed" ? <DiffButton title="Try Again" disabled={!controller.request} onPress={() => controller.generate(true)} /> : null}
+        {view === "disabled" ? <DiffButton title="Turn On…" disabled={!controller.request} onPress={controller.enable} /> : null}
+        {view === "generating" ? <DiffButton title="Cancel" onPress={controller.cancel} /> : null}
+        {view === "empty" || view === "failed" ? optionsButton : null}
+      </View>
+      {view === "failed" ? <View className="items-center" style={{ width: "100%", maxWidth: 520 }}>{rawOutput}</View> : null}
+      {view !== "consent" && view !== "trust" && controller.skillErrors.length ? <View style={{ width: "100%", maxWidth: 520 }}>{notices}</View> : null}
+    </View>;
+  }
   return <View className="flex-1" style={{ backgroundColor }}>
     {config ? <DiffNativeRowConfigView searchEnabled={false} nativeRowConfig={config} splitPaneMetrics$={splitPaneMetrics$} syntaxTokenizationState$={syntaxTokenizationState$} /> : null}
     <LegendList ref={listRef} data={rows} extraData={renderItem} renderItem={renderItem} keyExtractor={keyExtractor} getItemType={getItemType} getFixedItemSize={item => item.type === "line" ? rowHeight : undefined} estimatedItemSize={rowHeight} recycleItems contentContainerStyle={{ paddingTop: 52, paddingBottom: 20 }} style={{ flex: 1 }} onViewableItemsChanged={({ viewableItems }) => {

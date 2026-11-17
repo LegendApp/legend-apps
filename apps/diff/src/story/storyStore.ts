@@ -108,6 +108,7 @@ export function createStoryStore(dependencies: { runner: typeof storyRunner; cac
       operations.delete(id); current.delete(id); state$[id].delete();
     },
     isEnabled: (scope: string, tool: StoryTool) => dependencies.cache().isEnabled(scope, tool),
+    isDisabled: (scope: string, tool: StoryTool) => dependencies.cache().isDisabled(scope, tool),
     setEnabled: (scope: string, tool: StoryTool, enabled: boolean) => dependencies.cache().setEnabled(scope, tool, enabled),
     cancel: (windowId: string, skillName?: string) => dependencies.runner.cancel(windowId, skillName),
     closeWindow,

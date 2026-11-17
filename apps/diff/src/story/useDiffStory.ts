@@ -145,7 +145,7 @@ export function useDiffStory(windowId: string, state$: DiffViewerModel["state$"]
   const consent = useCallback((enabled: boolean) => {
     if (!notice) return;
     storyStore.setEnabled(getStoryScope(notice.request.source, notice.request.repoRoot), notice.request.tool, enabled);
-    setNotice(null);
+    setNotice(null); setConsentVersion(value => value + 1);
     if (enabled) start(notice);
   }, [notice, start]);
   const approve = useCallback((approved: boolean) => {
@@ -156,8 +156,18 @@ export function useDiffStory(windowId: string, state$: DiffViewerModel["state$"]
       start(trustNotice);
     }
   }, [trustNotice, start]);
+  const [consentVersion, setConsentVersion] = useState(0);
+  const generation = useMemo(() => {
+    const scope = request ? getStoryScope(request.source, request.repoRoot) : null;
+    return { enabled: !!request && storyStore.isEnabled(scope!, request.tool), disabled: !!request && storyStore.isDisabled(scope!, request.tool) };
+  }, [request, consentVersion]); // consentVersion rereads stored consent after it changes
   const disable = useCallback(() => {
     if (request) storyStore.setEnabled(getStoryScope(request.source, request.repoRoot), request.tool, false);
+    setConsentVersion(value => value + 1);
+  }, [request]);
+  const enable = useCallback(() => {
+    setTab("story");
+    if (request) setNotice({ request, preview: false });
   }, [request]);
   const editSkill = useCallback(() => {
     skillEditorContext$.set({ windowId, skillName: skill?.name });
@@ -166,7 +176,8 @@ export function useDiffStory(windowId: string, state$: DiffViewerModel["state$"]
   }, [windowId, skill?.name]);
   return { tab, setTab, story, story$, tool: request?.tool ?? tool, setTool, request, notice: notice?.request ?? null, consent,
     trustNotice: trustNotice?.request ?? null, approve, error: error ?? libraryError, preparing: !!input && !request,
-    openStory, generate, disable, cancel: () => storyStore.cancel(windowId, previewName ?? skill?.name), skill, skills: storySkills, skillErrors: skills?.errors ?? [],
+    windowId, generationEnabled: generation.enabled, generationDisabled: generation.disabled,
+    openStory, generate, disable, enable, cancel: () => storyStore.cancel(windowId, previewName ?? skill?.name), skill, skills: storySkills, skillErrors: skills?.errors ?? [],
     selectSkill: (name: string) => { setSkillName(name); setPreviewName(null); }, editSkill,
     preview: !!previewName, dismissPreview: () => { storyStore.clearPreview(windowId); setPreviewName(null); setNotice(null); setTrustNotice(null); },
   };
