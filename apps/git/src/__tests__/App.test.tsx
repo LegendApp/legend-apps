@@ -12,6 +12,9 @@ import { Switch, Text, TextInput } from "react-native";
 import { useMenu } from "@legendapp/spark/menus";
 import { runCommand } from "@legendapp/spark/processes";
 import { App } from "../App";
+import { StateBar } from "../StateBar";
+import { recentRepositories } from "../gitRecents";
+import { noteRecentDocument, subscribeToOpenRequests } from "@legendapp/spark/app/documents";
 import { sidebarDate } from "../gitStashes";
 import { blameLine, loadUnifiedDiff, openGitHistory } from "@legend-apps/diff-parser";
 import { setStringAsync } from "@legendapp/spark/clipboard";
@@ -35,6 +38,10 @@ jest.mock("@legendapp/spark/ui", () => ({ Button: "Button" }));
 jest.mock("@legendapp/spark/ui/symbol", () => ({ SFSymbol: "SFSymbol" }));
 jest.mock("@legendapp/spark/dialogs", () => ({ openFileDialog: jest.fn(async () => ({ canceled: true })), showMessage: jest.fn(async () => ({ buttonId: "confirm" })), showPrompt: jest.fn(async () => ({ canceled: true })) }));
 jest.mock("@legendapp/spark/menus", () => ({ useMenu: jest.fn() }));
+jest.mock("@legendapp/spark/app/documents", () => ({
+  getRecentDocuments: jest.fn(async () => []), noteRecentDocument: jest.fn(async () => {}), clearRecentDocuments: jest.fn(async () => {}),
+  subscribeToOpenRequests: jest.fn(async () => ({ remove: jest.fn() })),
+}));
 jest.mock("@legendapp/spark/ai", () => ({ ...jest.requireActual("@legendapp/spark/ai"), getAICommandAvailability: jest.fn(async () => ({ claude: true, codex: false, preferredTool: "claude" })) }));
 jest.mock("@legendapp/spark/ui/sidebar", () => {
   const React = jest.requireActual("react");
@@ -96,7 +103,7 @@ it("opens a repository, selects a native file row, stages and unstages it, and r
   const entry = { kind: "ordinary" as const, path: "both.txt", indexStatus: "M", worktreeStatus: "M" };
   const git = { resolveRoot: jest.fn(async () => "/repo"), watchLocations: jest.fn(async () => ({ root: "/repo", gitDir: "/repo/.git", commonDir: "/repo/.git", ignoredPaths: [] })),
     status: jest.fn(async () => ({ branch, entries: [entry] })), stageFile: jest.fn(async () => {}), unstageFile: jest.fn(async () => {}),
-    fileDiff: jest.fn(async () => ""), lastDiscard: jest.fn(async () => null), repoState: jest.fn(async () => ({ merging: false })), discardFiles: jest.fn(async () => {}), commit: jest.fn(async () => {}), headMessage: jest.fn(async () => "Last subject\nwrapped\n\nLast body") };
+    fileDiff: jest.fn(async () => ""), lastDiscard: jest.fn(async () => null), operationState: jest.fn(async () => null), discardFiles: jest.fn(async () => {}), commit: jest.fn(async () => {}), headMessage: jest.fn(async () => "Last subject\nwrapped\n\nLast body") };
   jest.mocked(getGitService).mockReturnValue(git as unknown as GitService);
   jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo/nested"] });
   let renderer!: ReactTestRenderer;
@@ -159,7 +166,7 @@ it("generates a commit message from the staged diff, shows progress, cancels on 
   const entry = { kind: "ordinary" as const, path: "app.ts", indexStatus: "M", worktreeStatus: "." };
   const stagedDiff = { files: [{ path: "app.ts", originalPath: null, binary: false, added: 1, deleted: 1 }], patch: "diff --git a/app.ts b/app.ts\n", truncated: false, omitted: [] };
   const git = { resolveRoot: jest.fn(async () => "/repo"), watchLocations: jest.fn(async () => ({ root: "/repo", gitDir: "/repo/.git", commonDir: "/repo/.git", ignoredPaths: [] })),
-    status: jest.fn(async () => ({ branch, entries: [entry] })), fileDiff: jest.fn(async () => ""), lastDiscard: jest.fn(async () => null), repoState: jest.fn(async () => ({ merging: false })),
+    status: jest.fn(async () => ({ branch, entries: [entry] })), fileDiff: jest.fn(async () => ""), lastDiscard: jest.fn(async () => null), operationState: jest.fn(async () => null),
     stagedDiff: jest.fn(async () => stagedDiff), commit: jest.fn(async () => {}) };
   jest.mocked(getGitService).mockReturnValue(git as unknown as GitService);
   jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
@@ -221,7 +228,7 @@ it("shows History from the sidebar and View menu, selects commits, and copies or
   jest.mocked(loadUnifiedDiff).mockReturnValue(new Promise(() => {}));
   const locations = { root: "/repo", gitDir: "/repo/.git", commonDir: "/repo/.git", ignoredPaths: [] };
   const git = { repoRoot: "/repo", resolveRoot: jest.fn(async () => "/repo"), watchLocations: jest.fn(async () => locations),
-    status: jest.fn(async () => ({ branch: { oid: head, head: "main", upstream: null, ahead: 0, behind: 0 }, entries: [] })), lastDiscard: jest.fn(async () => null), repoState: jest.fn(async () => ({ merging: false })),
+    status: jest.fn(async () => ({ branch: { oid: head, head: "main", upstream: null, ahead: 0, behind: 0 }, entries: [] })), lastDiscard: jest.fn(async () => null), operationState: jest.fn(async () => null),
     revParse: jest.fn(async () => head), refDecorations: jest.fn(async () => new Map([[head, [{ kind: "branch", name: "main" }, { kind: "tag", name: "v1.0" }]]])),
     remoteUrl: jest.fn(async () => "git@github.com:LegendApp/legend-apps.git"), currentBranch: jest.fn(async () => "main"),
     commitDetails: jest.fn(async (oid: string) => ({ oid, parents: oid === head ? [parent] : [], author: { name: "Ada", email: "ada@example.test", time: 1 }, committer: { name: "Ada", email: "ada@example.test", time: 1 }, message: oid === head ? "Second\n\nBody" : "First" })),
@@ -327,7 +334,7 @@ it("switches sections from the sidebar, the toolbar segment and the View menu, k
     { kind: "untracked" as const, path: "notes.txt", indexStatus: "?", worktreeStatus: "?" },
   ];
   const git = { repoRoot: "/repo", resolveRoot: jest.fn(async () => "/repo"), watchLocations: jest.fn(async () => ({ root: "/repo", gitDir: "/repo/.git", commonDir: "/repo/.git", ignoredPaths: [] })),
-    status: jest.fn(async () => ({ branch, entries })), fileDiff: jest.fn(async () => ""), lastDiscard: jest.fn(async () => null), repoState: jest.fn(async () => ({ merging: false })),
+    status: jest.fn(async () => ({ branch, entries })), fileDiff: jest.fn(async () => ""), lastDiscard: jest.fn(async () => null), operationState: jest.fn(async () => null),
     revParse: jest.fn(async () => head), refDecorations: jest.fn(async () => new Map()), remoteUrl: jest.fn(async () => null), currentBranch: jest.fn(async () => "main"),
     commitDetails: jest.fn(async (oid: string) => ({ oid, parents: [], author: { name: "Ada", email: "ada@example.test", time: 1 }, committer: { name: "Ada", email: "ada@example.test", time: 1 }, message: "Only" })),
     commitPatch: jest.fn(async () => "") };
@@ -423,7 +430,7 @@ it("computes each command's enabled state once for the menu bar, toolbar and con
 
   // With a repository, the toolbar Refresh and the menu's Refresh agree and run the same command.
   const git = { resolveRoot: jest.fn(async () => "/repo"), watchLocations: jest.fn(async () => ({ root: "/repo", gitDir: "/repo/.git", commonDir: "/repo/.git", ignoredPaths: [] })),
-    status: jest.fn(async () => ({ branch: { oid: "abc", head: "(detached)", upstream: null, ahead: 0, behind: 0 }, entries: [] })), lastDiscard: jest.fn(async () => null), repoState: jest.fn(async () => ({ merging: false })) };
+    status: jest.fn(async () => ({ branch: { oid: "abc", head: "(detached)", upstream: null, ahead: 0, behind: 0 }, entries: [] })), lastDiscard: jest.fn(async () => null), operationState: jest.fn(async () => null) };
   jest.mocked(getGitService).mockReturnValue(git as unknown as GitService);
   jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
   await act(async () => { openRepository(); });
@@ -463,7 +470,7 @@ it("blames a diff line into History, says when it is not committed, searches His
   const locations = { root: "/repo", gitDir: "/repo/.git", commonDir: "/repo/.git", ignoredPaths: [] };
   const git = { repoRoot: "/repo", resolveRoot: jest.fn(async () => "/repo"), watchLocations: jest.fn(async () => locations),
     status: jest.fn(async () => ({ branch: { oid: head, head: "main", upstream: null, ahead: 0, behind: 0 }, entries: [{ kind: "ordinary", path: "b.txt", indexStatus: ".", worktreeStatus: "M" }] })),
-    fileDiff: jest.fn(async () => patch), lastDiscard: jest.fn(async () => null), repoState: jest.fn(async () => ({ merging: false })),
+    fileDiff: jest.fn(async () => patch), lastDiscard: jest.fn(async () => null), operationState: jest.fn(async () => null),
     revParse: jest.fn(async () => head), refDecorations: jest.fn(async () => new Map()), remoteUrl: jest.fn(async () => null), currentBranch: jest.fn(async () => "main"),
     commitDetails: jest.fn(async (oid: string) => ({ oid, parents: oid === head ? [parent] : [], author: { name: "Ada", email: "a@x", time: 1 }, committer: { name: "Ada", email: "a@x", time: 1 }, message: oid === head ? "Second" : "First" })),
     commitPatch: jest.fn(async () => patch),
@@ -595,7 +602,7 @@ it("lists Branches, Remotes and Tags in the sidebar, scopes History to a ref, an
   };
   const { GitBranchNotMergedError } = jest.requireActual("@legend-apps/git-core");
   const git = { repoRoot: "/repo", resolveRoot: jest.fn(async () => "/repo"), watchLocations: jest.fn(async () => ({ root: "/repo", gitDir: "/repo/.git", commonDir: "/repo/.git", ignoredPaths: [] })),
-    status: jest.fn(async () => ({ branch: { oid: head, head: "main", upstream: null, ahead: 0, behind: 0 }, entries: [] })), lastDiscard: jest.fn(async () => null), repoState: jest.fn(async () => ({ merging: false })),
+    status: jest.fn(async () => ({ branch: { oid: head, head: "main", upstream: null, ahead: 0, behind: 0 }, entries: [] })), lastDiscard: jest.fn(async () => null), operationState: jest.fn(async () => null),
     revParse: jest.fn(async (ref: string) => ref === "HEAD" ? head : side), refDecorations: jest.fn(async () => new Map()), remoteUrl: jest.fn(async () => null), currentBranch: jest.fn(async () => "main"),
     commitDetails: jest.fn(async (oid: string) => ({ oid, parents: [], author: { name: "Ada", email: "a@x", time: 1 }, committer: { name: "Ada", email: "a@x", time: 1 }, message: "m" })),
     commitPatch: jest.fn(async () => "diff --git a/a.txt b/a.txt\n--- a/a.txt\n+++ b/a.txt\n@@ -1 +1 @@\n-a\n+b\n"),
@@ -737,7 +744,7 @@ it("has no branches and no New Branch on an unborn HEAD", async () => {
   jest.clearAllMocks();
   jest.mocked(watchDirectories).mockReturnValue({ remove: jest.fn() });
   const git = { resolveRoot: jest.fn(async () => "/repo"), watchLocations: jest.fn(async () => ({ root: "/repo", gitDir: "/repo/.git", commonDir: "/repo/.git", ignoredPaths: [] })),
-    status: jest.fn(async () => ({ branch: { oid: "(initial)", head: "main", upstream: null, ahead: 0, behind: 0 }, entries: [] })), lastDiscard: jest.fn(async () => null), repoState: jest.fn(async () => ({ merging: false })),
+    status: jest.fn(async () => ({ branch: { oid: "(initial)", head: "main", upstream: null, ahead: 0, behind: 0 }, entries: [] })), lastDiscard: jest.fn(async () => null), operationState: jest.fn(async () => null),
     listRefs: jest.fn(async () => ({ branches: [], remotes: [], tags: [] })), listStashes: jest.fn(async () => []), listWorktrees: jest.fn(async () => []) };
   jest.mocked(getGitService).mockReturnValue(git as unknown as GitService);
   jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
@@ -756,7 +763,7 @@ it("leaves a selected ref when another repository opens, without walking that re
   const head = "a".repeat(40);
   jest.mocked(openGitHistory).mockImplementation(async () => ({ head: { handle: 1, headOid: head, unborn: false, detached: false }, page: jest.fn(async (offset: number) => ({ offset, commits: [], done: true })), close: jest.fn() }));
   const service = (root: string) => ({ repoRoot: root, resolveRoot: jest.fn(async () => root), watchLocations: jest.fn(async () => ({ root, gitDir: `${root}/.git`, commonDir: `${root}/.git`, ignoredPaths: [] })),
-    status: jest.fn(async () => ({ branch: { oid: head, head: "main", upstream: null, ahead: 0, behind: 0 }, entries: [] })), lastDiscard: jest.fn(async () => null), repoState: jest.fn(async () => ({ merging: false })),
+    status: jest.fn(async () => ({ branch: { oid: head, head: "main", upstream: null, ahead: 0, behind: 0 }, entries: [] })), lastDiscard: jest.fn(async () => null), operationState: jest.fn(async () => null),
     revParse: jest.fn(async () => head), refDecorations: jest.fn(async () => new Map()), remoteUrl: jest.fn(async () => null), currentBranch: jest.fn(async () => "main"),
     listRefs: jest.fn(async () => ({ branches: [{ name: "main", ref: "refs/heads/main", oid: head, current: true, upstream: null, time: 1 }, { name: "only-in-a", ref: "refs/heads/only-in-a", oid: head, current: false, upstream: null, time: 1 }], remotes: [], tags: [] })), listStashes: jest.fn(async () => []), listWorktrees: jest.fn(async () => []) });
   const services = new Map([["/a", service("/a")], ["/b", service("/b")]]);
@@ -788,7 +795,7 @@ it("lists Stashes in the sidebar, previews one with Apply, Pop and Drop…, stas
   const { GitLocalChangesError } = jest.requireActual("@legend-apps/git-core");
   const entries = [{ kind: "ordinary" as const, path: "a.txt", indexStatus: ".", worktreeStatus: "M" }, { kind: "untracked" as const, path: "new.txt", indexStatus: "?", worktreeStatus: "?" }];
   const git = { repoRoot: "/repo", resolveRoot: jest.fn(async () => "/repo"), watchLocations: jest.fn(async () => ({ root: "/repo", gitDir: "/repo/.git", commonDir: "/repo/.git", ignoredPaths: [] })),
-    status: jest.fn(async () => ({ branch: { oid: head, head: "main", upstream: null, ahead: 0, behind: 0 }, entries })), lastDiscard: jest.fn(async () => null), repoState: jest.fn(async () => ({ merging: false })),
+    status: jest.fn(async () => ({ branch: { oid: head, head: "main", upstream: null, ahead: 0, behind: 0 }, entries })), lastDiscard: jest.fn(async () => null), operationState: jest.fn(async () => null),
     fileDiff: jest.fn(async () => ""),
     listRefs: jest.fn(async () => ({ branches: [{ name: "main", ref: "refs/heads/main", oid: head, current: true, upstream: null, time: 2 }, { name: "other", ref: "refs/heads/other", oid: head, current: false, upstream: null, time: 1 }], remotes: [], tags: [] })),
     listStashes: jest.fn(async () => stashes), listWorktrees: jest.fn(async () => []),
@@ -915,7 +922,7 @@ it("disables stashing on an unborn HEAD, with nothing to stash, and leaves out S
   let entries = [{ kind: "untracked" as const, path: "a.txt", indexStatus: "?", worktreeStatus: "?" }];
   let oid = "(initial)";
   const git = { repoRoot: "/repo", resolveRoot: jest.fn(async () => "/repo"), watchLocations: jest.fn(async () => ({ root: "/repo", gitDir: "/repo/.git", commonDir: "/repo/.git", ignoredPaths: [] })),
-    status: jest.fn(async () => ({ branch: { oid, head: "main", upstream: null, ahead: 0, behind: 0 }, entries })), lastDiscard: jest.fn(async () => null), repoState: jest.fn(async () => ({ merging: false })),
+    status: jest.fn(async () => ({ branch: { oid, head: "main", upstream: null, ahead: 0, behind: 0 }, entries })), lastDiscard: jest.fn(async () => null), operationState: jest.fn(async () => null),
     listRefs: jest.fn(async () => ({ branches: [], remotes: [], tags: [] })), listStashes: jest.fn(async () => []), listWorktrees: jest.fn(async () => []) };
   jest.mocked(getGitService).mockReturnValue(git as unknown as GitService);
   jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
@@ -943,7 +950,7 @@ describe("worktrees", () => {
   const patch = "diff --git a/dir/a.txt b/dir/a.txt\n--- a/dir/a.txt\n+++ b/dir/a.txt\n@@ -1 +1 @@\n-a\n+b\n";
   function service(root: string, worktrees: () => unknown[]) {
     return { repoRoot: root, resolveRoot: jest.fn(async () => root), watchLocations: jest.fn(async () => ({ root, gitDir: `${root}/.git`, commonDir: "/repo/.git", ignoredPaths: [] })),
-      status: jest.fn(async () => ({ branch: { oid: head, head: root === "/repo" ? "main" : "feature", upstream: null, ahead: 0, behind: 0 }, entries: [] })), lastDiscard: jest.fn(async () => null), repoState: jest.fn(async () => ({ merging: false })),
+      status: jest.fn(async () => ({ branch: { oid: head, head: root === "/repo" ? "main" : "feature", upstream: null, ahead: 0, behind: 0 }, entries: [] })), lastDiscard: jest.fn(async () => null), operationState: jest.fn(async () => null),
       fileDiff: jest.fn(async () => ""),
       listRefs: jest.fn(async () => ({ branches: [{ name: "main", ref: "refs/heads/main", oid: head, current: root === "/repo", upstream: null, time: 2 }, { name: "feature", ref: "refs/heads/feature", oid: other, current: root !== "/repo", upstream: null, time: 1 }], remotes: [], tags: [] })),
       listStashes: jest.fn(async () => []), listWorktrees: jest.fn(async () => worktrees()),
@@ -1134,7 +1141,7 @@ it("fetches, pulls and pushes from the Repository menu with ↓/↑ counts and p
   let branch = { oid: head, head: "main", upstream: "origin/main" as string | null, ahead: 1, behind: 2 };
   let fetchDone!: () => void;
   const git = { resolveRoot: jest.fn(async () => "/repo"), watchLocations: jest.fn(async () => ({ root: "/repo", gitDir: "/repo/.git", commonDir: "/repo/.git", ignoredPaths: [] })),
-    status: jest.fn(async () => ({ branch, entries: [] })), lastDiscard: jest.fn(async () => null), repoState: jest.fn(async () => ({ merging: false })),
+    status: jest.fn(async () => ({ branch, entries: [] })), lastDiscard: jest.fn(async () => null), operationState: jest.fn(async () => null),
     listRefs: jest.fn(async () => ({ branches: [{ name: branch.head, ref: `refs/heads/${branch.head}`, oid: head, current: true, upstream: branch.upstream, time: 1 }], remotes: [{ name: "origin", branches: [] }], tags: [] })),
     listStashes: jest.fn(async () => []), listWorktrees: jest.fn(async () => []),
     fetch: jest.fn((options: GitNetworkOptions) => new Promise<void>((resolve, reject) => {
@@ -1231,7 +1238,7 @@ it("lists the Review Queue, stages and commits in a queued worktree through its 
   const branch = (name: string, upstream: string | null, ahead = 0, current = false) => ({ name, ref: `refs/heads/${name}`, oid: head, current, upstream, time: 1, ahead, behind: 0, gone: false });
   const remoteBranch = (name: string) => ({ name: `origin/${name}`, ref: `refs/remotes/origin/${name}`, oid: head, remote: "origin", branch: name });
   const git = { repoRoot: "/repo", resolveRoot: jest.fn(async () => "/repo"), watchLocations: jest.fn(async () => ({ root: "/repo", gitDir: "/repo/.git", commonDir: "/repo/.git", ignoredPaths: [] })),
-    status: jest.fn(async () => ({ branch: { oid: head, head: "main", upstream: "origin/main", ahead: 0, behind: 0 }, entries: [] })), lastDiscard: jest.fn(async () => null), repoState: jest.fn(async () => ({ merging: false })),
+    status: jest.fn(async () => ({ branch: { oid: head, head: "main", upstream: "origin/main", ahead: 0, behind: 0 }, entries: [] })), lastDiscard: jest.fn(async () => null), operationState: jest.fn(async () => null),
     listRefs: jest.fn(async () => ({
       branches: [branch("main", "origin/main", 0, true), branch("feature", null), branch("clean", null), branch("fresh", null), branch("ahead", "origin/ahead", aheadBranch)],
       remotes: [{ name: "origin", branches: [remoteBranch("main"), remoteBranch("ahead")] }], tags: [], defaultBranch: "refs/remotes/origin/main",
@@ -1330,5 +1337,51 @@ it("lists the Review Queue, stages and commits in a queued worktree through its 
   expect(items().some(item => String(item.props.id).startsWith("review"))).toBe(false);
   expect(sidebar().props.selectedId).toBe("changes");
   expect(menuItem("show-review")).toMatchObject({ disabled: true });
+  await act(async () => { renderer.unmount(); });
+});
+
+it("lists recents in the empty window, opens Open Recent's requests, shows a paused merge in a state bar with Abort…, and offers another folder for a missing one", async () => {
+  jest.clearAllMocks();
+  jest.mocked(watchDirectories).mockReturnValue({ remove: jest.fn() });
+  const operation = { kind: "merge", branch: "main", target: "feature", commit: null, step: null, conflicts: 2, mergeHead: true };
+  const git = {
+    resolveRoot: jest.fn(async () => "/work/repo"), watchLocations: jest.fn(async () => ({ root: "/work/repo", gitDir: "/work/repo/.git", commonDir: "/work/repo/.git", ignoredPaths: [] })),
+    status: jest.fn(async () => ({ branch: { oid: "abc", head: "main", upstream: null, ahead: 0, behind: 0 }, entries: [] })), lastDiscard: jest.fn(async () => null),
+    operationState: jest.fn(async (): Promise<typeof operation | null> => operation), abortOperation: jest.fn(async () => {}),
+  };
+  const missing = { resolveRoot: jest.fn(async () => { throw new Error("cannot change to '/work/gone': No such file or directory"); }) };
+  jest.mocked(getGitService).mockImplementation(((path: string) => path === "/work/gone" ? missing : git) as never);
+  const menuItem = (id: string) => lastMenu().items.flatMap(entry => entry.items ?? []).find(entry => entry.id === id);
+  await recentRepositories.note("/work/gone");
+  let renderer!: ReactTestRenderer;
+  await act(async () => { renderer = create(<App />); });
+  const sidebarIds = () => renderer.root.findAllByType(SidebarItem).map(item => item.props.id);
+  expect(sidebarIds()[0]).toBe("repositories");
+  expect(sidebarIds()[1]).toBe("recent:/work/gone");
+  const openRequest = jest.mocked(subscribeToOpenRequests).mock.calls[0]![0];
+
+  // A folder that's gone (chosen from Open Recent): the sheet, and Choose Another… opens the folder panel.
+  jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "choose" });
+  await act(async () => { openRequest({ type: "file", id: "1", path: "/work/gone" }); });
+  expect(showMessage).toHaveBeenCalledWith(expect.objectContaining({ title: "“gone” isn’t in a Git repository.", buttons: [{ id: "choose", label: "Choose Another…" }, { id: "cancel", label: "Cancel" }] }));
+  expect(openFileDialog).toHaveBeenCalledWith(expect.objectContaining({ title: "Open Repository" }));
+
+  // Opening a repository puts it first; the merge shows above the lists with Abort… (after a warning) and Continue (disabled with conflicts).
+  jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/work/repo/src"] });
+  await act(async () => { openRepository(); });
+  await act(async () => { await recentRepositories.settled(); });
+  expect(recentRepositories.get().slice(0, 2)).toEqual(["/work/repo", "/work/gone"]);
+  expect(noteRecentDocument).toHaveBeenLastCalledWith("/work/repo");
+  const bar = renderer.root.findByType(StateBar);
+  expect(bar.props.text).toBe("Merging “feature” into “main” — 2 conflicts");
+  const [abort, resume] = bar.findAllByType(Button);
+  expect(resume!.props.disabled).toBe(true);
+  expect(menuItem("abort-operation")).toMatchObject({ label: "Abort Merge…", disabled: false });
+  jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "confirm" });
+  git.operationState.mockResolvedValue(null);
+  await act(async () => { abort!.props.onPress(); });
+  expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ title: "Abort the merge?" }));
+  expect(git.abortOperation).toHaveBeenCalledWith("merge", expect.anything());
+  expect(renderer.root.findAllByType(StateBar)).toHaveLength(0);
   await act(async () => { renderer.unmount(); });
 });

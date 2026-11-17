@@ -18,7 +18,11 @@ import { createStashPreview, emptyStashPreview, sidebarDate, stashLabel, type St
 import { setStringAsync } from "@legendapp/spark/clipboard";
 import { showContextMenu } from "@legendapp/spark/context-menu";
 import { openURL } from "@legendapp/spark/links";
+import { subscribeToOpenRequests } from "@legendapp/spark/app/documents";
 import { EmptyState } from "./EmptyState";
+import { StateBar } from "./StateBar";
+import { abortLabel, abortWarning, canContinue, operationText } from "./gitOperation";
+import { recentLabels, recentRepositories, useRecentRepositories } from "./gitRecents";
 import { FileRow, pathParts, useSymbolColor } from "./FileRow";
 import { CommitComposer, type CommitMessageGenerator } from "./CommitComposer";
 import { openFileDialog, showMessage, showPrompt } from "@legendapp/spark/dialogs";
@@ -61,6 +65,8 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
   const [network, setNetwork] = useState(emptyNetwork);
   const networkController = useRef<ReturnType<typeof createGitNetwork> | null>(null);
   const root = changes.root;
+  const recents = useRecentRepositories();
+  const operation = root ? changes.operation : null;
   const queue = useMemo(() => root ? reviewQueue(refs) : [], [root, refs]);
   const selectedQueue = queueEntry(queue, section);
   const queueWorktree = selectedQueue?.kind === "worktree" ? selectedQueue : null;
@@ -93,6 +99,16 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
       const result = await openFileDialog({ windowId, selection: "directories", multiple: false, title: "Open Repository" });
       if (!result.canceled && controller.current === owner) await owner?.open(result.paths[0]!);
     } catch (error) { console.error(error); }
+  }
+
+  /** Opens a recent repository in this window; a folder that's gone or no longer a repository gets the Not a Repository sheet. */
+  function openRecent(path: string) { void controller.current?.open(path); }
+
+  async function abortOperation() {
+    const current = operation, owner = controller.current;
+    if (!current || !owner) return;
+    const { title, message } = abortWarning(current);
+    if (await confirmDestructive(windowId, title, abortLabel(current.kind), message, true)) await owner.abortOperation(current.kind);
   }
 
   async function discardFile() {
@@ -400,8 +416,13 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     hasRemote: !!root && !!refs.refs?.remotes.length,
     network: root ? network.operation : null,
     queue,
+    recents,
+    operation,
     run: {
       openRepository: () => void chooseRepository(),
+      openRecent,
+      abortOperation: () => void abortOperation(),
+      continueOperation: () => { if (canContinue(operation)) void controller.current?.continueOperation(operation.kind); },
       toggleSidebar: () => setSidebarCollapsed(value => !value),
       showSection: setSection,
       refresh: () => { void controller.current?.refresh(); void historyController.current?.refresh(); },
@@ -456,12 +477,15 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     id: "legend-git",
     items: [
       { type: "submenu", id: "app", label: "Legend Git", target: { menu: "app" }, items: [] },
-      { type: "submenu", id: "file", label: "File", target: { menu: "file" }, items: [item("open-repository"), item("open-worktree")] },
+      { type: "submenu", id: "file", label: "File", target: { menu: "file" }, items: [
+        // AppKit's own Open Recent (filled from the system's recent documents) sits between these two.
+        item("open-repository"), item("open-worktree"),
+      ] },
       { type: "submenu", id: "edit", label: "Edit", target: { menu: "edit" }, items: [item("copy-sha"), { type: "separator" }, item("blame-line")] },
       // AppKit's own View ▸ Show/Hide Sidebar drives the split view, so the menu has no second one.
       { type: "submenu", id: "view", label: "View", target: { menu: "view" }, items: [item("show-changes"), item("show-history"), item("show-review"), { type: "separator" }, item("show-file-history"), item("show-all-history")] },
       { type: "submenu", id: "repository", label: "Repository", placement: { before: { menu: "window" } }, items: [item("fetch"), item("pull"), item("push"), item("cancel-network"), { type: "separator" }, item("refresh"), { type: "separator" }, item("open-github")] },
-      { type: "submenu", id: "branch", label: "Branch", placement: { before: { menu: "window" } }, items: [item("switch-branch"), item("new-branch"), { type: "separator" }, item("rename-branch"), item("delete-branch")] },
+      { type: "submenu", id: "branch", label: "Branch", placement: { before: { menu: "window" } }, items: [item("switch-branch"), item("new-branch"), { type: "separator" }, item("rename-branch"), item("delete-branch"), { type: "separator" }, item("abort-operation"), item("continue-operation")] },
       { type: "submenu", id: "worktree", label: "Worktree", placement: { before: { menu: "window" } }, items: [item("new-worktree"), item("open-review-worktree"), { type: "separator" }, item("reveal-worktree"), item("remove-worktree")] },
       {
         type: "submenu", id: "changes", label: "Changes", placement: { before: { menu: "window" } },
@@ -488,7 +512,21 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     worktreeController.current?.setRoot(root);
     networkController.current?.setRoot(root);
     if (!root) setSection("changes");
-  }, [root]);
+    // Worktree windows open from the main one, so only repositories opened by the user become recents.
+    if (root && !initialPath) void recentRepositories.note(root);
+  }, [root]); // eslint-disable-line react-hooks/exhaustive-deps -- initialPath is fixed per window
+  // Not a Repository (§5): a sheet offering another folder; the repository already open stays open.
+  useEffect(() => {
+    const failed = changes.openError;
+    if (!failed) return;
+    controller.current?.dismissOpenError();
+    const name = failed.path.replace(/\/+$/, "").split("/").pop() || failed.path;
+    void showMessage({
+      windowId, kind: "warning", title: `“${name}” isn’t in a Git repository.`,
+      message: `${failed.path}\n\n${failed.message.replace(/^(error|fatal): /gm, "").trim()}`,
+      buttons: [{ id: "choose", label: "Choose Another…" }, { id: "cancel", label: "Cancel" }], defaultButtonId: "choose", cancelButtonId: "cancel",
+    }).then(result => { if (result.buttonId === "choose") void chooseRepository(); }, console.error);
+  }, [changes.openError]); // eslint-disable-line react-hooks/exhaustive-deps -- once per failed open
   // Changes re-reads status on every ref or HEAD change its watcher sees; the refs follow it.
   useEffect(() => { if (changes.status) void refsController.current?.refresh(); }, [changes.status]);
   useEffect(() => { void stashController.current?.show(selectedStash); }, [selectedStash, root]);
@@ -736,12 +774,18 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
       networkController.current = null;
       closeMenuWindow(windowId);
       if (initialPath) openWorktreePaths.delete(initialPath);
-      for (const pending of [registration, closeRegistration, focusRegistration]) void pending.then(listener => listener.remove()).catch(console.error);
+      for (const pending of [registration, closeRegistration, focusRegistration, ...openRequests ? [openRequests] : []]) void pending.then(listener => listener.remove()).catch(console.error);
     };
     registerMenuRunner(windowId, itemId => { if (!disposed) runCommand(itemId, contextRef.current); });
     const closeRegistration = addWindowListener(windowId, "closed", close);
     const focusRegistration = addWindowListener(windowId, "focusChanged", event => { if (!disposed && event.focused) setMenuWindow(windowId); });
-    for (const pending of [registration, closeRegistration, focusRegistration]) void pending.catch(console.error);
+    // File ▸ Open Recent (AppKit's, filled from the system's recent documents) and folders opened from Finder arrive as
+    // open requests; the main window opens them, so a worktree window keeps its worktree.
+    const openRequests = windowId === mainWindowId ? subscribeToOpenRequests(event => {
+      if (disposed || event.type !== "file") return;
+      void owner.open(event.path);
+    }) : null;
+    for (const pending of [registration, closeRegistration, focusRegistration, ...openRequests ? [openRequests] : []]) void pending.catch(console.error);
     if (initialPath) { openWorktreePaths.add(initialPath); setMenuWindow(windowId); void owner.open(initialPath); }
     return close;
   }, []); // eslint-disable-line react-hooks/exhaustive-deps -- one window, one set of controllers
@@ -812,11 +856,12 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
       titleBar={{ content: { height: contentInset, material: "titlebar" } }}
       sidebar={
         <Sidebar style={styles.root} selectedId={root ? sidebarSection : null} onSelectionChange={event => {
-          if (event.id === "review") runCommand("show-review", contextRef.current);
+          if (event.id?.startsWith("recent:")) runCommand("open-recent", contextRef.current, event.id.slice(7));
+          else if (event.id === "review") runCommand("show-review", contextRef.current);
           else if (event.id === "changes" || event.id === "history" || event.id?.startsWith("ref:") || event.id?.startsWith("stash:") || event.id?.startsWith("worktree:") || event.id?.startsWith("review:")) setSection(event.id as Section);
         }} contentInsetTop={58}>
           <SidebarItem id="repositories" selectable={false}>
-            <Text style={styles.section}>{root?.split("/").pop() ?? "Repositories"}</Text>
+            <Text style={styles.section}>{root?.split("/").pop() ?? (recents.length ? "Recent" : "Repositories")}</Text>
           </SidebarItem>
           {root ? [
             <SidebarItem key="changes" id="changes"><SidebarRow symbol="square.and.pencil" label="Changes" count={changes.status?.entries.length} /></SidebarItem>,
@@ -825,7 +870,9 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
             ...refSidebarItems(refs.refs, ref => showRefMenu(ref)),
             ...stashSidebarItems(refs.stashes, showStashMenu),
             ...worktreeSidebarItems(refs.worktrees, root, showWorktreeMenu),
-          ] :
+          ] : recents.length ? recentLabels(recents).map((label, index) => <SidebarItem key={recents[index]} id={`recent:${recents[index]}`}>
+            <SidebarRow symbol="folder" label={label} />
+          </SidebarItem>) :
             <SidebarItem id="empty" selectable={false}><Text style={styles.sidebarNote}>No repository open</Text></SidebarItem>}
         </Sidebar>
       }
@@ -857,7 +904,12 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
       </> : undefined}
       content={
         <View style={styles.content}>
-          {changes.error ? <Text accessibilityRole="alert" selectable style={styles.error}>{changes.error}</Text> : null}
+          {/* The operation bar (merge, rebase, …) and Git's errors sit across the top of the detail. */}
+          {operation ? <StateBar tone="warning" text={operationText(operation)}>
+            <Button style={styles.barButton} disabled={!commandEnabled("abort-operation", context)} onPress={() => runCommand("abort-operation", contextRef.current)}>{operation.kind === "bisect" ? "Stop…" : "Abort…"}</Button>
+            {operation.kind !== "bisect" ? <Button style={styles.barButton} disabled={!commandEnabled("continue-operation", context)} onPress={() => runCommand("continue-operation", contextRef.current)}>Continue</Button> : null}
+          </StateBar> : null}
+          {changes.error ? <StateBar tone="error" text={changes.error} /> : null}
           {root ? <View style={styles.detail}>{showsHistory || queueBranch ? <CommitDetails history={history} actions={historyActions} /> : stashEntry ? stashDetail : worktreeEntry || queueWorktree ? worktreeDetailPane : changesDetail}</View>
             : changes.loading ? <EmptyState title="Opening Repository…" />
             : <EmptyState symbol="folder" title="No Repository Open" message="Open a Git repository to see its changes and commit them.">
@@ -1063,7 +1115,7 @@ const styles = StyleSheet.create({
   label: { flex: 1, fontSize: 13, color: PlatformColor("labelColor") },
   count: { fontSize: 12, color: PlatformColor("secondaryLabelColor"), fontVariant: ["tabular-nums"] },
   sidebarNote: { paddingHorizontal: 10, paddingVertical: 6, fontSize: 13, color: PlatformColor("secondaryLabelColor") },
-  error: { paddingHorizontal: 16, paddingVertical: 8, fontSize: 12, color: PlatformColor("systemRedColor") },
+  barButton: { width: 84, height: 24 },
 });
 
 export default App;

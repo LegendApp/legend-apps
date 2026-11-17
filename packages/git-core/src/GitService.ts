@@ -33,6 +33,23 @@ export type GitRepoState = {
   reverting: boolean;
   bisecting: boolean;
 };
+/** A merge, rebase, cherry-pick, revert or bisect that Git paused (see GitService.operationState). */
+export type GitOperationKind = "merge" | "rebase" | "cherry-pick" | "revert" | "bisect";
+/**
+ * `branch` is the branch the operation changes (null when detached); `target` names what is merged or rebased onto (a
+ * branch, remote branch or tag pointing at it, else an abbreviated commit id); `commit` is the commit picked or reverted;
+ * `step` is a rebase's position; `conflicts` counts conflicted paths. Bisect can't continue.
+ */
+export type GitOperation = {
+  kind: GitOperationKind;
+  branch: string | null;
+  target: string | null;
+  commit: { oid: string; subject: string } | null;
+  step: { current: number; total: number } | null;
+  conflicts: number;
+  /** MERGE_HEAD exists, so a commit concludes a merge (also inside a rebase that recreates merges). */
+  mergeHead: boolean;
+};
 export type GitErrorCode = "aborted" | "index-locked" | "command-failed" | "timed-out" | "output-truncated";
 /** One path's worktree state saved by a discard: its mode and blob, or `mode: null` when the path did not exist. */
 export type GitBackupEntry = { path: string; mode: "100644" | "100755" | "120000"; oid: string } | { path: string; mode: null; oid?: undefined };
@@ -159,6 +176,12 @@ printf '\\0'
 for name in index.lock MERGE_HEAD rebase-apply rebase-merge CHERRY_PICK_HEAD REVERT_HEAD BISECT_LOG; do
   if test -e "$1/$name"; then printf '%s\\0' "$name"; fi
 done`;
+
+// Prints "<name>\0<first line>\0" for each operation file present in the git dir.
+const operationProbe = `for name in rebase-merge/head-name rebase-merge/onto rebase-merge/msgnum rebase-merge/end rebase-apply/head-name rebase-apply/onto rebase-apply/next rebase-apply/last rebase-apply/applying MERGE_HEAD CHERRY_PICK_HEAD REVERT_HEAD BISECT_START; do
+  if test -f "$1/$name"; then printf '%s\\0' "$name"; head -n 1 "$1/$name" | tr -d '\\000\\n'; printf '\\0'; fi
+done`;
+const operationCommands: Record<Exclude<GitOperationKind, "bisect">, readonly string[]> = { merge: ["merge"], rebase: ["rebase"], "cherry-pick": ["cherry-pick"], revert: ["revert"] };
 
 const diffFormat = ["-c", "diff.suppressBlankEmpty=false", "-c", "diff.noprefix=false", "diff", "--no-ext-diff", "--no-textconv", "--no-color", "--unified=3", "--src-prefix=a/", "--dst-prefix=b/", "--ignore-submodules=none"];
 
@@ -806,6 +829,79 @@ export class GitService {
 
   repoState(options: GitReadOptions = {}) {
     return this.enqueue(options, (gitDir) => this.inspect(gitDir, options));
+  }
+
+  /** The operation Git has paused in this worktree, or null. */
+  operationState(options: GitReadOptions = {}) {
+    return this.enqueue(options, gitDir => this.readOperation(gitDir, options));
+  }
+
+  private async readOperation(gitDir: string, options: GitReadOptions): Promise<GitOperation | null> {
+    const fields = (await this.process("sh", ["-c", operationProbe, "legend-git-operation", gitDir], options)).split("\0");
+    const files = new Map<string, string>();
+    for (let index = 0; index + 1 < fields.length; index += 2) files.set(fields[index]!, fields[index + 1]!.trim());
+    const rebase = files.has("rebase-merge/head-name") ? "rebase-merge" : files.has("rebase-apply/head-name") && !files.has("rebase-apply/applying") ? "rebase-apply" : null;
+    const kind: GitOperationKind | null = rebase ? "rebase" : files.has("MERGE_HEAD") ? "merge" : files.has("CHERRY_PICK_HEAD") ? "cherry-pick"
+      : files.has("REVERT_HEAD") ? "revert" : files.has("BISECT_START") ? "bisect" : null;
+    if (!kind) return null;
+    const head = (await this.process("sh", ["-c", 'cat "$1/HEAD"', "legend-git-head", gitDir], options)).trim();
+    const short = (name: string) => name.replace(/^refs\/(heads|remotes|tags)\//, "");
+    let branch = head.startsWith("ref: refs/heads/") ? head.slice(16) : null;
+    let target: string | null = null, commit: GitOperation["commit"] = null, step: GitOperation["step"] = null;
+    if (rebase) {
+      const name = files.get(`${rebase}/head-name`)!;
+      branch = name.startsWith("refs/heads/") ? short(name) : null;
+      target = await this.nameCommit(files.get(`${rebase}/onto`) ?? "", options);
+      const [current, total] = rebase === "rebase-merge" ? [files.get("rebase-merge/msgnum"), files.get("rebase-merge/end")] : [files.get("rebase-apply/next"), files.get("rebase-apply/last")];
+      if (current && total && Number(total) > 0) step = { current: Number(current), total: Number(total) };
+    } else if (kind === "merge") {
+      target = await this.nameCommit(files.get("MERGE_HEAD")!, options);
+    } else if (kind === "bisect") {
+      // BISECT_START holds the branch (or commit) bisect started from.
+      const start = files.get("BISECT_START")!;
+      branch = start && !/^[0-9a-f]{40,64}$/.test(start) ? start : null;
+    } else {
+      const oid = files.get(kind === "revert" ? "REVERT_HEAD" : "CHERRY_PICK_HEAD")!;
+      const [abbreviated, subject = ""] = (await this.git(["log", "-1", "--format=%h%x00%s", "--end-of-options", oid], options, 10_000, undefined, [0, 128])).replace(/\n$/, "").split("\0");
+      commit = { oid: abbreviated || oid.slice(0, 7), subject };
+    }
+    const conflicts = new Set((await this.git(["ls-files", "-u", "-z"], options, 10_000)).split("\0").filter(Boolean).map(record => record.slice(record.indexOf("\t") + 1))).size;
+    return { kind, branch, target, commit, step, conflicts, mergeHead: files.has("MERGE_HEAD") };
+  }
+
+  /** A local branch, then a remote branch, then a tag pointing at `oid`; else its abbreviated id. */
+  private async nameCommit(oid: string, options: GitReadOptions) {
+    if (!/^[0-9a-f]{4,64}$/.test(oid)) return null;
+    const names = (await this.git(["for-each-ref", "--points-at", oid, "--format=%(refname)", "refs/heads", "refs/remotes", "refs/tags"], options, 10_000, undefined, [0, 129])).split("\n").filter(name => name && !name.endsWith("/HEAD"));
+    const name = ["refs/heads/", "refs/remotes/", "refs/tags/"].map(prefix => names.find(entry => entry.startsWith(prefix))).find(Boolean);
+    return name ? name.replace(/^refs\/(heads|remotes|tags)\//, "") : oid.slice(0, 7);
+  }
+
+  /**
+   * Aborts the paused operation (`git <op> --abort`, `git bisect reset`) as a queued write that refuses while index.lock
+   * exists. Rejects, changing nothing, when Git is no longer paused in `kind` (it ended or another one started).
+   */
+  abortOperation(kind: GitOperationKind, options: GitReadOptions = {}) {
+    return this.operationWrite(kind, kind === "bisect" ? ["bisect", "reset"] : [...operationCommands[kind], "--abort"], options);
+  }
+
+  /**
+   * Continues a merge, rebase, cherry-pick or revert (`git <op> --continue`) with Git's prepared messages; commit hooks run.
+   * Git refuses while conflicts are unresolved. Bisect has no continue.
+   */
+  continueOperation(kind: Exclude<GitOperationKind, "bisect">, options: GitReadOptions = {}) {
+    return this.operationWrite(kind, [...operationCommands[kind], "--continue"], options);
+  }
+
+  private operationWrite(kind: GitOperationKind, args: readonly string[], options: GitReadOptions) {
+    return this.enqueue(options, async (gitDir, commit) => {
+      await this.inspect(gitDir, options);
+      const current = await this.readOperation(gitDir, options);
+      if (current?.kind !== kind) throw new GitServiceError("command-failed", `There’s no ${kind} in progress.`, args);
+      commit();
+      // `true` as the editor keeps the message Git prepared; nothing waits on a terminal.
+      await this.git(args, { processEnv: { GIT_EDITOR: "true" } }, 600_000);
+    });
   }
 
   resolveRoot(options: GitReadOptions = {}) {

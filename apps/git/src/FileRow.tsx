@@ -4,8 +4,8 @@ import { SFSymbol } from "@legendapp/spark/ui/symbol";
 
 // SFSymbol needs concrete colors: Spark's native view aborts on a PlatformColor. These are the macOS system colors.
 const symbolColors = {
-  light: { orange: "#FF9500", green: "#28CD41", red: "#FF3B30", blue: "#007AFF", teal: "#30B0C7", purple: "#AF52DE", gray: "#8E8E93", secondary: "#00000080", tertiary: "#00000042" },
-  dark: { orange: "#FF9F0A", green: "#32D74B", red: "#FF453A", blue: "#0A84FF", teal: "#40C8E0", purple: "#BF5AF2", gray: "#98989D", secondary: "#FFFFFF8C", tertiary: "#FFFFFF40" },
+  light: { orange: "#FF9500", green: "#28CD41", red: "#FF3B30", blue: "#007AFF", teal: "#30B0C7", purple: "#AF52DE", yellow: "#FFCC00", gray: "#8E8E93", secondary: "#00000080", tertiary: "#00000042" },
+  dark: { orange: "#FF9F0A", green: "#32D74B", red: "#FF453A", blue: "#0A84FF", teal: "#40C8E0", purple: "#BF5AF2", yellow: "#FFD60A", gray: "#98989D", secondary: "#FFFFFF8C", tertiary: "#FFFFFF40" },
 };
 export type SymbolColor = keyof typeof symbolColors.light;
 export function useSymbolColor(name: SymbolColor) { return symbolColors[useColorScheme() === "dark" ? "dark" : "light"][name]; }

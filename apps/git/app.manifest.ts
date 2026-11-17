@@ -24,6 +24,7 @@ const manifest = {
       "@legendapp/spark/clipboard",
       "@legendapp/spark/context-menu",
       "@legendapp/spark/links",
+      "@legendapp/spark/app",
     ],
     ios: [],
     android: [],

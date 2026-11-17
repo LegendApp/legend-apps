@@ -1,4 +1,4 @@
-import { getGitService, watchGitRepo, type GitCommitInput, type GitDirectoryWatcher, type GitDiscardBackup, type GitService, type GitStatus, type GitStatusEntry } from "@legend-apps/git-core";
+import { getGitService, watchGitRepo, type GitCommitInput, type GitDirectoryWatcher, type GitDiscardBackup, type GitOperation, type GitOperationKind, type GitService, type GitStatus, type GitStatusEntry } from "@legend-apps/git-core";
 import { applyPatchSelection, discardPatchSelection, loadFilePatch, type FilePatch } from "./gitPatch";
 
 export type ChangesSection = "unstaged" | "staged";
@@ -9,8 +9,12 @@ export type ChangesState = {
   lastDiscard: GitDiscardBackup | null;
   /** A merge is in progress, so committing concludes it even when the index matches HEAD. */
   merging: boolean;
+  /** The merge, rebase, cherry-pick, revert or bisect Git has paused, if any. */
+  operation: GitOperation | null;
+  /** The folder the last Open couldn't open because it isn't in a Git repository (or is gone); the open repository stays. */
+  openError: { path: string; message: string } | null;
 };
-export const emptyChanges: ChangesState = { root: null, status: null, loading: false, writing: false, error: null, selection: null, patch: null, lastDiscard: null, merging: false };
+export const emptyChanges: ChangesState = { root: null, status: null, loading: false, writing: false, error: null, selection: null, patch: null, lastDiscard: null, merging: false, operation: null, openError: null };
 
 /** Conflicted files are listed once, with the unstaged changes, where staging the whole file marks them resolved. */
 export const unstagedEntries = (status: GitStatus | null) => status?.entries.filter(entry => entry.worktreeStatus !== ".") ?? [];
@@ -40,12 +44,13 @@ export function createGitChanges(onChange: (state: ChangesState) => void, watch:
   const refresh = async (git: GitService, controller: AbortController) => {
     if (!current(controller)) return;
     const run = ++generation;
-    const [status, lastDiscard, { merging }] = await Promise.all([git.status({ signal: controller.signal }), git.lastDiscard({ signal: controller.signal }), git.repoState({ signal: controller.signal })]);
+    const [status, lastDiscard, operation] = await Promise.all([git.status({ signal: controller.signal }), git.lastDiscard({ signal: controller.signal }), git.operationState({ signal: controller.signal })]);
+    const merging = !!operation?.mergeHead;
     const selection = state.selection;
     const entry = selectedEntry(status, selection);
     const conflicted = entry?.kind === "unmerged";
     const patch = entry && selection ? { ...selection, conflicted, ...conflicted ? { text: "", file: null } : await loadFilePatch(git, entry, selection.section === "staged", controller.signal) } : null;
-    if (current(controller) && run === generation && selection === state.selection) publish({ status, lastDiscard, merging, error: null, patch, selection: entry ? selection : null });
+    if (current(controller) && run === generation && selection === state.selection) publish({ status, lastDiscard, merging, operation, error: null, patch, selection: entry ? selection : null });
   };
   /** Runs one write, then re-reads status; resolves true when the write succeeded. */
   const write = async (operation: (git: GitService, signal: AbortSignal) => Promise<unknown>) => {
@@ -71,15 +76,25 @@ export function createGitChanges(onChange: (state: ChangesState) => void, watch:
     if (patch.text !== expectedText) { publish({ error: "The diff changed. Review it and select the lines again." }); return null; }
     return patch;
   };
+  let opening: AbortController | undefined;
   return {
+    /** Opens the repository containing `path`; when there's none, sets `openError` and keeps the open repository. */
     async open(path: string) {
-      cancel();
       if (closed) return;
+      opening?.abort();
+      const attempt = opening = new AbortController();
+      let root: string;
+      try {
+        root = await serviceFor(path).resolveRoot({ signal: attempt.signal });
+      } catch (error) {
+        if (!closed && opening === attempt) publish({ openError: { path, message: error instanceof Error ? error.message : String(error) } });
+        return;
+      }
+      if (closed || opening !== attempt) return;
+      cancel();
       const controller = active = new AbortController();
       publish({ ...emptyChanges, loading: true });
       try {
-        const root = await serviceFor(path).resolveRoot({ signal: controller.signal });
-        if (!current(controller)) return;
         const git = service = serviceFor(root);
         const locations = await git.watchLocations({ signal: controller.signal });
         if (!current(controller)) return;
@@ -117,6 +132,14 @@ export function createGitChanges(onChange: (state: ChangesState) => void, watch:
       const ref = state.lastDiscard?.ref;
       return ref ? write((git, signal) => git.restoreDiscard(ref, { signal })) : Promise.resolve(false);
     },
+    dismissOpenError() { if (state.openError) publish({ openError: null }); },
+    /** Aborts (`git <op> --abort`, `git bisect reset`) or continues the paused operation; Git's refusal shows as the error. */
+    abortOperation(kind: GitOperationKind) {
+      return write((git, signal) => git.abortOperation(kind, { signal }));
+    },
+    continueOperation(kind: Exclude<GitOperationKind, "bisect">) {
+      return write((git, signal) => git.continueOperation(kind, { signal }));
+    },
     commit(input: GitCommitInput) {
       return write((git, signal) => git.commit(input, { signal }));
     },
@@ -140,6 +163,6 @@ export function createGitChanges(onChange: (state: ChangesState) => void, watch:
       const git = service, controller = active;
       if (git && controller) try { await refresh(git, controller); } catch (error) { report(error, controller); }
     },
-    dispose() { closed = true; cancel(); },
+    dispose() { closed = true; opening?.abort(); cancel(); },
   };
 }

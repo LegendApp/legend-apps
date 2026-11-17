@@ -1,4 +1,5 @@
-import type { GitRefList, GitStash } from "@legend-apps/git-core";
+import type { GitOperation, GitRefList, GitStash } from "@legend-apps/git-core";
+import { abortLabel, canContinue, continueLabel } from "./gitOperation";
 import { searchScopes, type SearchScope } from "./gitHistory";
 import { findRef, type WorktreeEntry } from "./gitRefs";
 import { networkVerb, type NetworkOperation } from "./gitNetwork";
@@ -70,8 +71,16 @@ export type CommandContext = {
   network: NetworkOperation | null;
   /** The Review Queue: other worktrees with changes and branches with commits to push. */
   queue: readonly QueueEntry[];
+  /** Recently opened repositories, newest first. */
+  recents: readonly string[];
+  /** The merge, rebase, cherry-pick, revert or bisect Git has paused. */
+  operation: GitOperation | null;
   run: {
     openRepository(): void;
+    openRecent(path: string): void;
+    /** Asks first. */
+    abortOperation(): void;
+    continueOperation(): void;
     toggleSidebar(): void;
     showSection(section: Section): void;
     refresh(): void;
@@ -154,6 +163,15 @@ const canStash = (context: CommandContext) => canWriteBranch(context) && context
 
 export const commands = [
   { id: "open-repository", label: "Open Repository…", shortcut: "Cmd+o", enabled: () => true, run: context => context.run.openRepository() },
+  { id: "open-recent", label: "Open Recent", enabled: (context, target) => !!target && context.recents.includes(target), run: (context, target) => context.run.openRecent(target!) },
+  {
+    id: "abort-operation", label: context => context.operation ? `${abortLabel(context.operation.kind)}…` : "Abort Operation…",
+    enabled: context => context.hasRepository && !context.busy && !!context.operation, run: context => context.run.abortOperation(),
+  },
+  {
+    id: "continue-operation", label: context => context.operation && context.operation.kind !== "bisect" ? continueLabel(context.operation.kind) : "Continue Operation",
+    enabled: context => context.hasRepository && !context.busy && canContinue(context.operation), run: context => context.run.continueOperation(),
+  },
   { id: "toggle-sidebar", label: context => context.sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar", shortcut: "Cmd+Ctrl+s", enabled: () => true, run: context => context.run.toggleSidebar() },
   { id: "show-changes", label: "Changes", shortcut: "Cmd+1", enabled: context => context.hasRepository, run: context => context.run.showSection("changes") },
   { id: "show-history", label: "History", shortcut: "Cmd+2", enabled: context => context.hasRepository, run: context => context.run.showSection("history") },

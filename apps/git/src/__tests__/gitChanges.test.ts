@@ -1,4 +1,4 @@
-import { GitIndexLockedError, GitServiceError, type GitCommitInput, type GitDiscardBackup, type GitService, type GitStatus, type GitReadOptions, type GitDirectoryChangeEvent } from "@legend-apps/git-core";
+import { GitIndexLockedError, GitServiceError, type GitCommitInput, type GitDiscardBackup, type GitOperation, type GitService, type GitStatus, type GitReadOptions, type GitDirectoryChangeEvent } from "@legend-apps/git-core";
 import { conflictedEntries, createGitChanges, stagedEntries, unstagedEntries, type ChangesState } from "../gitChanges";
 
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done; }); return { promise, resolve }; }
@@ -14,7 +14,7 @@ function setup() {
     watchLocations: jest.fn(async () => ({ root: "/repo", gitDir: "/repo/.git/worktrees/linked", commonDir: "/repo/.git", ignoredPaths: ["ignored/"] })),
     status: jest.fn(async () => status()), stageFile: jest.fn(async () => {}), unstageFile: jest.fn(async () => {}),
     fileDiff: jest.fn(async (_file: { path: string }, staged: boolean) => staged ? stagedPatch : unstagedPatch), applyPatch: jest.fn(async (_patch: string, _options: GitReadOptions & { reverse?: boolean }) => {}),
-    repoState: jest.fn(async (_options?: GitReadOptions) => ({ merging: false })),
+    operationState: jest.fn(async (_options?: GitReadOptions) => null as GitOperation | null),
     lastDiscard: jest.fn(async (_options?: GitReadOptions): Promise<GitDiscardBackup | null> => null),
     discardFiles: jest.fn(async (_paths: readonly string[], _options?: GitReadOptions) => backup), discardPatch: jest.fn(async (_path: string, _patch: string, _options?: GitReadOptions) => backup),
     restoreDiscard: jest.fn(async (_ref: string, _options?: GitReadOptions) => ({ restored: backup, replaced: backup })),
@@ -76,8 +76,13 @@ it("does not publish a late write or read after switching repositories, and prev
 
 it("reports invalid selections and index.lock errors while preserving the latest list", async () => {
   const t = setup(); t.git.resolveRoot.mockRejectedValueOnce(new Error("Not a repository"));
-  await t.controller.open("/invalid"); expect(t.state()).toMatchObject({ root: null, loading: false, error: "Not a repository" });
+  await t.controller.open("/invalid"); expect(t.state()).toMatchObject({ root: null, loading: false, error: null, openError: { path: "/invalid", message: "Not a repository" } });
+  t.controller.dismissOpenError(); expect(t.state().openError).toBeNull();
   await t.controller.open("/repo");
+  // A folder outside any repository leaves the open one as it was.
+  t.git.resolveRoot.mockRejectedValueOnce(new Error("Not a repository"));
+  await t.controller.open("/gone"); expect(t.state()).toMatchObject({ root: "/repo", openError: { path: "/gone" } });
+  expect(t.state().status).not.toBeNull();
   t.git.stageFile.mockRejectedValueOnce(new GitIndexLockedError("/repo/.git/index.lock"));
   await t.controller.changeFile("both.txt", true);
   expect(t.state()).toMatchObject({ writing: false, status: status(), error: expect.stringContaining("index is locked") });
