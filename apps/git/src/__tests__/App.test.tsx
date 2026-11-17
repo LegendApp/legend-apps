@@ -6,7 +6,8 @@ import { openFileDialog, showMessage, showPrompt } from "@legendapp/spark/dialog
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { SidebarSplitView } from "@legendapp/spark/ui/split-view";
 import { addWindowListener, setWindowOptions } from "@legendapp/spark/windows";
-import { addMacOSWindowListener } from "@legendapp/spark/windows/macos";
+import { addMacOSWindowListener, setToolbarItemText } from "@legendapp/spark/windows/macos";
+import { GitPullDivergedError, GitPushRejectedError, GitServiceError, type GitNetworkOptions } from "@legend-apps/git-core";
 import { Switch, Text, TextInput } from "react-native";
 import { useMenu } from "@legendapp/spark/menus";
 import { runCommand } from "@legendapp/spark/processes";
@@ -55,6 +56,7 @@ jest.mock("@legendapp/spark/windows", () => ({ setWindowOptions: jest.fn(async (
 jest.mock("../gitWindows", () => ({ ...jest.requireActual("../gitWindows"), openWorktreeWindow: jest.fn(async () => ({})) }));
 jest.mock("@legendapp/spark/windows/macos", () => ({
   addMacOSWindowListener: jest.fn(async () => ({ remove: jest.fn(async () => {}) })),
+  setToolbarItemText: jest.fn(async () => {}),
 }));
 
 const lastMenu = () => jest.mocked(useMenu).mock.calls.at(-1)![0] as unknown as { items: any[]; onAction: (action: { itemId: string }) => void };
@@ -1123,4 +1125,91 @@ describe("worktrees", () => {
     expect(services.get("/repo")!.status.mock.calls.length).toBeGreaterThan(mainStatus + 1);
     await act(async () => { worktreeWindow.unmount(); mainWindow.unmount(); });
   });
+});
+
+it("fetches, pulls and pushes from the Repository menu with ↓/↑ counts and progress in the toolbar, reports Git's refusals and publishes a new branch", async () => {
+  jest.clearAllMocks();
+  jest.mocked(watchDirectories).mockReturnValue({ remove: jest.fn() });
+  const head = "a".repeat(40);
+  let branch = { oid: head, head: "main", upstream: "origin/main" as string | null, ahead: 1, behind: 2 };
+  let fetchDone!: () => void;
+  const git = { resolveRoot: jest.fn(async () => "/repo"), watchLocations: jest.fn(async () => ({ root: "/repo", gitDir: "/repo/.git", commonDir: "/repo/.git", ignoredPaths: [] })),
+    status: jest.fn(async () => ({ branch, entries: [] })), lastDiscard: jest.fn(async () => null), repoState: jest.fn(async () => ({ merging: false })),
+    listRefs: jest.fn(async () => ({ branches: [{ name: branch.head, ref: `refs/heads/${branch.head}`, oid: head, current: true, upstream: branch.upstream, time: 1 }], remotes: [{ name: "origin", branches: [] }], tags: [] })),
+    listStashes: jest.fn(async () => []), listWorktrees: jest.fn(async () => []),
+    fetch: jest.fn((options: GitNetworkOptions) => new Promise<void>((resolve, reject) => {
+      fetchDone = resolve;
+      options.signal?.addEventListener("abort", () => reject(new GitServiceError("aborted", "Git operation was cancelled.")));
+      options.onProgress?.({ phase: "Receiving objects", percent: 45 });
+    })),
+    // Git's hints, including its bare "hint:" spacer lines, are left out of the sheet.
+    pull: jest.fn(async () => { throw new GitPullDivergedError("hint: Diverging branches can't be fast-forwarded.\nhint:\nhint:\nfatal: Not possible to fast-forward, aborting."); }),
+    push: jest.fn(async (_options: GitNetworkOptions & { setUpstream?: string }): Promise<void> => { throw new GitPushRejectedError("To /remote.git\n ! [rejected]        main -> main (fetch first)\nerror: failed to push some refs to '/remote.git'\nhint: Updates were rejected"); }),
+    publishRemote: jest.fn(async () => "origin") };
+  jest.mocked(getGitService).mockReturnValue(git as unknown as GitService);
+  jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
+  let renderer!: ReactTestRenderer;
+  await act(async () => { renderer = create(<App />); });
+  await act(async () => { openRepository(); });
+  const menuItem = (id: string) => lastMenu().items.flatMap(entry => entry.items ?? []).find(entry => entry.id === id);
+  const toolbarItems = () => jest.mocked(setWindowOptions).mock.calls.filter(call => call[1].macos?.toolbar).at(-1)![1].macos!.toolbar!.items! as any[];
+  const repository = lastMenu().items.find(entry => entry.id === "repository").items.map((entry: any) => entry.id ?? "-");
+  expect(repository).toEqual(["fetch", "pull", "push", "cancel-network", "-", "refresh", "-", "open-github"]);
+  expect(menuItem("fetch")).toMatchObject({ label: "Fetch", shortcut: "Cmd+Alt+f", disabled: false });
+  expect(menuItem("pull")).toMatchObject({ label: "Pull", shortcut: "Cmd+Shift+Down", disabled: false });
+  expect(menuItem("push")).toMatchObject({ label: "Push", shortcut: "Cmd+Shift+Up", disabled: false });
+  expect(menuItem("cancel-network")).toMatchObject({ disabled: true });
+  // The pinned Spark's disabled toolbar buttons still act enabled, so Fetch/Pull/Push have no toolbar buttons; the counts do.
+  expect(toolbarItems().map(entry => entry.id)).not.toContain("fetch");
+  expect(toolbarItems().find(entry => entry.id === "ahead-behind")).toMatchObject({ type: "label", text: "↓2 ↑1" });
+
+  // Fetch: one at a time, progress in the toolbar label, Stop cancels without an alert.
+  await act(async () => { lastMenu().onAction({ itemId: "fetch" }); });
+  expect(git.fetch).toHaveBeenCalledWith(expect.objectContaining({ prune: true }));
+  expect(toolbarItems().find(entry => entry.id === "network-progress")).toMatchObject({ type: "label", text: "Receiving objects 45%" });
+  expect(setToolbarItemText).toHaveBeenLastCalledWith("main", "network-progress", "Receiving objects 45%");
+  for (const id of ["fetch", "pull", "push"]) expect(menuItem(id)).toMatchObject({ disabled: true });
+  expect(menuItem("cancel-network")).toMatchObject({ label: "Stop Fetching", disabled: false });
+  await act(async () => { lastMenu().onAction({ itemId: "fetch" }); });
+  expect(git.fetch).toHaveBeenCalledTimes(1);
+  const reads = git.status.mock.calls.length;
+  branch = { ...branch, behind: 3 };
+  await act(async () => { fetchDone(); });
+  expect(git.status.mock.calls.length).toBeGreaterThan(reads);
+  expect(toolbarItems().find(entry => entry.id === "ahead-behind")).toMatchObject({ text: "↓3 ↑1" });
+  expect(toolbarItems().some(entry => entry.id === "network-progress")).toBe(false);
+  await act(async () => { lastMenu().onAction({ itemId: "fetch" }); });
+  await act(async () => { lastMenu().onAction({ itemId: "cancel-network" }); });
+  expect(showMessage).not.toHaveBeenCalled();
+  expect(menuItem("fetch")).toMatchObject({ disabled: false });
+
+  // A diverged pull and a rejected push say why, without Git's hints.
+  await act(async () => { lastMenu().onAction({ itemId: "pull" }); });
+  expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "warning", title: "Couldn’t Pull", message: expect.stringMatching(/^Not possible to fast-forward, aborting\.\n\n“main” and “origin\/main” both have new commits/) }));
+  await act(async () => { lastMenu().onAction({ itemId: "push" }); });
+  const rejected = jest.mocked(showMessage).mock.calls.at(-1)![0] as { title: string; message: string };
+  expect(rejected.title).toBe("“origin/main” Has Commits You Don’t Have");
+  expect(rejected.message).toMatch(/^Pull first, then push again\.\n\nTo \/remote\.git\n ! \[rejected\]/);
+  expect(rejected.message).not.toMatch(/hint:/);
+
+  // A branch without an upstream is published after a sheet naming the remote; Cancel leaves it unpublished.
+  branch = { ...branch, head: "topic", upstream: null, ahead: 0, behind: 0 };
+  await act(async () => { lastMenu().onAction({ itemId: "refresh" }); });
+  expect(menuItem("push")).toMatchObject({ label: "Publish Branch…", disabled: false });
+  expect(menuItem("pull")).toMatchObject({ disabled: true });
+  expect(toolbarItems().some(entry => entry.id === "ahead-behind")).toBe(false);
+  git.push.mockClear();
+  jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "cancel" });
+  await act(async () => { lastMenu().onAction({ itemId: "push" }); });
+  expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "info", title: "Publish “topic” to “origin”?", defaultButtonId: "publish" }));
+  expect(git.push).not.toHaveBeenCalled();
+  git.push.mockResolvedValueOnce(undefined);
+  jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "publish" });
+  await act(async () => { lastMenu().onAction({ itemId: "push" }); });
+  expect(git.push).toHaveBeenCalledWith(expect.objectContaining({ setUpstream: "origin" }));
+  // No remote to publish to.
+  git.publishRemote.mockResolvedValueOnce(null as unknown as string);
+  await act(async () => { lastMenu().onAction({ itemId: "push" }); });
+  expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ title: "There’s No Remote to Publish To" }));
+  await act(async () => { renderer.unmount(); });
 });

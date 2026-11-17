@@ -1,6 +1,7 @@
 import type { GitRefList, GitStash } from "@legend-apps/git-core";
 import { searchScopes, type SearchScope } from "./gitHistory";
 import { findRef, type WorktreeEntry } from "./gitRefs";
+import { networkVerb, type NetworkOperation } from "./gitNetwork";
 
 /** A sidebar item: Changes, History, a branch, remote branch or tag by its full ref name, a stash by its oid, or a worktree by its path. */
 export type Section = "changes" | "history" | `ref:${string}` | `stash:${string}` | `worktree:${string}`;
@@ -49,6 +50,14 @@ export type CommandContext = {
   worktrees: WorktreeEntry[] | null;
   /** The path of the worktree this window shows. */
   root: string | null;
+  /** The checked-out branch; null when detached or not read yet. */
+  currentBranch: string | null;
+  /** The current branch's upstream ("origin/main"), or null. */
+  upstream: string | null;
+  /** The repository has at least one remote. */
+  hasRemote: boolean;
+  /** The running fetch, pull or push. */
+  network: NetworkOperation | null;
   run: {
     openRepository(): void;
     toggleSidebar(): void;
@@ -82,6 +91,11 @@ export type CommandContext = {
     newWorktree(): void;
     removeWorktree(path: string): void;
     revealInFinder(path: string): void;
+    fetch(): void;
+    pull(): void;
+    /** Pushes, or publishes a branch without an upstream. */
+    push(): void;
+    cancelNetwork(): void;
   };
 };
 
@@ -126,6 +140,18 @@ export const commands = [
   { id: "toggle-sidebar", label: context => context.sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar", shortcut: "Cmd+Ctrl+s", enabled: () => true, run: context => context.run.toggleSidebar() },
   { id: "show-changes", label: "Changes", shortcut: "Cmd+1", enabled: context => context.hasRepository, run: context => context.run.showSection("changes") },
   { id: "show-history", label: "History", shortcut: "Cmd+2", enabled: context => context.hasRepository, run: context => context.run.showSection("history") },
+  { id: "fetch", label: "Fetch", shortcut: "Cmd+Alt+f", enabled: context => context.hasRepository && context.hasRemote && !context.network, run: context => context.run.fetch() },
+  // Pull fast-forwards the worktree, so it waits for branch writes like a checkout.
+  { id: "pull", label: "Pull", shortcut: "Cmd+Shift+Down", enabled: context => canWriteBranch(context) && !!context.upstream && !context.network, run: context => context.run.pull() },
+  {
+    id: "push", label: context => context.upstream || !context.currentBranch ? "Push" : "Publish Branch…", shortcut: "Cmd+Shift+Up",
+    enabled: context => context.hasRepository && !context.unborn && !!context.currentBranch && (!!context.upstream || context.hasRemote) && !context.network,
+    run: context => context.run.push(),
+  },
+  {
+    id: "cancel-network", label: context => context.network ? `Stop ${networkVerb(context.network)}` : "Stop", shortcut: "Cmd+.",
+    enabled: context => !!context.network, run: context => context.run.cancelNetwork(),
+  },
   { id: "refresh", label: "Refresh", shortcut: "Cmd+r", enabled: context => context.hasRepository, run: context => context.run.refresh() },
   { id: "copy-sha", label: "Copy SHA", shortcut: "Cmd+Shift+c", enabled: (context, target) => !!commit(context, target), run: (context, target) => context.run.copySha(commit(context, target)!) },
   {

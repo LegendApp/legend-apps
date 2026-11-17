@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { PlatformColor, StyleSheet, Text, View } from "react-native";
 import { watchDirectories } from "@legend-apps/file-system-watcher";
-import { GitBranchNotMergedError, GitLocalChangesError, GitStashDropError, type GitRefList, type GitStash, type GitStatusEntry } from "@legend-apps/git-core";
+import { GitBranchNotMergedError, GitLocalChangesError, GitPullDivergedError, GitPushRejectedError, GitServiceError, GitStashDropError, type GitRefList, type GitStash, type GitStatusEntry } from "@legend-apps/git-core";
 import { Button } from "@legendapp/spark/ui";
 import { conflictedEntries, createGitChanges, emptyChanges, stagedEntries, unstagedEntries } from "./gitChanges";
 import { DiffPane, type DiffLineTarget } from "./DiffPane";
@@ -12,6 +12,7 @@ import { createWorktreePreview, emptyWorktreePreview, worktreeDetail, worktreeNa
 import { closeMenuWindow, mainWindowId, registerMenuRunner, runMenuAction, useMenuBar, openWorktreePaths, openWorktreeWindow, publishMenu, setMenuWindow, type GitWindowProps } from "./gitWindows";
 import { runCommand as runProcess } from "@legendapp/spark/processes";
 import { commitGitHubUrl, createGitHistory, emptyHistory, searchScopes, type SearchScope } from "./gitHistory";
+import { createGitNetwork, emptyNetwork, networkStatusText, networkVerb, type NetworkOperation } from "./gitNetwork";
 import { createStashPreview, emptyStashPreview, sidebarDate, stashLabel, type StashPreviewState } from "./gitStashes";
 import { setStringAsync } from "@legendapp/spark/clipboard";
 import { showContextMenu } from "@legendapp/spark/context-menu";
@@ -25,7 +26,7 @@ import { Sidebar, SidebarItem } from "@legendapp/spark/ui/sidebar";
 import { SFSymbol } from "@legendapp/spark/ui/symbol";
 import { SidebarSplitView } from "@legendapp/spark/ui/split-view";
 import { addWindowListener, setWindowOptions } from "@legendapp/spark/windows";
-import { addMacOSWindowListener, type MacOSToolbarItem } from "@legendapp/spark/windows/macos";
+import { addMacOSWindowListener, setToolbarItemText, type MacOSToolbarItem } from "@legendapp/spark/windows/macos";
 
 const contentInset = 52;
 
@@ -56,6 +57,8 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
   const stashController = useRef<ReturnType<typeof createStashPreview> | null>(null);
   const [worktreePreview, setWorktreePreview] = useState(emptyWorktreePreview);
   const worktreeController = useRef<ReturnType<typeof createWorktreePreview> | null>(null);
+  const [network, setNetwork] = useState(emptyNetwork);
+  const networkController = useRef<ReturnType<typeof createGitNetwork> | null>(null);
   const root = changes.root;
   const showsHistory = sectionShowsHistory(section);
   const selectedStash = sectionStash(section);
@@ -295,6 +298,36 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     }
   }
 
+  /** Runs a fetch, pull or push; Git's message goes in a warning sheet, a cancelled one says nothing. Changes and History re-read after. */
+  async function runNetwork(operation: NetworkOperation, start: (owner: ReturnType<typeof createGitNetwork>) => Promise<void>) {
+    const owner = networkController.current;
+    if (!owner) return;
+    const branch = changes.status?.branch;
+    try {
+      await start(owner);
+    } catch (error) {
+      if (error instanceof GitServiceError && error.code === "aborted") return;
+      const text = (error instanceof Error ? error.message : String(error)).replace(/^hint:.*(?:\n|$)/gm, "").trim();
+      if (error instanceof GitPushRejectedError) await reportBranchError(`“${branch?.upstream ?? "The remote"}” Has Commits You Don’t Have`, `Pull first, then push again.\n\n${text}`);
+      else if (error instanceof GitPullDivergedError) {
+        await reportBranchError("Couldn’t Pull", `${text}\n\n“${branch?.head}” and “${branch?.upstream}” both have new commits. Legend Git pulls only by fast-forward for now; merge or rebase the branch in Terminal.`);
+      } else await reportBranchError({ fetch: "Couldn’t Fetch", pull: "Couldn’t Pull", push: "Couldn’t Push", publish: "Couldn’t Publish the Branch" }[operation], text);
+    } finally {
+      if (networkController.current === owner) { void controller.current?.refresh(); void historyController.current?.refresh(); }
+    }
+  }
+
+  /** Pushes; a branch without an upstream is published to the default remote after a sheet naming it. */
+  async function push() {
+    const owner = networkController.current, branch = changes.status?.branch;
+    if (!owner || !branch?.head) return;
+    if (branch.upstream) { await runNetwork("push", current => current.push()); return; }
+    const remote = await owner.publishRemote().catch((error: unknown) => { console.error(error); return null; });
+    if (!remote) { await reportBranchError("There’s No Remote to Publish To", "Add a remote to the repository (git remote add), then publish the branch."); return; }
+    if (networkController.current !== owner || !await confirmPublish(windowId, branch.head, remote)) return;
+    await runNetwork("publish", current => current.publish(remote));
+  }
+
   const currentBranch = refs.refs?.branches.find(branch => branch.current)?.name ?? null;
   const context: CommandContext = {
     hasRepository: !!root,
@@ -323,6 +356,10 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     hasChanges: !!changes.status?.entries.length,
     worktrees: root ? refs.worktrees : null,
     root,
+    currentBranch: root ? currentBranch : null,
+    upstream: root ? changes.status?.branch.upstream ?? null : null,
+    hasRemote: !!root && !!refs.refs?.remotes.length,
+    network: root ? network.operation : null,
     run: {
       openRepository: () => void chooseRepository(),
       toggleSidebar: () => setSidebarCollapsed(value => !value),
@@ -364,6 +401,10 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
       newWorktree: () => void newWorktree(),
       removeWorktree: path => void removeWorktree(path),
       revealInFinder,
+      fetch: () => void runNetwork("fetch", owner => owner.fetch()),
+      pull: () => void runNetwork("pull", owner => owner.pull()),
+      push: () => void push(),
+      cancelNetwork: () => networkController.current?.cancel(),
     },
   };
   const contextRef = useRef(context);
@@ -378,7 +419,7 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
       { type: "submenu", id: "edit", label: "Edit", target: { menu: "edit" }, items: [item("copy-sha"), { type: "separator" }, item("blame-line")] },
       // AppKit's own View ▸ Show/Hide Sidebar drives the split view, so the menu has no second one.
       { type: "submenu", id: "view", label: "View", target: { menu: "view" }, items: [item("show-changes"), item("show-history"), { type: "separator" }, item("show-file-history"), item("show-all-history")] },
-      { type: "submenu", id: "repository", label: "Repository", placement: { before: { menu: "window" } }, items: [item("refresh"), { type: "separator" }, item("open-github")] },
+      { type: "submenu", id: "repository", label: "Repository", placement: { before: { menu: "window" } }, items: [item("fetch"), item("pull"), item("push"), item("cancel-network"), { type: "separator" }, item("refresh"), { type: "separator" }, item("open-github")] },
       { type: "submenu", id: "branch", label: "Branch", placement: { before: { menu: "window" } }, items: [item("switch-branch"), item("new-branch"), { type: "separator" }, item("rename-branch"), item("delete-branch")] },
       { type: "submenu", id: "worktree", label: "Worktree", placement: { before: { menu: "window" } }, items: [item("new-worktree"), { type: "separator" }, item("reveal-worktree"), item("remove-worktree")] },
       {
@@ -404,6 +445,7 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     refsController.current?.setRoot(root);
     stashController.current?.setRoot(root);
     worktreeController.current?.setRoot(root);
+    networkController.current?.setRoot(root);
     if (!root) setSection("changes");
   }, [root]);
   // Changes re-reads status on every ref or HEAD change its watcher sees; the refs follow it.
@@ -512,6 +554,8 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     const label = commandLabel(id, context);
     return { type: "button" as const, id, label, symbol, tooltip: label, disabled: !commandEnabled(id, context) };
   };
+  const networkText = networkStatusText(network, root ? branch : null);
+  const aheadBehindTooltip = `${branch?.behind ?? 0} incoming and ${branch?.ahead ?? 0} outgoing commits on “${branch?.upstream}”`;
   const toolbarItems: MacOSToolbarItem[] = [
     { ...button("toggle-sidebar", "sidebar.left"), placement: "leading" },
     ...root ? [
@@ -525,7 +569,10 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
         { value: "changes", label: "Changes", symbol: "square.and.pencil" },
         { value: "history", label: "History", symbol: "clock" },
       ] },
-      // Fetch, Pull and Push arrive with M3: a `disabled` toolbar button still shows and acts enabled (Spark ask), so they are left out until then.
+      // Fetch, Pull and Push stay in the Repository menu: the pinned Spark's `disabled` toolbar button still acts enabled
+      // (fixed in Spark main, not released). Its status label shows the running operation's progress, or ↓behind ↑ahead.
+      ...network.operation ? [{ type: "label" as const, id: "network-progress", label: `${networkVerb(network.operation)}…`, text: `${networkVerb(network.operation)}…`, width: 180 }]
+        : networkText ? [{ type: "label" as const, id: "ahead-behind", label: `${aheadBehindTooltip}`, text: networkText }] : [],
       button("refresh", "arrow.clockwise"),
       // AppKit's NSSearchToolbarItem (it collapses itself when the toolbar is narrow); Spark's `collapses` button ignores real clicks (Spark ask).
       { type: "search", id: "search", label: "Search", placeholder: showsHistory ? "Search Commits" : "Filter Files", width: 200 },
@@ -537,7 +584,8 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
   ];
   // The search field keeps its own text; it is passed only when the toolbar is rebuilt (a section switch or Show All).
   const searchText = showsHistory ? historyQuery : filter;
-  const toolbar = { visible: true, style: "unified" as const, items: toolbarItems.map(entry => entry.type === "search" ? { ...entry, value: searchText } : entry) };
+  // Progress text changes go to the label alone (below); a rebuilt toolbar carries the current text.
+  const toolbar = { visible: true, style: "unified" as const, items: toolbarItems.map(entry => entry.type === "search" ? { ...entry, value: searchText } : entry.id === "network-progress" ? { ...entry, text: networkText } : entry) };
   const toolbarRef = useRef(toolbar);
   toolbarRef.current = toolbar;
   // Title bar options go once: re-sending them grows the window by 20 pt each time (Spark ask).
@@ -566,6 +614,10 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
   }, [toolbarKey]);
 
   useEffect(() => {
+    if (network.operation) setToolbarItemText(windowId, "network-progress", networkText).catch(() => { /* not in the toolbar yet; the rebuild carries the text */ });
+  }, [networkText]); // eslint-disable-line react-hooks/exhaustive-deps -- only the text
+
+  useEffect(() => {
     let disposed = false;
     const owner = createGitChanges(setChanges, watchDirectories);
     controller.current = owner;
@@ -577,6 +629,8 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     stashController.current = stashOwner;
     const worktreeOwner = createWorktreePreview(setWorktreePreview);
     worktreeController.current = worktreeOwner;
+    const networkOwner = createGitNetwork(setNetwork);
+    networkController.current = networkOwner;
     const registration = addMacOSWindowListener(windowId, event => {
       if (disposed) return;
       if (event.type === "toolbarAction") runCommand(event.itemId, contextRef.current);
@@ -601,12 +655,13 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
       if (disposed) return;
       disposed = true;
       generator.current?.reset();
-      for (const disposable of [owner, historyOwner, refsOwner, stashOwner, worktreeOwner]) disposable.dispose();
+      for (const disposable of [owner, historyOwner, refsOwner, stashOwner, worktreeOwner, networkOwner]) disposable.dispose();
       controller.current = null;
       historyController.current = null;
       refsController.current = null;
       stashController.current = null;
       worktreeController.current = null;
+      networkController.current = null;
       closeMenuWindow(windowId);
       if (initialPath) openWorktreePaths.delete(initialPath);
       for (const pending of [registration, closeRegistration, focusRegistration]) void pending.then(listener => listener.remove()).catch(console.error);
@@ -804,6 +859,18 @@ function StashFiles({ stash, preview, filter, onSelect }: { stash: GitStash; pre
       })}
     </Sidebar> : <View style={styles.emptyList}><Text style={styles.emptyListText}>{preview.loading ? "Loading…" : filter ? "No matching files" : "No files"}</Text></View>}
   </View>;
+}
+
+/** Names the remote a branch's first push goes to; Publish is the default (nothing is lost). */
+async function confirmPublish(windowId: string, branch: string, remote: string) {
+  try {
+    const result = await showMessage({
+      windowId, kind: "info", title: `Publish “${branch}” to “${remote}”?`,
+      message: `Legend Git pushes the branch to “${remote}” and sets “${remote}/${branch}” as its upstream, so Pull and Push use it from then on.`,
+      buttons: [{ id: "publish", label: "Publish" }, { id: "cancel", label: "Cancel" }], defaultButtonId: "publish", cancelButtonId: "cancel",
+    });
+    return result.buttonId === "publish";
+  } catch (error) { console.error(error); return false; }
 }
 
 /** Offers to stash the changes Git refused to carry along, then switch. */

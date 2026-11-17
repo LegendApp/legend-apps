@@ -178,6 +178,81 @@ function serialize<T>(queues: Map<string, Promise<void>>, key: string, operation
   return pending;
 }
 
+/** Internal: extra environment and streamed stderr for one command. */
+type GitProcessOptions = GitReadOptions & { processEnv?: Readonly<Record<string, string>>; onStderr?: (text: string) => void };
+
+/** One `--progress` report: Git's phase ("Receiving objects") and its percentage. */
+export type GitProgress = { phase: string; percent: number };
+/** Network operations run until `signal` aborts them or `timeoutMs` (default 30 minutes) passes. */
+export type GitNetworkOptions = GitReadOptions & { onProgress?: (progress: GitProgress) => void; timeoutMs?: number };
+export type GitFetchOptions = GitNetworkOptions & { remote?: string; prune?: boolean };
+/** `setUpstream` names the remote for a branch's first push (`git push --set-upstream <remote> <branch>`). */
+export type GitPushOptions = GitNetworkOptions & { setUpstream?: string };
+
+/** The remote refused the push because it has commits the branch doesn't (fetch first / non-fast-forward). */
+export class GitPushRejectedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "GitPushRejectedError";
+  }
+}
+
+/** Pull can only fast-forward, and the branch and its upstream both have new commits; nothing changed. */
+export class GitPullDivergedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "GitPullDivergedError";
+  }
+}
+
+/** The current branch has no upstream to pull from or push to. */
+export class GitNoUpstreamError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "GitNoUpstreamError";
+  }
+}
+
+// The phase may be translated, so it is anything up to the colon that doesn't start with a digit.
+const progressLine = /^(?:remote: *)?([^\d\s:\r\n][^:\r\n]*): +(\d{1,3})% \(/;
+
+/** Calls `onProgress` for every complete `--progress` line in the stderr chunks it is fed (lines end with \r or \n). */
+export function createProgressParser(onProgress: (progress: GitProgress) => void) {
+  let pending = "";
+  return (chunk: string) => {
+    const lines = (pending + chunk).split(/[\r\n]/);
+    pending = lines.pop() ?? "";
+    for (const line of lines) {
+      const match = progressLine.exec(line);
+      if (match) onProgress({ phase: match[1]!.trim(), percent: Math.min(100, Number(match[2])) });
+    }
+  };
+}
+
+/** Git's stderr without the `--progress` lines, so an error message holds only what Git said. */
+export function withoutProgress(text: string) {
+  if (!text.includes("\r") && !/% \(/.test(text)) return text;
+  return text.split(/\r\n|\r|\n/).filter(line => !progressLine.test(line) && !/^(?:remote: *)?(?:Enumerating objects|Total \d)/.test(line)).join("\n");
+}
+
+/** Decodes stderr chunks up to their last \r or \n, so a UTF-8 character split between chunks is decoded whole. */
+function lineDecoder(decode: GitDecoder, onText: (text: string) => void) {
+  let pending = new Uint8Array(0);
+  return ({ stream, bytes }: { stream: "stdout" | "stderr"; bytes: Uint8Array }) => {
+    if (stream !== "stderr") return;
+    const joined = new Uint8Array(pending.length + bytes.length);
+    joined.set(pending);
+    joined.set(bytes, pending.length);
+    let end = joined.length;
+    while (end > 0 && joined[end - 1] !== 10 && joined[end - 1] !== 13) end--;
+    pending = joined.slice(end);
+    if (end) onText(decode(joined.subarray(0, end)));
+  };
+}
+
+const networkQueues = new Map<string, Promise<void>>();
+const networkTimeout = 30 * 60_000;
+
 export type GitPerson = { name: string; email: string; time: number };
 export type GitCommitDetails = { oid: string; parents: string[]; author: GitPerson; committer: GitPerson; message: string };
 export type GitRefDecoration = { kind: "branch" | "remote" | "tag"; name: string };
@@ -330,6 +405,7 @@ export function githubCommitUrl(remoteUrl: string | null, oid: string) {
 
 export class GitService {
   private gitDir: string | undefined;
+  private commonGitDir: string | undefined;
   private readonly operations: GitOperationLog[] = [];
   private readonly runner: GitRunner;
   private readonly decode: GitDecoder;
@@ -375,7 +451,7 @@ export class GitService {
     return Promise.race([pending, aborted]).finally(() => signal.removeEventListener("abort", onAbort));
   }
 
-  private async process(command: string, args: readonly string[], options: GitReadOptions, timeoutMs = 60_000, input?: string, okCodes: readonly number[] = [0]): Promise<string> {
+  private async process(command: string, args: readonly string[], options: GitProcessOptions, timeoutMs = 60_000, input?: string, okCodes: readonly number[] = [0]): Promise<string> {
     checkAborted(options.signal);
     const entry: GitOperationLog = { command, args: [...args], startedAt: Date.now(), endedAt: null, exit: null, stderrTail: "" };
     this.operations.push(entry);
@@ -385,13 +461,14 @@ export class GitService {
         target: { type: "command", name: command },
         args,
         cwd: this.repoRoot,
-        env: { GIT_TERMINAL_PROMPT: "0", GIT_OPTIONAL_LOCKS: "0" },
+        env: { GIT_TERMINAL_PROMPT: "0", GIT_OPTIONAL_LOCKS: "0", ...options.processEnv },
         signal: options.signal,
         input,
         timeoutMs,
+        ...options.onStderr ? { onOutput: lineDecoder(this.decode, options.onStderr) } : {},
       });
       entry.exit = result.exit;
-      entry.stderrTail = this.decode(result.stderr).slice(-4096);
+      entry.stderrTail = withoutProgress(this.decode(result.stderr)).slice(-4096);
       checkAborted(options.signal);
       if (result.aborted) throw new GitServiceError("aborted", "Git operation was cancelled.", args);
       if (result.timedOut) throw new GitServiceError("timed-out", `${command} timed out.`, args);
@@ -412,7 +489,7 @@ export class GitService {
     }
   }
 
-  private git(args: readonly string[], options: GitReadOptions, timeoutMs = 60_000, input?: string, okCodes?: readonly number[]) {
+  private git(args: readonly string[], options: GitProcessOptions, timeoutMs = 60_000, input?: string, okCodes?: readonly number[]) {
     return this.process("git", ["-c", "core.quotepath=off", ...args], options, timeoutMs, input, okCodes);
   }
 
@@ -944,7 +1021,7 @@ export class GitService {
   }
 
   /** Pushes a stash (`git stash push`) and resolves with its oid; rejects when there is nothing to stash or no first commit yet. */
-  private async push(message: string | undefined, includeUntracked: boolean, options: GitReadOptions) {
+  private async pushStash(message: string | undefined, includeUntracked: boolean, options: GitReadOptions) {
     if (await this.unborn(options)) throw new Error("Stashing needs a first commit. Commit once, then stash.");
     const top = () => this.git(["rev-parse", "--verify", "-q", "refs/stash"], options, 5_000, undefined, [0, 1]).then(value => value.trim());
     const before = await top();
@@ -956,7 +1033,7 @@ export class GitService {
 
   /** Stashes the uncommitted changes, and untracked files with `includeUntracked`; resolves with the new stash's oid. */
   stashPush(message?: string, { includeUntracked = false, ...options }: GitStashPushOptions = {}) {
-    return this.branchWrite(options, () => this.push(message?.trim() || undefined, includeUntracked, options));
+    return this.branchWrite(options, () => this.pushStash(message?.trim() || undefined, includeUntracked, options));
   }
 
   /** Applies stash `oid` (`git stash apply`); on conflicts or refusal the stash stays and Git's message is the error. */
@@ -1004,7 +1081,7 @@ export class GitService {
     const local = typeof target === "string" ? target : target.branch;
     await this.validateBranchName(local, options);
     return this.branchWrite(options, async () => {
-      const stash = await this.push(`auto-stash before switching to ${local}`, true, options).catch(async (error: unknown) => {
+      const stash = await this.pushStash(`auto-stash before switching to ${local}`, true, options).catch(async (error: unknown) => {
         if (error instanceof Error && error.message === "There are no local changes to stash.") return null;
         throw error;
       });
@@ -1096,6 +1173,113 @@ export class GitService {
     const head = (await this.git(["-C", path, "rev-parse", "--verify", "-q", "HEAD"], options, 5_000, undefined, [0, 1])).trim()
       || (await this.git(["hash-object", "-t", "tree", "--stdin"], options, 5_000, "")).trim();
     return this.git([...prefix, "--literal-pathspecs", ...diffFormat, "--no-renames", head, "--", file.path], options);
+  }
+
+  private async commonDir(options: GitReadOptions): Promise<string> {
+    this.commonGitDir ??= (await this.read(["rev-parse", "--path-format=absolute", "--git-common-dir"], options, 5_000)).replace(/\n$/, "");
+    return this.commonGitDir;
+  }
+
+  /**
+   * Runs one network operation at a time per repository (its common dir, so worktrees share the slot), outside the
+   * read/write queue so status and history keep loading meanwhile. Credentials never prompt: GIT_TERMINAL_PROMPT=0, and
+   * SSH runs in batch mode unless core.sshCommand chooses the command.
+   */
+  private async network<T>(options: GitNetworkOptions, operation: (run: (args: readonly string[]) => Promise<string>) => Promise<T>): Promise<T> {
+    const commonDir = await this.commonDir(options);
+    const { signal } = options;
+    let started = false;
+    const pending = serialize(networkQueues, commonDir, async () => {
+      checkAborted(signal);
+      started = true;
+      const sshCommand = (await this.git(["config", "--get", "core.sshCommand"], options, 5_000, undefined, [0, 1])).trim();
+      const parse = options.onProgress && createProgressParser(options.onProgress);
+      const processOptions: GitProcessOptions = {
+        signal: options.signal,
+        processEnv: { GIT_TERMINAL_PROMPT: "0", ...sshCommand ? {} : { GIT_SSH_COMMAND: "ssh -o BatchMode=yes" } },
+        ...parse ? { onStderr: parse } : {},
+      };
+      return operation(args => this.git(args, processOptions, options.timeoutMs ?? networkTimeout));
+    });
+    if (!signal) return pending;
+    // Waiting for another operation's slot ends at once on abort; once started, the operation itself handles the abort.
+    let onAbort!: () => void;
+    const aborted = new Promise<never>((_resolve, reject) => {
+      onAbort = () => { if (!started) reject(new GitServiceError("aborted", "Git operation was cancelled.")); };
+      signal.addEventListener("abort", onAbort, { once: true });
+      if (signal.aborted) onAbort();
+    });
+    return Promise.race([pending, aborted]).finally(() => signal.removeEventListener("abort", onAbort));
+  }
+
+  /** The remote and branch name the current branch tracks, or null without an upstream. */
+  private async upstream(options: GitReadOptions) {
+    const branch = await this.currentBranch(options);
+    if (!branch) return null;
+    const [remote = "", merge = ""] = await Promise.all([`branch.${branch}.remote`, `branch.${branch}.merge`].map(key =>
+      this.read(["config", "--get", key], options, 5_000, false, [0, 1]).then(value => value.trim())));
+    return remote && merge ? { branch, remote, merge } : null;
+  }
+
+  /**
+   * `git fetch --progress [--prune] <remote>`, or `--all` remotes. Only refs change; a cancelled fetch leaves the remote
+   * being fetched as it was (with `--all`, remotes fetched before the cancel keep their new refs).
+   */
+  fetch({ remote, prune = false, ...options }: GitFetchOptions = {}) {
+    if (remote !== undefined && (!remote || remote.startsWith("-"))) return Promise.reject(new Error(`“${remote}” isn’t a remote name.`));
+    return this.network(options, run => run(["fetch", "--progress", ...prune ? ["--prune"] : [], ...remote ? [remote] : ["--all"]])).then(() => {});
+  }
+
+  /**
+   * Fetches the upstream's remote (cancellable), then fast-forwards the current branch to its upstream with
+   * `git merge --ff-only @{u}` as a queued write (checks index.lock first; once started it finishes). Rejects with Git's
+   * message when the branch can't be fast-forwarded, and with GitNoUpstreamError without an upstream.
+   */
+  pull(options: GitNetworkOptions = {}) {
+    return this.network(options, async run => {
+      await this.repoState(options);
+      const upstream = await this.upstream(options);
+      if (!upstream) throw new GitNoUpstreamError("The current branch has no upstream branch to pull from. Push it first, which sets one.");
+      if (upstream.remote !== ".") await run(["fetch", "--progress", upstream.remote]);
+      await this.branchWrite(options, async () => {
+        try {
+          await this.git(["merge", "--ff-only", "--no-edit", "@{u}"], {}, 120_000);
+        } catch (error) {
+          // Decided from the history, not Git's (possibly translated) message.
+          const fastForward = await this.git(["merge-base", "--is-ancestor", "HEAD", "@{u}"], {}, 10_000).then(() => true, () => false);
+          throw error instanceof GitServiceError && !fastForward ? new GitPullDivergedError(error.message) : error;
+        }
+      });
+    });
+  }
+
+  /**
+   * Pushes the branch to its upstream (`git push --progress <remote> refs/heads/<branch>:<upstream branch>`, whatever
+   * push.default says), or for a first push `git push --set-upstream <remote> <branch>`. Never forces. Rejects with
+   * GitPushRejectedError when the remote has commits the branch doesn't, and GitNoUpstreamError when there is no upstream.
+   */
+  push({ setUpstream, ...options }: GitPushOptions = {}) {
+    if (setUpstream !== undefined && (!setUpstream || setUpstream.startsWith("-"))) return Promise.reject(new Error(`“${setUpstream}” isn’t a remote name.`));
+    return this.network(options, async run => {
+      const branch = await this.currentBranch(options);
+      if (!branch) throw new Error("Check out a branch to push; HEAD is detached.");
+      const upstream = setUpstream ? null : await this.upstream(options);
+      if (!setUpstream && !upstream) throw new GitNoUpstreamError(`The branch “${branch}” has no upstream branch yet. Publish it to set one.`);
+      try {
+        await run(["push", "--progress", ...upstream ? [upstream.remote, `refs/heads/${branch}:${upstream.merge}`] : ["--set-upstream", setUpstream!, `refs/heads/${branch}:refs/heads/${branch}`]]);
+      } catch (error) {
+        if (error instanceof GitServiceError && /\[rejected\].*\((?:fetch first|non-fast-forward)\)/.test(error.message)) throw new GitPushRejectedError(error.message);
+        throw error;
+      }
+    });
+  }
+
+  /** The remote a branch's first push goes to: remote.pushDefault, else "origin", else the only remote; null when there's none to pick. */
+  async publishRemote(options: GitReadOptions = {}) {
+    const pushDefault = (await this.read(["config", "--get", "remote.pushDefault"], options, 5_000, false, [0, 1])).trim();
+    if (pushDefault) return pushDefault;
+    const remotes = (await this.remotes(options)).split("\n").filter(Boolean);
+    return remotes.includes("origin") ? "origin" : remotes.length === 1 ? remotes[0]! : null;
   }
 
   /** The checked-out branch's short name, or null when HEAD is detached. */
