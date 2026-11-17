@@ -5,7 +5,7 @@ import { useDocumentAppController, type DocumentAppController } from "@legendapp
 import { useRoutedHotkeys } from "@legendapp/spark/shortcuts/commands";
 import type { MenuAction } from "@legendapp/spark/menus";
 import { showWindow } from "@legendapp/spark/windows";
-import { finishWindowRestoration } from "@legendapp/spark/app";
+import { finishWindowRestoration, quit } from "@legendapp/spark/app";
 import { useValue } from "@legendapp/state/react";
 import { withMenuState } from "@legend-apps/runtime-utils";
 import { diffMenuState$, diffMenuShortcuts$, diffActiveMenuWindow$ } from "./diffMenuState";
@@ -39,6 +39,7 @@ import {
 } from "./diffWindowRestoration";
 import { openDiffSettingsWindow, openDiffViewerWindow, registerDiffWindows, type DiffViewerWindowOpenOptions } from "./diffWindows";
 import { diffCustomization } from "./customization/diffCustomizationRuntime";
+import { getStoryCommandRequestFolder, getStoryCommandRequestFromLaunchArguments, handleStoryCommandUrl } from "./story/storyCommandHost";
 
 
 LogBox.ignoreLogs([
@@ -231,10 +232,19 @@ async function openInitialDiffViewer(
   launchArguments: string[] | undefined,
   controller: DocumentAppController,
   openPrimaryViewer: PrimaryDiffViewerOpener,
+  hasPrimaryWindow: () => boolean,
 ) {
   let source = getLaunchDiffSource(launchArguments?.slice(1));
   if (!source) {
     const initialUrl = await initialUrlPromise;
+    const storyRequest = getStoryCommandRequestFromLaunchArguments(launchArguments ?? []) ?? getStoryCommandRequestFolder(initialUrl ?? "");
+    if (storyRequest) {
+      // Launched by `ldiff story`: generate in the background, open no window, and quit unless a window opened meanwhile.
+      void handleStoryCommandUrl(storyRequest).catch(reportDiffAppControllerError).finally(() => {
+        if (!hasPrimaryWindow()) void quit().catch(reportDiffAppControllerError);
+      });
+      return;
+    }
     source = getDiffSourceFromOpenUrl(initialUrl ?? "");
   }
 
@@ -309,7 +319,7 @@ export function App({ launchArguments }: DiffAppProps) {
   const handleInitialOpen = useCallback(
     async (args: string[] | undefined, documentController: DocumentAppController) => {
       try {
-        await openInitialDiffViewer(args, documentController, openPrimaryViewer);
+        await openInitialDiffViewer(args, documentController, openPrimaryViewer, () => primaryWindowRef.current !== null);
       } finally {
         await finishWindowRestoration();
       }
@@ -368,6 +378,11 @@ export function App({ launchArguments }: DiffAppProps) {
       const isImmediateDuplicate = lastHandled !== null && lastHandled.url === url && now - lastHandled.handledAt < 1000;
       if (url && !isImmediateDuplicate) {
         handledOpenUrlRef.current = { handledAt: now, url };
+        const storyRequest = getStoryCommandRequestFolder(url);
+        if (storyRequest) {
+          handleStoryCommandUrl(storyRequest).catch(reportDiffAppControllerError);
+          return;
+        }
         const source = getDiffSourceFromOpenUrl(url);
         if (source) {
           const currentController = controllerRef.current;

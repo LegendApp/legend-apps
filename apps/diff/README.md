@@ -57,7 +57,16 @@ The Diff Metro server uses port `19095` by default.
 
 From a repository, `ldiff --index-vs-workdir` opens unstaged changes and `ldiff --head-vs-index` opens staged changes. Use `ldiff --commit <sha>` for a commit (root commits compare against the empty tree), or `ldiff main..topic` / `ldiff main...topic` for a direct / merge-base range. Other Git diff arguments keep their existing behavior.
 
-The same arguments work in `legend-diff://open?cwd=<encoded-path>&arg=<encoded-argument>` (repeat `arg` for each argument), or as app launch arguments with `--cwd <repo>`. Comparison sources retain their repository and target when windows are restored.
+The same arguments work in `legend-diff://open?cwd=<encoded-path>&arg=<encoded-argument>` (repeat `arg` for each argument), or as app launch arguments with `--cwd <repo>`. Comparison sources retain their repository and target when windows are restored. `ldiff --help` lists them.
+
+`ldiff story [comparison] [--agent claude|codex] [--model <name>] [--skill <name>] [--out <file>] [--json]` generates a Change Story without opening a window. The comparison takes the same Git arguments and defaults to `--index-vs-workdir`. For example, `ldiff story --commit HEAD --agent claude` or `ldiff story main...topic --skill change-story-detailed --out story.md`. The story is printed as Markdown (`--json` adds the cache identity), progress and errors go to stderr, and a failure exits nonzero (2 for usage errors).
+
+- `--agent` (or `--engine`, as in Review) picks the CLI; without it the skill's `tool` applies, then Codex or Claude, whichever is installed. A skill pinned to one tool rejects the other.
+- `--model` is passed to the CLI as the Story tab does. Stories are cached per tool and model, and the Story tab reads the default model, so a story made with `--model` is not shown there.
+- `--skill` resolves repository, then user, then built-in skills, as the skill picker does (default `change-story`). An unapproved repository override of the default skill runs only when named with `--skill`.
+- Running the command is consent for that run and is not saved. If story generation was turned off for the repository in Diff, the command exits with a message.
+
+The command opens Legend Diff in the background (`open -g -j`, no window) because diffs are parsed by Diff's native parser, which also fixes the cache key. Diff writes the result to the story cache, so opening the same comparison shows it at once, and quits afterwards if it was not already running. Reinstall `ldiff` from Settings to get the `story` command.
 
 ## AI skills
 

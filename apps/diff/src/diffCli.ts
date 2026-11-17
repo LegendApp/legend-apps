@@ -1,6 +1,7 @@
 import { decodeProcessText } from "@legend-apps/runtime-utils";
 import { runCommand } from "@legendapp/spark/processes";
 import { createStorage } from "@legend-apps/storage";
+import { storyCommandHelp } from "./story/storyCommand";
 
 const cliCommandName = "ldiff";
 const cliScriptRelativePath = "bin/legend-diff";
@@ -65,10 +66,40 @@ function shellSingleQuote(value: string) {
   return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
+export const legendDiffCliHelp = `Usage: ldiff [comparison]
+       ldiff story [comparison] [options]
+
+Opens a comparison of the current repository in Legend Diff (default: the working tree).
+  --index-vs-workdir   Unstaged changes
+  --head-vs-index      Staged changes
+  --commit <sha>       One commit
+  main..topic          Direct range; main...topic compares against the merge base
+Other git diff arguments, a folder, a .diff file, two files or a GitHub URL also work.
+
+ldiff story generates a Change Story in the background without opening a window.
+Run ldiff story --help for its options.
+`;
+
 export function getLegendDiffCliScript() {
   return `#!/bin/zsh
 emulate -L zsh
 set -e
+
+if [ "\${1:-}" = "--help" ] || [ "\${1:-}" = "-h" ]; then
+  cat <<'LEGEND_DIFF_HELP'
+${legendDiffCliHelp}LEGEND_DIFF_HELP
+  exit 0
+fi
+if [ "\${1:-}" = "story" ]; then
+  for arg in "\${@:2}"; do
+    if [ "$arg" = "--" ]; then break; fi
+    if [ "$arg" = "--help" ] || [ "$arg" = "-h" ]; then
+      cat <<'LEGEND_DIFF_STORY_HELP'
+${storyCommandHelp}LEGEND_DIFF_STORY_HELP
+      exit 0
+    fi
+  done
+fi
 
 app_path=""
 for candidate in ${shellSingleQuote(installedAppPath)} "\${HOME:-}/${userInstalledAppRelativePath}"; do
@@ -84,8 +115,42 @@ if [ -z "$app_path" ]; then
 fi
 
 urlencode() {
-  /usr/bin/osascript -l JavaScript -e 'function run(argv) { return encodeURIComponent(argv[0]); }' "$1"
+  # The leading "x" keeps osascript from reading an argument such as --commit as its own option.
+  /usr/bin/osascript -l JavaScript -e 'function run(argv) { return encodeURIComponent(argv[0].slice(1)); }' "x$1"
 }
+
+if [ "\${1:-}" = "story" ]; then
+  shift
+  tmp_root="\${TMPDIR:-/tmp}"
+  request_dir="$(/usr/bin/mktemp -d "\${tmp_root%/}/legend-diff-story.XXXXXXXX")"
+  trap '/bin/rm -rf "$request_dir"' EXIT
+  trap '/usr/bin/touch "$request_dir/cancel"; for i in {1..50}; do [ -f "$request_dir/exit" ] && break; /bin/sleep 0.1; done; exit 130' INT TERM
+  { urlencode "$PWD"; for arg in "$@"; do urlencode "$arg"; done } > "$request_dir/request"
+  /usr/bin/open -g -j -a "$app_path" "legend-diff://story?request=$(urlencode "$request_dir")" --args "--story-request=$request_dir"
+  printed=0
+  print_progress() {
+    [ -f "$request_dir/progress" ] || return 0
+    local count=$(/usr/bin/wc -l < "$request_dir/progress" | /usr/bin/tr -d ' ')
+    if [ "$count" -gt "$printed" ]; then
+      /usr/bin/tail -n "+$((printed + 1))" "$request_dir/progress" | /usr/bin/head -n "$((count - printed))" >&2
+      printed=$count
+    fi
+  }
+  waited=0
+  while [ ! -f "$request_dir/exit" ]; do
+    if [ ! -f "$request_dir/started" ] && [ "$waited" -ge 300 ]; then
+      printf '%s\\n' "Legend Diff did not answer the story request. Update Legend Diff, then reinstall ldiff from Settings." >&2
+      exit 1
+    fi
+    print_progress
+    /bin/sleep 0.2
+    waited=$((waited + 1))
+  done
+  print_progress
+  [ -f "$request_dir/stdout" ] && /bin/cat "$request_dir/stdout"
+  [ -f "$request_dir/stderr" ] && /bin/cat "$request_dir/stderr" >&2
+  exit "$(/bin/cat "$request_dir/exit")"
+fi
 
 url="legend-diff://open?cwd=$(urlencode "$PWD")"
 for arg in "$@"; do

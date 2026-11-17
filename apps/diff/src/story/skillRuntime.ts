@@ -8,6 +8,10 @@ import { useEffect, useState } from "react";
 import { createSkillLibrary, type SkillLibrary } from "./skillLibrary";
 
 const libraries = new Map<string, { library: SkillLibrary; users: number }>();
+export function userSkillDirectory() {
+  return `${decodeURIComponent(getApplicationSupportDirectory().uri.replace(/^file:\/\//, "")).replace(/\/+$/, "")}/skills`;
+}
+export const skillFiles = { ...files, writeNewText: async (path: string, text: string) => { await files.writeChunks(path, [Buffer.from(text, "utf8")], { mode: "createNew" }); } };
 export const skillEditorContext$ = observable<{ windowId?: string; skillName?: string; skillId?: string }>({});
 
 export const skillPreviewTargets = new Map<string, (skill: import("./storySkill").StorySkill) => boolean>();
@@ -25,15 +29,14 @@ export function useSkillLibrary(repoRoot?: string, enabled = true) {
       const key = repoRoot ?? "";
       let entry = libraries.get(key);
       if (!entry) {
-        const support = decodeURIComponent(getApplicationSupportDirectory().uri.replace(/^file:\/\//, "")).replace(/\/+$/, "");
-        const userDirectory = `${support}/skills`;
+        const userDirectory = userSkillDirectory();
         await files.mkdir(userDirectory);
         if (cancelled) return;
         entry = libraries.get(key);
         if (!entry) {
           entry = { library: createSkillLibrary({
             userDirectory, repoRoot, watch: watchDirectories,
-            files: { ...files, writeNewText: async (path, text) => { await files.writeChunks(path, [Buffer.from(text, "utf8")], { mode: "createNew" }); } },
+            files: skillFiles,
           }), users: 0 };
           libraries.set(key, entry);
           try { void entry.library.start(); }
