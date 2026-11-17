@@ -329,9 +329,10 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
           colors={workspaceColors}
           onClose={path => { closeFileTab(path).catch(handleError); }}
           onSelect={path => { switchToFile(path).catch(handleError); }}
-          onToggleSidebar={workspace.toggleSidebar}
+          onToggleSidebar={workspace.state.sidebarOpen ? undefined : workspace.toggleSidebar}
           sidebarOpen={workspace.state.sidebarOpen}
           paths={workspace.state.tabs.paths}
+          style={styles.tabBar}
         />
       </View>
     </View>
@@ -354,9 +355,11 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
             onAddFolder={workspace.chooseFolders}
             onError={handleError}
             onOpenFile={path => { switchToFile(path).catch(handleError); }}
+            onToggleSidebar={workspace.toggleSidebar}
           />
         )}
         sidebarCollapsed={!workspace.state.sidebarOpen}
+        sidebarWidth={220}
         style={styles.root}
       />
     </View>
@@ -624,6 +627,10 @@ const styles = StyleSheet.create({
     height: TITLEBAR_HEIGHT,
     justifyContent: "center",
     overflow: "hidden",
+  },
+  tabBar: {
+    // Fills the band, so the bar's hairline is the title bar's bottom edge.
+    height: TITLEBAR_HEIGHT,
   },
   glass: {
     // Keep the rounded glass edges outside the clipped titlebar band.

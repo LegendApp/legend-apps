@@ -132,6 +132,14 @@ jest.mock("@legendapp/spark/ui/symbol", () => ({
   SFSymbol: () => null,
 }));
 
+jest.mock("@legendapp/spark/ui/sidebar", () => {
+  const React = require("react");
+  return {
+    Sidebar: ({ children }) => React.createElement(React.Fragment, null, children),
+    SidebarItem: ({ children }) => React.createElement(React.Fragment, null, children),
+  };
+});
+
 jest.mock("@legendapp/spark-ui/src/SparkSelectNativeComponent", () => "NativeSelect");
 jest.mock("@legendapp/spark-ui/src/SparkButtonNativeComponent", () => "NativeButton");
 jest.mock("@legendapp/spark-ui/src/SparkTextInputNativeComponent", () => "NativeTextInput");

@@ -26,13 +26,13 @@ jest.mock("@legendapp/spark/files", () => ({
   writeText: jest.fn(async () => {}),
 }));
 jest.mock("@legendapp/spark/dialogs", () => ({ openFileDialog: jest.fn() }));
-jest.mock("@legendapp/list/react-native", () => {
+jest.mock("@legendapp/spark/ui/symbol", () => ({ SFSymbol: () => null }));
+jest.mock("@legendapp/spark/ui/sidebar", () => {
   const React = require("react");
   return {
-    LegendList: ({ data, extraData, renderItem }: { data: unknown[]; extraData: unknown; renderItem: (info: { item: unknown }) => React.ReactNode }) => {
-      const children = React.useMemo(() => data.map((item, index) => React.createElement(React.Fragment, { key: index }, renderItem({ item }))), [data, extraData]);
-      return React.createElement("List", null, children);
-    },
+    Sidebar: ({ children, onSelectionChange, selectedId }: { children: React.ReactNode; onSelectionChange: unknown; selectedId: string | null }) =>
+      React.createElement("Sidebar", { onSelectionChange, selectedId }, children),
+    SidebarItem: ({ children, id, selectable }: { children: React.ReactNode; id: string; selectable?: boolean }) => React.createElement("SidebarItem", { id, selectable }, children),
   };
 });
 
@@ -59,8 +59,16 @@ function Harness({ props, sidebarOpenSetting = true, sidebarColors = colors }: {
 
 describe("WorkspaceSidebar", () => {
   let renderer: ReactTestRenderer;
-  const labels = () => renderer.root.findAll(node => node.type === ("Pressable" as never)).map(node => [node.props.accessibilityLabel, !node.props.disabled]);
-  const press = (label: string) => act(async () => renderer.root.find(node => node.type === ("Pressable" as never) && node.props.accessibilityLabel === label).props.onPress());
+  // Folder rows and buttons are pressable; file rows are native sidebar rows, selectable when the app opens them.
+  const labels = () => renderer.root.findAll(node => typeof node.type === "string" && typeof node.props.accessibilityLabel === "string")
+    .map(node => [node.props.accessibilityLabel, !node.props.accessibilityState?.disabled]);
+  const press = (label: string) => act(async () => {
+    const item = renderer.root.findAll(node => node.type === ("SidebarItem" as never) && node.props.id.endsWith(`/${label}`))[0];
+    if (item && !renderer.root.findAll(node => node.type === ("Pressable" as never) && node.props.accessibilityLabel === label).length) {
+      return renderer.root.findByType("Sidebar" as never).props.onSelectionChange({ id: item.props.id });
+    }
+    return renderer.root.find(node => node.type === ("Pressable" as never) && node.props.accessibilityLabel === label).props.onPress();
+  });
 
   beforeEach(() => jest.clearAllMocks());
   afterEach(() => act(async () => renderer.unmount()));
@@ -68,7 +76,7 @@ describe("WorkspaceSidebar", () => {
   it("starts single files with the sidebar closed, then adds folders", async () => {
     await act(async () => { renderer = create(<Harness props={{ files: ["/x/one.md"] }} />); });
     expect(workspace.state.sidebarOpen).toBe(false);
-    expect(labels()).toEqual([["Add File", true], ["Add Folder", true], ["one.md", true]]);
+    expect(labels()).toEqual([["one.md", true], ["Add File", true], ["Add Folder", true]]);
 
     jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
     await press("Add Folder");
@@ -76,7 +84,7 @@ describe("WorkspaceSidebar", () => {
     expect(workspace.state.sidebarOpen).toBe(true);
     expect(workspace.state.workspacePath).toBeNull();
     expect(writeText).not.toHaveBeenCalled();
-    expect(labels().map(([label]) => label)).toEqual(["Add File", "Add Folder", "repo", "src", "notes.md", "one.md"]);
+    expect(labels().map(([label]) => label)).toEqual(["repo", "src", "notes.md", "one.md", "Add File", "Add Folder"]);
   });
 
   it("refreshes mounted row colors when the theme changes without changing the files", async () => {
@@ -92,9 +100,11 @@ describe("WorkspaceSidebar", () => {
     await act(async () => { renderer = create(<Harness props={{ folders: ["/repo"] }} />); });
     expect(workspace.state.sidebarOpen).toBe(true);
     await press("src");
-    expect(labels()).toEqual([["Add File", true], ["Add Folder", true], ["repo", true], ["src", true], ["a.ts", false], ["notes.md", true]]);
+    expect(labels()).toEqual([["repo", true], ["src", true], ["a.ts", false], ["notes.md", true], ["Add File", true], ["Add Folder", true]]);
+    expect(renderer.root.findAll(node => node.type === ("SidebarItem" as never)).map(node => [node.props.id, node.props.selectable]))
+      .toEqual([["/repo", false], ["/repo/src", false], ["/repo/src/a.ts", false], ["/repo/notes.md", true]]);
     await press("repo");
-    expect(labels().map(([label]) => label)).toEqual(["Add File", "Add Folder", "repo"]);
+    expect(labels().map(([label]) => label)).toEqual(["repo", "Add File", "Add Folder"]);
     expect(list).toHaveBeenCalledTimes(2);
   });
 
@@ -102,6 +112,7 @@ describe("WorkspaceSidebar", () => {
     await act(async () => { renderer = create(<Harness props={{ folders: ["/repo"], workspacePath: "/data/w.json" }} />); });
     await press("notes.md");
     expect(workspace.state.tabs).toEqual({ active: "/repo/notes.md", paths: ["/repo/notes.md"] });
+    expect(renderer.root.findByType("Sidebar" as never).props.selectedId).toBe("/repo/notes.md");
 
     jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/other"] });
     await press("Add Folder");
