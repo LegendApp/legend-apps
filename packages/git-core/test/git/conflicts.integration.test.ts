@@ -235,3 +235,34 @@ describe("conflict region picks", () => {
     await expect(git.resolveConflictRegion("gone.txt", 0, "ours", "")).rejects.toThrow("no longer a conflicted text file");
   });
 });
+
+describe("saving a hand-edited result", () => {
+  it("writes the text byte for byte, keeping CRLF and a missing final newline, and leaves the file conflicted", async () => {
+    const crlf = (text: string) => text.replace(/\n/g, "\r\n");
+    const { path, git } = setup("result-save", { "a.txt": crlf(base) }, { "a.txt": crlf(base.replace("2", "main 2")) }, { "a.txt": crlf(base.replace("2", "feature 2")) });
+    conflictOf(path, "merge");
+    const shown = (await git.conflictRegions("a.txt"))!;
+    expect(shown.size).toBe(7);
+    expect(shown.text).toContain("<<<<<<< HEAD\r\nmain 2\r\n");
+    const edited = crlf(base.replace("2", "größe 2")).replace(/\r\n$/, "");
+    await git.saveConflictResult("a.txt", edited, shown.text);
+    expect(readFileSync(join(path, "a.txt")).equals(Buffer.from(edited, "utf8"))).toBe(true);
+    expect(status(path)).toContain("UU a.txt");
+    expect(await git.conflictRegions("a.txt")).toEqual({ text: edited, size: 7, regions: [] });
+    // Mark Resolved stays explicit: nothing was staged.
+    expect((await git.operationState())?.conflicts).toBe(1);
+  });
+
+  it("refuses when the file changed since the edit began, writing nothing", async () => {
+    const { path, git } = setup("result-stale", { "a.txt": base }, { "a.txt": base.replace("2", "main 2") }, { "a.txt": base.replace("2", "feature 2") });
+    conflictOf(path, "merge");
+    const shown = (await git.conflictRegions("a.txt"))!;
+    const outside = shown.text.replace("1\n", "0\n1\n");
+    writeFileSync(join(path, "a.txt"), outside);
+    await expect(git.saveConflictResult("a.txt", base, shown.text)).rejects.toThrow("“a.txt” changed since you began editing it, so your edits weren’t saved.");
+    expect(read(path, "a.txt")).toBe(outside);
+    fixtureGit(path, "add", "a.txt");
+    await expect(git.saveConflictResult("a.txt", base, outside)).rejects.toThrow("no longer a conflicted text file");
+    expect(read(path, "a.txt")).toBe(outside);
+  });
+});

@@ -43,14 +43,16 @@ export type SourceDocumentEditorProps = {
   syntaxHighlightingMode?: "viewport" | "background";
   onLoad?: () => void;
   onChange?: (change: SourceEdit) => void;
+  /** A background color for the line at a 0-based index (e.g. conflict regions); pass a new function to repaint. */
+  lineBackground?: (index: number) => string | undefined;
 };
 export type SourceDocumentEditorHandle = {
   command: (command: string, argument?: string) => Promise<boolean>;
 };
 
-function EditorLine({ item, index, fontFamily, fontSize, foreground, wrap, heights, heightKey, viewportWidth }: {
+function EditorLine({ item, index, fontFamily, fontSize, foreground, wrap, heights, heightKey, viewportWidth, background }: {
   item: SourceLine; index: number; fontFamily: string; fontSize: number; foreground: string; wrap: boolean;
-  heights: SourceHeightCache; heightKey: string; viewportWidth: number;
+  heights: SourceHeightCache; heightKey: string; viewportWidth: number; background?: string;
 }) {
   const lineHeight = Math.ceil(fontSize * 1.6);
   const subscribe = useCallback((listener: () => void) => heights.subscribe(item.id, listener), [heights, item.id]);
@@ -65,13 +67,13 @@ function EditorLine({ item, index, fontFamily, fontSize, foreground, wrap, heigh
         heights.set(heightKey, item.id, nativeEvent.height);
       }
     }}
-    style={{ height: wrap ? height : lineHeight }}
+    style={{ height: wrap ? height : lineHeight, backgroundColor: background }}
   />;
 }
 
 export function SourceDocumentEditor({ ref, onDocumentState, filePath, fontFamily = "Menlo", fontSize = 14, foreground = "#eeeeee", wrap = true, indentUnit = "  ", automaticPairs = true,
   language: preferredLanguage, showLanguageSelector = true, showFileLoadingBanner = true, syntaxTheme = defaultSyntaxThemeName, syntaxHighlightingEnabled = true,
-  syntaxHighlightingMode = "viewport", syntaxBackend = "tree-sitter", onChange, onLoad, initialSource, onSelectionChange, preparedDocumentId,
+  syntaxHighlightingMode = "viewport", syntaxBackend = "tree-sitter", onChange, onLoad, initialSource, onSelectionChange, preparedDocumentId, lineBackground,
 }: SourceDocumentEditorProps) {
   const host = useRef<React.ElementRef<typeof SourceEditorHost>>(null);
   const pending = useRef(new Map<number, { resolve: (value: boolean) => void; reject: (error: Error) => void }>());
@@ -125,7 +127,7 @@ export function SourceDocumentEditor({ ref, onDocumentState, filePath, fontFamil
   }, [heightKey, dataSource, heights, prepareHeights]);
   const renderItem = ({ item, index }: LegendListDataSourceRenderItemProps<SourceLine>) => item
     ? <EditorLine item={item} index={index} fontFamily={fontFamily} fontSize={fontSize} foreground={foreground} wrap={wrap}
-        heights={heights} heightKey={heightKey} viewportWidth={viewportWidth} /> : null;
+        heights={heights} heightKey={heightKey} viewportWidth={viewportWidth} background={lineBackground?.(index)} /> : null;
 
   return <SourceEditorHost
     ref={host}
@@ -220,6 +222,7 @@ export function SourceDocumentEditor({ ref, onDocumentState, filePath, fontFamil
       dataSource={dataSource}
       dataKey={filePath}
       renderItem={renderItem}
+      extraData={lineBackground}
       recycleItems
       onLayout={event => setViewportWidth(event.nativeEvent.layout.width)}
       getFixedItemSize={item => wrap ? heights.getForLayout(heightKey, item.id) : lineHeight}

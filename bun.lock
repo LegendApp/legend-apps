@@ -152,6 +152,7 @@
         "@legend-apps/diff-parser": "workspace:*",
         "@legend-apps/file-system-watcher": "workspace:*",
         "@legend-apps/git-core": "workspace:*",
+        "@legend-apps/source-editor": "workspace:*",
         "@legend-apps/syntax-parser": "workspace:*",
         "@legendapp/list": "catalog:",
         "@legendapp/spark": "catalog:",

@@ -2196,7 +2196,7 @@ it("shows a conflicted file's regions with picks named for the operation, resolv
   await act(async () => { renderer.root.findAllByType(Sidebar)[1]!.props.onSelectionChange({ id: "app.ts" }); });
 
   // The file's picks stay in its header; each region has its own, and sections named for the sides (and the ancestor).
-  expect(labels()).toEqual(["Use “main”", "Use “feature”", "Use Both", "Mark Resolved", "Use “main”", "Use “feature”", "Use Both", "Use “main”", "Use “feature”", "Use Both"]);
+  expect(labels()).toEqual(["Use “main”", "Use “feature”", "Use Both", "Mark Resolved", "Use “main”", "Use “feature”", "Use Both", "Use “main”", "Use “feature”", "Use Both", "Revert", "Save"]);
   expect(texts()).toEqual(expect.arrayContaining(["Conflict 1 of 2, line 1", "Conflict 2 of 2, line 7", "“main”", "“feature”", "Common ancestor", "No lines"]));
   // A region pick writes only that region (the file stays conflicted and unstaged).
   await press("Use “feature”", 1);
@@ -2215,7 +2215,7 @@ it("shows a conflicted file's regions with picks named for the operation, resolv
   // The last region: no markers left, but the file stays conflicted until Mark Resolved; then Continue is on.
   await press("Use Both", 1);
   expect(text).toBe("edited\nfeature\nx\nred\n");
-  expect(labels()).toEqual(["Use “main”", "Use “feature”", "Use Both", "Mark Resolved"]);
+  expect(labels()).toEqual(["Use “main”", "Use “feature”", "Use Both", "Mark Resolved", "Revert", "Save"]);
   expect(texts()).toContain("No conflict markers are left. Review the file, then Mark Resolved.");
   expect(bar().findAllByType(Button)[1]!.props.disabled).toBe(true);
   await press("Mark Resolved");
@@ -2246,7 +2246,7 @@ it("names a conflict region's sides for a rebase and a cherry-pick", async () =>
   await act(async () => { renderer = create(<App />); });
   await act(async () => { openRepository(); });
   await act(async () => { renderer.root.findAllByType(Sidebar)[1]!.props.onSelectionChange({ id: "a.txt" }); });
-  const regionLabels = () => renderer.root.findByType(DiffPane).findAllByType(Button).slice(4).map(node => node.props.children);
+  const regionLabels = () => renderer.root.findByType(DiffPane).findAllByType(Button).slice(4, 7).map(node => node.props.children);
   const texts = () => renderer.root.findByType(DiffPane).findAllByType(Text).map(node => node.props.children);
   // During a rebase, ours is the branch rebased onto.
   expect(regionLabels()).toEqual(["Use “main”", "Use “topic”", "Use Both"]);
@@ -2254,4 +2254,118 @@ it("names a conflict region's sides for a rebase and a cherry-pick", async () =>
   operation = { kind: "cherry-pick", branch: "main", target: null, commit: { oid: "ccccccc", subject: "Fix the title" }, step: null, conflicts: 1, mergeHead: false };
   await act(async () => { lastMenu().onAction({ itemId: "refresh" }); });
   expect(regionLabels()).toEqual(["Use “main”", "Use “Fix the title”", "Use Both"]);
+});
+
+it("edits a conflicted file's Result, keeps the draft through refreshes, asks before losing it, saves it, then Mark Resolved", async () => {
+  jest.clearAllMocks();
+  jest.mocked(watchDirectories).mockReturnValue({ remove: jest.fn() });
+  const head = "a".repeat(40);
+  jest.mocked(openGitHistory).mockImplementation(async () => ({ head: { handle: 1, headOid: head, unborn: false, detached: false }, page: jest.fn(async (offset: number) => ({ offset, commits: [], done: true })), close: jest.fn() }));
+  jest.mocked(loadUnifiedDiff).mockReturnValue(new Promise(() => {}));
+  const branch = { oid: head, head: "main", upstream: null, ahead: 0, behind: 0 };
+  const unmerged = (path: string) => ({ kind: "unmerged", path, indexStatus: "U", worktreeStatus: "U", modes: ["100644", "100644", "100644", "100644"] });
+  let entries: unknown[] = [unmerged("app.ts"), unmerged("notes.txt")];
+  const operation = { kind: "merge", branch: "main", target: "feature", commit: null, step: null, conflicts: 2, mergeHead: true };
+  const shown = "top\r\n<<<<<<< HEAD\r\nmain\r\n=======\r\nfeature\r\n>>>>>>> feature\r\nend";
+  const files: Record<string, string> = { "app.ts": shown, "notes.txt": "<<<<<<< HEAD\na\n=======\nb\n>>>>>>> feature\n" };
+  const { parseConflictRegions } = jest.requireActual("@legend-apps/git-core");
+  const git = { repoRoot: "/repo", resolveRoot: jest.fn(async () => "/repo"), watchLocations: jest.fn(async () => ({ root: "/repo", gitDir: "/repo/.git", commonDir: "/repo/.git", ignoredPaths: [] })),
+    status: jest.fn(async () => ({ branch, entries })), lastDiscard: jest.fn(async () => null), operationState: jest.fn(async () => operation),
+    revParse: jest.fn(async () => head), refDecorations: jest.fn(async () => new Map()), remoteUrl: jest.fn(async () => null), currentBranch: jest.fn(async () => "main"),
+    listRefs: jest.fn(async () => ({ branches: [], remotes: [], tags: [] })), listStashes: jest.fn(async () => []), listWorktrees: jest.fn(async () => []), fileDiff: jest.fn(async () => ""),
+    mergeMessage: jest.fn(async () => null), hasConflictMarkers: jest.fn(async (path: string) => files[path]!.includes("<<<<<<<")),
+    stageFile: jest.fn(async (path: string) => { entries = entries.map(entry => (entry as { path: string }).path === path ? { kind: "ordinary", path, indexStatus: "M", worktreeStatus: "." } : entry); }),
+    conflictFile: jest.fn(async () => ({ ours: true, theirs: true, binary: false, edited: false })),
+    conflictRegions: jest.fn(async (path: string) => ({ text: files[path], size: 7, regions: parseConflictRegions(files[path]) })),
+    resolveConflictRegion: jest.fn(async () => {}),
+    saveConflictResult: jest.fn(async (path: string, text: string, base: string) => {
+      if (files[path] !== base) throw new Error(`“${path}” changed since you began editing it, so your edits weren’t saved. Revert to see it.`);
+      files[path] = text;
+    }) };
+  jest.mocked(getGitService).mockReturnValue(git as unknown as GitService);
+  jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
+  let renderer!: ReactTestRenderer;
+  await act(async () => { renderer = create(<App />); });
+  await act(async () => { openRepository(); });
+  const pane = () => renderer.root.findByType(DiffPane);
+  const editor = () => pane().findByType("SourceDocumentEditor" as never);
+  const button = (label: string, nth = 0) => pane().findAllByType(Button).filter(node => node.props.children === label)[nth]!;
+  const press = (label: string, nth = 0) => act(async () => { await button(label, nth).props.onPress(); });
+  const states = () => ({ revert: !button("Revert").props.disabled, save: !button("Save").props.disabled });
+  const texts = () => pane().findAllByType(Text).map(node => node.props.children);
+  const type = (edit: { offset: number; removedLength: number; insertedText: string }) => act(async () => { editor().props.onChange(edit); });
+  const select = (id: string) => act(async () => { renderer.root.findAllByType(Sidebar)[1]!.props.onSelectionChange({ id }); });
+  const refresh = () => act(async () => { lastMenu().onAction({ itemId: "refresh" }); });
+  await select("app.ts");
+
+  // The Result shows the worktree text with its region tinted, beside the regions; nothing to save or revert yet.
+  expect(editor().props.initialSource).toBe(shown);
+  expect([0, 1, 2, 3, 4, 5, 6].map(line => editor().props.lineBackground(line) === undefined)).toEqual([true, false, false, false, false, false, true]);
+  expect(texts()).toEqual(expect.arrayContaining(["Conflict 1 of 1, line 2", "Result"]));
+  expect(states()).toEqual({ revert: false, save: false });
+
+  // A hand edit: Save and Revert turn on; a refresh of the unchanged file keeps the draft and the editor.
+  const resolved = "top\r\nmain and feature\r\nend";
+  await type({ offset: shown.indexOf("<<<<<<<"), removedLength: shown.lastIndexOf("feature") + "feature".length - shown.indexOf("<<<<<<<"), insertedText: "main and feature" });
+  expect(texts()).toContain("Result — edited");
+  expect(states()).toEqual({ revert: true, save: true });
+  expect(editor().props.lineBackground(1)).toBeUndefined();
+  const mounted = editor();
+  await refresh();
+  expect(editor()).toBe(mounted);
+  expect(texts()).toContain("Result — edited");
+
+  // Switching files asks first; Cancel stays. A region pick asks to discard; Cancel picks nothing.
+  jest.mocked(showMessage).mockClear();
+  jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "cancel" });
+  await select("notes.txt");
+  expect(jest.mocked(showMessage).mock.calls[0]![0]).toMatchObject({ title: "Save your edits to “app.ts”?", buttons: [{ label: "Save" }, { label: "Don’t Save" }, { label: "Cancel" }] });
+  expect(pane().props.patch.path).toBe("app.ts");
+  jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "cancel" });
+  await press("Use “feature”", 1);
+  expect(jest.mocked(showMessage).mock.calls[1]![0]).toMatchObject({ title: "Discard your edits to “app.ts”?", buttons: [{ label: "Use “feature”" }, { label: "Cancel" }] });
+  expect(git.resolveConflictRegion).not.toHaveBeenCalled();
+  expect(texts()).toContain("Result — edited");
+
+  // Save writes the draft over the text it began from (line endings and the missing final newline as typed).
+  await press("Save");
+  expect(git.saveConflictResult).toHaveBeenLastCalledWith("app.ts", resolved, shown, expect.anything());
+  expect(files["app.ts"]).toBe(resolved);
+  expect(texts()).toEqual(expect.arrayContaining(["No conflict markers are left. Review the file, then Mark Resolved.", "Result"]));
+  expect(states()).toEqual({ revert: false, save: false });
+
+  // The file changing on disk under new edits keeps them, marks them, and only Revert (to the disk text) is offered.
+  await type({ offset: 0, removedLength: 0, insertedText: "// " });
+  const editing = editor();
+  files["app.ts"] = "outside\n";
+  await refresh();
+  expect(editor()).toBe(editing);
+  expect(texts()).toContain("Result — the file changed since you began editing");
+  expect(states()).toEqual({ revert: true, save: false });
+  // Edits that can't be saved: switching offers only Don't Save or Cancel.
+  jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "cancel" });
+  await select("notes.txt");
+  expect(jest.mocked(showMessage).mock.calls.at(-1)![0]).toMatchObject({ buttons: [{ label: "Don’t Save" }, { label: "Cancel" }], defaultButtonId: "cancel" });
+  expect(pane().props.patch.path).toBe("app.ts");
+  await press("Revert");
+  expect(editor().props.initialSource).toBe("outside\n");
+  expect(states()).toEqual({ revert: false, save: false });
+
+  // Mark Resolved with unsaved edits asks to save them first; then it stages the file (no markers, so no second ask).
+  await type({ offset: 0, removedLength: 0, insertedText: "x" });
+  jest.mocked(showMessage).mockClear();
+  jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "save" });
+  await press("Mark Resolved");
+  expect(jest.mocked(showMessage)).toHaveBeenCalledTimes(1);
+  expect(files["app.ts"]).toBe("xoutside\n");
+  expect(git.stageFile).toHaveBeenLastCalledWith("app.ts", expect.anything());
+
+  // Switching with Don't Save drops the edits.
+  await select("notes.txt");
+  await type({ offset: 0, removedLength: 0, insertedText: "y" });
+  jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "discard" });
+  await act(async () => { renderer.root.findAllByType(Sidebar)[2]!.props.onSelectionChange({ id: "app.ts" }); });
+  expect(pane().props.patch).toMatchObject({ path: "app.ts", section: "staged" });
+  expect(files["notes.txt"]).not.toContain("y");
+  expect(git.saveConflictResult).toHaveBeenCalledTimes(2);
 });

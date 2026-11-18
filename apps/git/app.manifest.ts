@@ -17,6 +17,7 @@ const manifest = {
       "@legendapp/spark/processes",
       "@legend-apps/diff-parser",
       "@legend-apps/syntax-parser",
+      "@legend-apps/source-editor",
       "@legend-apps/file-system-watcher",
       "@legendapp/spark/dialogs",
       "@legendapp/spark/menus",

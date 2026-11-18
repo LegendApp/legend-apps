@@ -38,6 +38,7 @@ import { SFSymbol } from "@legendapp/spark/ui/symbol";
 import { SidebarSplitView } from "@legendapp/spark/ui/split-view";
 import { addWindowListener, setWindowOptions } from "@legendapp/spark/windows";
 import { addMacOSWindowListener, setToolbarItemText, type MacOSToolbarItem } from "@legendapp/spark/windows/macos";
+import { createResultDraftStore, draftDirty, type ResultDraft } from "./resultDraft";
 
 const contentInset = 52;
 
@@ -45,7 +46,11 @@ const contentInset = 52;
 export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindowProps = {}) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [changes, setChanges] = useState(emptyChanges);
+  const changesRef = useRef(changes);
+  changesRef.current = changes;
   const controller = useRef<ReturnType<typeof createGitChanges> | null>(null);
+  // A conflicted file's unsaved Result edits; they survive refreshes and section switches, and actions that would drop them ask.
+  const [resultDraft] = useState(createResultDraftStore);
   const [section, setSection] = useState<Section>("changes");
   const [filter, setFilter] = useState("");
   const [history, setHistory] = useState(emptyHistory);
@@ -116,6 +121,13 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
   const generator = useRef<CommitMessageGenerator | null>(null);
   const [generating, setGenerating] = useState(false);
   const conflicts = conflictedEntries(changes.status).length;
+  // A draft belongs to one repository and one conflict: it goes when either does (Abort, a resolve, another repository).
+  const conflictedPaths = changes.status ? conflictedEntries(changes.status).map(entry => entry.path) : null;
+  useEffect(() => { resultDraft.clear(); }, [root]); // eslint-disable-line react-hooks/exhaustive-deps -- resultDraft is stable
+  useEffect(() => {
+    const draft = resultDraft.get();
+    if (draft && conflictedPaths && !conflictedPaths.includes(draft.path)) resultDraft.clear();
+  }, [conflictedPaths?.join("\0")]); // eslint-disable-line react-hooks/exhaustive-deps -- the paths are the key
   const conflictList = root ? conflictedEntries(changes.status).map(entry => conflictSides(entry, changes.patch?.conflicted && changes.patch.path === entry.path ? changes.patch.conflict : undefined)) : [];
   const selectedEntry = selected?.section === "unstaged" ? unstaged.find(entry => entry.path === selected.path) : undefined;
   const canDiscardFile = !busy && !!selectedEntry && selectedEntry.kind !== "unmerged";
@@ -129,18 +141,26 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     const owner = controller.current;
     try {
       const result = await openFileDialog({ windowId, selection: "directories", multiple: false, title: "Open Repository" });
-      if (!result.canceled && controller.current === owner) await owner?.open(result.paths[0]!);
+      if (result.canceled || controller.current !== owner) return;
+      // Asked only with unsaved edits, so a plain open takes no extra turn.
+      if (unsavedResult(changesRef.current.selection?.path) && !await settleResult(changesRef.current.selection?.path, openingLoses)) return;
+      await owner?.open(result.paths[0]!);
     } catch (error) { console.error(error); }
   }
 
   /** Opens a recent repository in this window; a folder that's gone or no longer a repository gets the Not a Repository sheet. */
-  function openRecent(path: string) { void controller.current?.open(path); }
+  async function openRecent(path: string) {
+    if (unsavedResult(changesRef.current.selection?.path) && !await settleResult(changesRef.current.selection?.path, openingLoses)) return;
+    await controller.current?.open(path);
+  }
 
   async function abortOperation() {
     const current = operation, owner = controller.current;
     if (!current || !owner) return;
     const { title, message } = abortWarning(current);
-    if (await confirmDestructive(windowId, title, abortLabel(current.kind), message, true)) await owner.abortOperation(current.kind);
+    const draft = unsavedResult(changesRef.current.selection?.path);
+    const lost = draft ? ` Your unsaved edits to the Result of “${draft.path.split("/").pop()}” are lost too.` : "";
+    if (await confirmDestructive(windowId, title, abortLabel(current.kind), message + lost, true)) await owner.abortOperation(current.kind);
   }
 
   async function discardFile() {
@@ -304,8 +324,55 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     finally { afterOperation(moved); }
   }
 
+  const openingLoses = "Your edits to its Result aren’t saved. Opening another repository without saving loses them.";
+  const saveResult = (draft: ResultDraft) => controller.current?.saveConflictResult(draft.path, draft.text, draft.base) ?? Promise.resolve(false);
+  /** Unsaved Result edits to `path`, or null. */
+  const unsavedResult = (path: string | null | undefined) => { const draft = resultDraft.get(); return path && draft?.path === path && draftDirty(draft) ? draft : null; };
+
+  /** Drops unsaved Result edits, showing the file as it was last read. */
+  const dropResult = () => {
+    const patch = changesRef.current.patch;
+    resultDraft.revert(patch?.path === resultDraft.get()?.path ? patch?.regions?.text : undefined);
+  };
+
+  /**
+   * Before leaving `path`'s unsaved Result edits (switching files or repositories, Mark Resolved): Save, Don't Save or Cancel.
+   * Edits the file changed under can't be saved, so then it's Don't Save or Cancel.
+   */
+  async function settleResult(path: string | null | undefined, reason: string) {
+    const draft = unsavedResult(path);
+    if (!draft) return true;
+    let choice: string | null;
+    try {
+      choice = (await showMessage({ windowId, kind: "warning", title: `Save your edits to “${draft.path.split("/").pop()}”?`,
+        message: draft.stale ? `${reason} The file changed since you began editing, so they can’t be saved.` : reason,
+        buttons: [...draft.stale ? [] : [{ id: "save", label: "Save" }], { id: "discard", label: "Don’t Save" }, { id: "cancel", label: "Cancel" }],
+        defaultButtonId: draft.stale ? "cancel" : "save", cancelButtonId: "cancel" })).buttonId;
+    } catch (error) { console.error(error); return false; }
+    if (choice === "discard") { dropResult(); return true; }
+    return choice === "save" && await resultDraft.save(saveResult);
+  }
+
+  /** Before a pick replaces `path`'s Result: asks to discard unsaved edits to it. */
+  async function discardResultFor(path: string, label: string) {
+    if (!unsavedResult(path)) return true;
+    if (!await confirmDestructive(windowId, `Discard your edits to “${path.split("/").pop()}”?`, label,
+      `${label} rewrites the file, so your unsaved edits to its Result are lost.`, true)) return false;
+    dropResult();
+    return true;
+  }
+
+  /** Selects a file in Changes once unsaved Result edits to the shown file are saved or dropped. */
+  async function selectChange(selection: { section: "unstaged" | "staged"; path: string } | null) {
+    const shown = changesRef.current.selection;
+    if (shown && (shown.section !== selection?.section || shown.path !== selection.path)
+      && !await settleResult(shown.path, "Your edits to its Result aren’t saved. Switching files without saving loses them.")) return;
+    await controller.current?.select(selection);
+  }
+
   /** Stages a conflicted file to mark it resolved; one that still has conflict markers asks first. */
   async function markResolved(path: string) {
+    if (!await settleResult(path, "Mark Resolved stages the file as it is on disk, without your unsaved edits to its Result.")) return;
     const owner = controller.current, repository = rootRef.current;
     if (!owner) return;
     let markers: boolean;
@@ -323,6 +390,7 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     const owner = controller.current, repository = rootRef.current;
     if (!owner) return;
     const label = commandLabel(`use-${side}`, contextRef.current, path), name = path.split("/").pop();
+    if (!await discardResultFor(path, label)) return;
     let file: GitConflictFile | null;
     try { file = await owner.conflictFile(path); } catch (error) { await reportBranchError("Couldn’t Resolve the Conflict", error); return; }
     if (!file) { void owner.refresh(); return; }
@@ -1161,11 +1229,11 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
   // Stays mounted (hidden) in History so the commit message draft and a running generation survive a section switch.
   const changesList = <View style={[styles.listPane, section !== "changes" && styles.hidden]}>
     <ChangesList title="Unstaged" entries={unstaged.filter(matches("unstaged"))} filtered={!!filter} selectedPath={selected?.section === "unstaged" ? selected.path : null}
-      onSelect={path => void controller.current?.select(path === null ? null : { section: "unstaged", path })}
+      onSelect={path => void selectChange(path === null ? null : { section: "unstaged", path })}
       action="Stage" disabled={busy} onAction={path => { if (context.conflicts.some(entry => entry.path === path)) void markResolved(path); else void controller.current?.changeFile(path, true); }} onContextMenu={showFileMenu}
       secondaryAction="Discard…" secondaryDisabled={!canDiscardFile} onSecondaryAction={() => void discardFile()} />
     <ChangesList title="Staged" entries={staged.filter(matches("staged"))} filtered={!!filter} selectedPath={selected?.section === "staged" ? selected.path : null}
-      onSelect={path => void controller.current?.select(path === null ? null : { section: "staged", path })}
+      onSelect={path => void selectChange(path === null ? null : { section: "staged", path })}
       action="Unstage" disabled={busy} onAction={path => void controller.current?.changeFile(path, false)} onContextMenu={showFileMenu} />
     <CommitComposer disabled={busy} stagedCount={staged.length} conflictCount={conflicts} merging={changes.merging} prepared={preparedMessage} unborn={changes.status?.branch.oid === "(initial)"} root={root!}
       commitRef={commit} onCommit={input => controller.current?.commit(input) ?? Promise.resolve(false)} headMessage={() => controller.current?.headMessage() ?? Promise.resolve(null)}
@@ -1228,7 +1296,11 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
   </> : null;
   const changesDetail = changes.patch ? <DiffPane patch={changes.patch} disabled={busy} applyRef={applyLines} discardRef={discardLines} accessory={resolveButton}
     conflictLabels={{ ours: conflictSideName(operation, "ours"), theirs: conflictSideName(operation, "theirs") }}
-    onPickRegion={(index, side, shown) => { if (conflictPath) void controller.current?.resolveConflictRegion(conflictPath, index, side, shown); }}
+    onPickRegion={async (index, side, shown) => {
+      if (!conflictPath || !await discardResultFor(conflictPath, side === "both" ? "Use Both" : `Use ${conflictSideName(operation, side)}`)) return;
+      await controller.current?.resolveConflictRegion(conflictPath, index, side, shown);
+    }}
+    result={{ store: resultDraft, onSave: saveResult }}
     onLineChange={target => setBlameTarget(changesBlameTarget(target))}
     onLineContextMenu={(target, position) => { const blame = changesBlameTarget(target); if (blame) showLineMenu(blame, position); }}
     onApply={(keys, text) => void controller.current?.changeLines(keys, text)}

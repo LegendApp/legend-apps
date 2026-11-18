@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactElement, type ReactNode } from "react";
 import { FlatList, PlatformColor, Pressable, ScrollView, StyleSheet, Text, View, useColorScheme, type GestureResponderEvent } from "react-native";
 import type { ConflictRegion, ConflictRegionSide } from "@legend-apps/git-core";
 import { DiffNativeRow, DiffNativeRowConfig, diffUnifiedChangeBarWidth, diffUnifiedLineNumberWidth, diffUnifiedMarkerWidth, getDiffRowPalette, loadUnifiedDiff, type DiffDocument, type DiffRenderRow } from "@legend-apps/diff-parser";
 import { unifiedPatchHunkKeys, unifiedPatchLineKey } from "@legend-apps/diff-parser/src/unifiedPatch";
 import { Button } from "@legendapp/spark/ui";
 import { SFSymbol } from "@legendapp/spark/ui/symbol";
+import { SourceDocumentEditor } from "@legend-apps/source-editor";
+import { draftDirty, resultLineKinds, type ResultDraft, type ResultDraftStore, type TextEdit } from "./resultDraft";
 import { rowAnchorKeys } from "./reviewThreads";
 import type { ChangesState } from "./gitChanges";
 import { pathParts, useSymbolColor } from "./FileRow";
@@ -130,7 +132,48 @@ function ConflictRegionView({ region, index, count, labels, disabled, appearance
   </View>;
 }
 
-export function DiffPane({ patch, disabled, readOnly = false, accessory, onApply, applyRef, onDiscard, discardRef, onLineChange, onLineContextMenu, annotations, header, onRangeChange, conflictLabels, onPickRegion }: {
+const resultTint = {
+  light: { ...sideTint.light, marker: "rgba(207, 34, 46, 0.12)", base: "rgba(110, 119, 129, 0.10)" },
+  dark: { ...sideTint.dark, marker: "rgba(248, 81, 73, 0.18)", base: "rgba(139, 148, 158, 0.14)" },
+};
+
+/** The editor for one draft version; it's seeded once, so a new version (Revert, a reload) remounts it. */
+function ResultEditor({ draft, lineBackground, appearance, onEdit }: {
+  draft: ResultDraft; lineBackground: (index: number) => string | undefined; appearance: "light" | "dark"; onEdit: (edit: TextEdit) => void;
+}) {
+  const [seed] = useState(draft.text);
+  return <SourceDocumentEditor filePath={draft.path} initialSource={seed} fontSize={12} wrap={false} foreground={appearance === "dark" ? "#e6edf3" : "#1f2328"}
+    syntaxHighlightingEnabled={false} showLanguageSelector={false} showFileLoadingBanner={false} lineBackground={lineBackground} onChange={onEdit} />;
+}
+
+/**
+ * A conflicted file's worktree text, editable, with its conflict regions tinted. Save writes it to the file (refused when
+ * the file changed since the edit began); Revert drops unsaved edits. Edits live in `store`, so they outlast this view.
+ */
+function ResultView({ path, disk, size, store, disabled, appearance, onSave }: {
+  path: string; disk: string; size: number; store: ResultDraftStore; disabled: boolean; appearance: "light" | "dark";
+  onSave: (draft: ResultDraft) => Promise<boolean>;
+}) {
+  const stored = useSyncExternalStore(store.subscribe, store.get);
+  useEffect(() => { store.sync(path, disk); }, [store, path, disk]);
+  const draft = stored?.path === path ? stored : null;
+  const text = draft?.text ?? disk;
+  const kinds = useMemo(() => resultLineKinds(text, size), [text, size]);
+  const tint = resultTint[appearance];
+  const lineBackground = useCallback((index: number) => { const kind = kinds[index]; return kind ? tint[kind] : undefined; }, [kinds, tint]);
+  const dirty = draftDirty(draft), stale = !!draft?.stale;
+  const status = stale ? "Result — the file changed since you began editing" : dirty ? "Result — edited" : "Result";
+  return <View style={styles.result}>
+    <View style={styles.hunk}>
+      <Text style={styles.hunkTitle} numberOfLines={1} accessibilityRole="header">{status}</Text>
+      <Button style={styles.resultAction} disabled={disabled || !dirty && !stale} onPress={() => store.revert(disk)}>Revert</Button>
+      <Button style={styles.resultAction} disabled={disabled || !dirty || stale} onPress={() => void store.save(onSave)}>Save</Button>
+    </View>
+    {draft ? <ResultEditor key={`${path}:${draft.version}`} draft={draft} lineBackground={lineBackground} appearance={appearance} onEdit={edit => store.edit(draft.version, edit)} /> : null}
+  </View>;
+}
+
+export function DiffPane({ patch, disabled, readOnly = false, accessory, onApply, applyRef, onDiscard, discardRef, onLineChange, onLineContextMenu, annotations, header, onRangeChange, conflictLabels, onPickRegion, result }: {
   patch: NonNullable<ChangesState["patch"]>; disabled: boolean;
   /** History: no staging or discard actions and no line selection. */
   readOnly?: boolean;
@@ -153,6 +196,8 @@ export function DiffPane({ patch, disabled, readOnly = false, accessory, onApply
   conflictLabels?: { ours: string; theirs: string };
   /** A conflicted file: resolves one region in the worktree file, given the text its regions were read from. */
   onPickRegion?: (index: number, side: ConflictRegionSide, shown: string) => void;
+  /** A conflicted text file: its editable Result, kept in `store` and written by `onSave`. */
+  result?: { store: ResultDraftStore; onSave: (draft: ResultDraft) => Promise<boolean> };
 }) {
   const appearance = useColorScheme() === "dark" ? "dark" : "light";
   const [loaded, setLoaded] = useState<{ text: string; document: DiffDocument; rows: DiffRenderRow[] } | null>(null);
@@ -234,6 +279,10 @@ export function DiffPane({ patch, disabled, readOnly = false, accessory, onApply
   };
   const annotated = (row: DiffRenderRow) => !!annotations?.size && rowAnchorKeys(row).some(key => annotations.has(key));
   const { name, folder } = pathParts(patch.path);
+  const regionList = (regions: NonNullable<typeof patch.regions>) => regions.regions?.length ? <ScrollView key={patch.path} style={styles.fill} contentContainerStyle={styles.regions}>
+    {regions.regions.map((region, index) => <ConflictRegionView key={`${index}:${region.start}`} region={region} index={index} count={regions.regions!.length}
+      labels={conflictLabels ?? { ours: "Ours", theirs: "Theirs" }} disabled={disabled} appearance={appearance} onPick={side => onPickRegion!(index, side, regions.text)} />)}
+  </ScrollView> : null;
   return <View style={styles.root}>
     <View style={styles.header}>
       <Text style={styles.path} numberOfLines={1} accessibilityRole="header">{name}{folder ? <Text style={styles.folder}>{`  ${folder}`}</Text> : null}</Text>
@@ -242,10 +291,10 @@ export function DiffPane({ patch, disabled, readOnly = false, accessory, onApply
       {readOnly || patch.conflicted ? null : <Button style={styles.action} disabled={disabled || !selected.size} onPress={() => onApply(selected, patch.text)}>{`${verb} Lines`}</Button>}
       {accessory}
     </View>
-    {message ? <Text style={styles.message}>{message}</Text> : regions?.regions ? <ScrollView key={patch.path} contentContainerStyle={styles.regions}>
-      {regions.regions.map((region, index) => <ConflictRegionView key={`${index}:${region.start}`} region={region} index={index} count={regions.regions!.length}
-        labels={conflictLabels ?? { ours: "Ours", theirs: "Theirs" }} disabled={disabled} appearance={appearance} onPick={side => onPickRegion!(index, side, regions.text)} />)}
-    </ScrollView> : loaded && <>
+    {regions && result ? <View style={styles.fill}>
+      {message ? <Text style={styles.message}>{message}</Text> : regionList(regions)}
+      <ResultView path={patch.path} disk={regions.text} size={regions.size} store={result.store} disabled={disabled} appearance={appearance} onSave={result.onSave} />
+    </View> : message ? <Text style={styles.message}>{message}</Text> : regions?.regions ? regionList(regions) : loaded && <>
       <DiffNativeRowConfig
         style={styles.config} collapsable={false} configId={configId} configVersion={appearance === "dark" ? 2 : 1} documentId={loaded.document.documentId}
         presentation="unified" projectionId={0} collapsedFileIndexes="" rowHeight={rowHeight} fontFamily={fontFamily} fontSize={12}
@@ -307,6 +356,9 @@ const styles = StyleSheet.create({
   marker: { position: "absolute", left: 6, top: 4, width: 13, height: 12 },
   selected: { backgroundColor: PlatformColor("selectedContentBackgroundColor"), opacity: 0.28 },
   regions: { paddingBottom: 16 },
+  fill: { flex: 1 },
+  result: { flex: 1.2, borderTopWidth: StyleSheet.hairlineWidth, borderColor: PlatformColor("separatorColor") },
+  resultAction: { width: 76, height: 24 },
   region: { marginBottom: 12 },
   regionLabel: { paddingLeft: 16, paddingTop: 6, paddingBottom: 3, fontSize: 11, fontWeight: "600", color: PlatformColor("secondaryLabelColor") },
   regionLines: { borderLeftWidth: 3, paddingVertical: 2 },

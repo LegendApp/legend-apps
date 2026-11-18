@@ -1362,7 +1362,9 @@ export class GitService {
     return this.enqueue(options, async () => {
       const root = (await this.git(["rev-parse", "--show-toplevel"], options)).replace(/\n$/, "");
       const text = await this.conflictText(root, path, options);
-      return text === null ? null : { text, regions: parseConflictRegions(text, await this.markerSize(root, path, options)) };
+      if (text === null) return null;
+      const size = await this.markerSize(root, path, options);
+      return { text, size, regions: parseConflictRegions(text, size) };
     });
   }
 
@@ -1385,18 +1387,31 @@ export class GitService {
    * without writing, since the region may have moved.
    */
   resolveConflictRegion(path: string, index: number, side: ConflictRegionSide, shown: string, options: GitReadOptions = {}) {
+    return this.rewriteConflictText(path, shown, "its conflicts were shown, so nothing was picked. Review them again.",
+      (text, size) => resolveConflictRegion(text, index, side, size), options);
+  }
+
+  /**
+   * Writes `text` (a hand-edited result, written byte for byte) over conflicted `path` in the worktree only; it stays
+   * conflicted until staged. Rejects without writing when the file no longer matches `shown`, the text the edit began from.
+   */
+  saveConflictResult(path: string, text: string, shown: string, options: GitReadOptions = {}) {
+    return this.rewriteConflictText(path, shown, "you began editing it, so your edits weren’t saved. Revert to see it.", () => text, options);
+  }
+
+  private rewriteConflictText(path: string, shown: string, staleReason: string, next: (text: string, size: number) => string, options: GitReadOptions) {
     if (!isRepoPath(path)) return Promise.reject(new Error("Expected a repository-relative file path."));
     return this.enqueue(options, async (_gitDir, commit) => {
       const root = (await this.git(["rev-parse", "--show-toplevel"], options)).replace(/\n$/, "");
       const name = `“${path.split("/").pop()}”`;
       const text = await this.conflictText(root, path, options);
       if (text === null) throw new Error(`${name} is no longer a conflicted text file. Refresh and try again.`);
-      if (text !== shown) throw new Error(`${name} changed since its conflicts were shown, so nothing was picked. Review them again.`);
-      const next = resolveConflictRegion(text, index, side, await this.markerSize(root, path, options));
+      if (text !== shown) throw new Error(`${name} changed since ${staleReason}`);
+      const written = next(text, await this.markerSize(root, path, options));
       commit();
       // Written in full beside the file first, then copied over it (keeping its mode and links); not cancellable once begun.
       await this.process("sh", ["-c", 't=$(mktemp "$1.XXXXXX") || exit 1; if cat > "$t"; then cat -- "$t" > "$1"; s=$?; else s=1; fi; rm -f -- "$t"; exit $s',
-        "legend-git-conflict-write", `${root}/${path}`], { ...options, signal: undefined }, 60_000, next);
+        "legend-git-conflict-write", `${root}/${path}`], { ...options, signal: undefined }, 60_000, written);
     });
   }
 

@@ -197,6 +197,10 @@ export function createGitChanges(onChange: (state: ChangesState) => void, watch:
     resolveConflictRegion(path: string, index: number, side: ConflictRegionSide, shown: string) {
       return write((git, signal) => git.resolveConflictRegion(path, index, side, shown, { signal }));
     },
+    /** Writes a hand-edited result over conflicted `path`; refused when the file no longer matches `shown`, the text the edit began from. */
+    saveConflictResult(path: string, text: string, shown: string) {
+      return write((git, signal) => git.saveConflictResult(path, text, shown, { signal }));
+    },
     /** The open repository's staged diff; aborted by `signal` or by opening another repository. */
     async stagedDiff(signal: AbortSignal) {
       const git = service, controller = active, root = state.root;

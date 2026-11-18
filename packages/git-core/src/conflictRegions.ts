@@ -9,8 +9,11 @@ export type ConflictRegion = {
   oursLabel: string; baseLabel: string | null; theirsLabel: string;
 };
 
-/** A conflicted file's text and its regions; `regions` is null when the markers don't form well-nested regions. */
-export type GitConflictRegions = { text: string; regions: ConflictRegion[] | null };
+/**
+ * A conflicted file's text, its markers' length (`conflict-marker-size`) and its regions; `regions` is null when the markers
+ * don't form well-nested regions.
+ */
+export type GitConflictRegions = { text: string; size: number; regions: ConflictRegion[] | null };
 
 export type ConflictRegionSide = "ours" | "theirs" | "both";
 
