@@ -166,7 +166,7 @@ it("lists conflicts once without loading their patch, and reports commit failure
   t.git.status.mockResolvedValue(conflicted);
   await t.controller.open("/repo");
   expect(conflictedEntries(t.state().status).map(entry => entry.path)).toEqual(["conflict.txt"]);
-  expect(unstagedEntries(t.state().status).map(entry => entry.path)).toEqual(["both.txt", "conflict.txt"]);
+  expect(unstagedEntries(t.state().status).map(entry => entry.path)).toEqual(["conflict.txt", "both.txt"]);
   expect(stagedEntries(t.state().status).map(entry => entry.path)).toEqual(["both.txt"]);
   await t.controller.select({ section: "unstaged", path: "conflict.txt" });
   expect(t.state().patch).toMatchObject({ conflicted: true, file: null });

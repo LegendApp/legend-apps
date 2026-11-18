@@ -685,7 +685,7 @@ it("lists Branches, Remotes and Tags in the sidebar, scopes History to a ref, an
   git.checkoutBranch.mockRejectedValueOnce(new Error("error: Your local changes to the following files would be overwritten by checkout:\n\ta.txt\nPlease commit your changes or stash them before you switch branches.\nAborting"));
   jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: false, itemId: "checkout-ref" });
   await act(async () => { row("ref:refs/heads/feature/ünï").props.onContextMenu({ windowPosition: { x: 1, y: 2 } }); });
-  expect(jest.mocked(showContextMenu).mock.calls.at(-1)![0].items.map((entry: any) => entry.label ?? "-")).toEqual(["Check Out", "New Branch from “feature/ünï”…", "-", "Rename Branch…", "Delete Branch…", "-", "Copy Name"]);
+  expect(jest.mocked(showContextMenu).mock.calls.at(-1)![0].items.map((entry: any) => entry.label ?? "-")).toEqual(["Check Out", "New Branch from “feature/ünï”…", "-", "Merge “feature/ünï” into “main”…", "-", "Rename Branch…", "Delete Branch…", "-", "Copy Name"]);
   expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "warning", title: "Couldn’t Switch to “feature/ünï”", message: expect.stringMatching(/^Your local changes .*would be overwritten[\s\S]*Aborting$/) }));
 
   // A remote branch checks out as a tracking local branch, and its selection moves to that branch.
@@ -1378,7 +1378,7 @@ it("lists recents in the empty window, opens Open Recent's requests, shows a pau
   expect(recentRepositories.get().slice(0, 2)).toEqual(["/work/repo", "/work/gone"]);
   expect(noteRecentDocument).toHaveBeenLastCalledWith("/work/repo");
   const bar = renderer.root.findByType(StateBar);
-  expect(bar.props.text).toBe("Merging “feature” into “main” — 2 conflicts");
+  expect(bar.props.text).toBe("Merging “feature” into “main” — 2 conflicted files");
   const [abort, resume] = bar.findAllByType(Button);
   expect(resume!.props.disabled).toBe(true);
   expect(menuItem("abort-operation")).toMatchObject({ label: "Abort Merge…", disabled: false });
@@ -1388,6 +1388,141 @@ it("lists recents in the empty window, opens Open Recent's requests, shows a pau
   expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ title: "Abort the merge?" }));
   expect(git.abortOperation).toHaveBeenCalledWith("merge", expect.anything());
   expect(renderer.root.findAllByType(StateBar)).toHaveLength(0);
+  await act(async () => { renderer.unmount(); });
+});
+
+it("merges a branch into the current one after a sheet, shows the stopped merge with conflicted files first, marks files resolved and continues", async () => {
+  jest.clearAllMocks();
+  jest.mocked(watchDirectories).mockReturnValue({ remove: jest.fn() });
+  const head = "a".repeat(40), side = "c".repeat(40);
+  jest.mocked(openGitHistory).mockImplementation(async () => ({ head: { handle: 1, headOid: head, unborn: false, detached: false }, page: jest.fn(async (offset: number) => ({ offset, commits: [], done: true })), close: jest.fn() }));
+  jest.mocked(loadUnifiedDiff).mockReturnValue(new Promise(() => {}));
+  const branch = { oid: head, head: "main", upstream: null, ahead: 0, behind: 0 };
+  const refs = {
+    branches: [{ name: "feature", ref: "refs/heads/feature", oid: side, current: false, upstream: null, time: 2 }, { name: "main", ref: "refs/heads/main", oid: head, current: true, upstream: null, time: 1 }],
+    remotes: [{ name: "origin", branches: [{ name: "origin/fix", ref: "refs/remotes/origin/fix", oid: side, remote: "origin", branch: "fix" }] }], tags: [],
+  };
+  const merging = { kind: "merge", branch: "main", target: "feature", commit: null, step: null, conflicts: 2, mergeHead: true };
+  const conflicted = (path: string) => ({ kind: "unmerged" as const, path, indexStatus: "U", worktreeStatus: "U" });
+  const git = { repoRoot: "/repo", resolveRoot: jest.fn(async () => "/repo"), watchLocations: jest.fn(async () => ({ root: "/repo", gitDir: "/repo/.git", commonDir: "/repo/.git", ignoredPaths: [] })),
+    status: jest.fn(async (): Promise<unknown> => ({ branch, entries: [] })), lastDiscard: jest.fn(async () => null), operationState: jest.fn(async (): Promise<unknown> => null),
+    revParse: jest.fn(async () => head), refDecorations: jest.fn(async () => new Map()), remoteUrl: jest.fn(async () => null), currentBranch: jest.fn(async () => "main"),
+    listRefs: jest.fn(async () => refs), listStashes: jest.fn(async () => []), listWorktrees: jest.fn(async () => []), fileDiff: jest.fn(async () => ""),
+    mergeKind: jest.fn(async () => "merge"), merge: jest.fn(async () => "stopped"), mergeMessage: jest.fn(async () => "Merge branch 'feature'"),
+    hasConflictMarkers: jest.fn(async () => true), stageFile: jest.fn(async () => {}), continueOperation: jest.fn(async () => {}), commit: jest.fn(async () => {}) };
+  jest.mocked(getGitService).mockReturnValue(git as unknown as GitService);
+  jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
+  let renderer!: ReactTestRenderer;
+  await act(async () => { renderer = create(<App />); });
+  await act(async () => { openRepository(); });
+  const sidebar = () => renderer.root.findAllByType(Sidebar)[0]!;
+  const row = (id: string) => sidebar().findAllByType(SidebarItem).find(item => item.props.id === id)!;
+  const menuItem = (id: string) => lastMenu().items.flatMap(entry => entry.items ?? []).find(entry => entry.id === id);
+  const button = (label: string) => renderer.root.findAllByType(Button).find(node => node.props.children === label);
+  const inputs = () => renderer.root.findAllByType(TextInput);
+  const menuLabels = () => jest.mocked(showContextMenu).mock.calls.at(-1)![0].items.map((entry: any) => entry.label ?? "-");
+
+  // The Branch menu has Merge into Current Branch…; a branch's context menu names both branches. The current branch has none.
+  expect(lastMenu().items.find(entry => entry.id === "branch").items.map((entry: any) => entry.id ?? "-")).toEqual(["switch-branch", "new-branch", "-", "rename-branch", "delete-branch", "-", "merge-ref", "-", "abort-operation", "continue-operation"]);
+  expect(menuItem("merge-ref")).toMatchObject({ label: "Merge into Current Branch…", disabled: false });
+  jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: true } as never);
+  await act(async () => { row("ref:refs/heads/main").props.onContextMenu({ windowPosition: { x: 1, y: 2 } }); });
+  expect(menuLabels()).not.toContain("Merge “main” into “main”…");
+
+  // The sheet says a merge commit is made; Merge runs it, it stops with conflicts and Changes shows them first, with Git's message.
+  git.merge.mockImplementationOnce(async () => {
+    git.status.mockResolvedValue({ branch, entries: [{ kind: "ordinary", path: "a-clean.txt", indexStatus: "M", worktreeStatus: "." }, { kind: "ordinary", path: "0-edit.txt", indexStatus: ".", worktreeStatus: "M" }, conflicted("x.txt"), conflicted("y.txt")] });
+    git.operationState.mockResolvedValue(merging);
+    return "stopped";
+  });
+  await act(async () => { sidebar().props.onSelectionChange({ id: "history" }); });
+  jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "merge" });
+  jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: false, itemId: "merge-ref" });
+  await act(async () => { row("ref:refs/heads/feature").props.onContextMenu({ windowPosition: { x: 1, y: 2 } }); });
+  expect(menuLabels()).toEqual(["Check Out", "New Branch from “feature”…", "-", "Merge “feature” into “main”…", "-", "Rename Branch…", "Delete Branch…", "-", "Copy Name"]);
+  expect(git.mergeKind).toHaveBeenCalledWith("refs/heads/feature", expect.anything());
+  expect(showMessage).toHaveBeenCalledWith(expect.objectContaining({ kind: "info", title: "Merge “feature” into “main”?", message: expect.stringContaining("Git makes a merge commit on “main” with its default message."),
+    buttons: [{ id: "merge", label: "Merge" }, { id: "cancel", label: "Cancel" }], defaultButtonId: "merge" }));
+  expect(git.merge).toHaveBeenCalledWith("refs/heads/feature", expect.anything());
+  expect(sidebar().props.selectedId).toBe("changes");
+  const bar = renderer.root.findByType(StateBar);
+  expect(bar.props.text).toBe("Merging “feature” into “main” — 2 conflicted files");
+  expect(bar.findAllByType(Button)[1]!.props.disabled).toBe(true);
+  expect(menuItem("continue-operation")).toMatchObject({ label: "Continue Merge", disabled: true });
+  expect(menuItem("merge-ref")).toMatchObject({ disabled: true });
+  const unstagedList = () => renderer.root.findAllByType(Sidebar)[1]!;
+  expect(unstagedList().findAllByType(SidebarItem).map(item => item.props.id)).toEqual(["x.txt", "y.txt", "0-edit.txt"]);
+  expect(inputs().map(input => input.props.value)).toEqual(["Merge branch 'feature'", ""]);
+  // The toolbar's branch is still the current branch.
+  expect((jest.mocked(setWindowOptions).mock.calls.at(-1)![1].macos!.toolbar!.items! as any[]).find(entry => entry.id === "branch").label).toBe("main");
+
+  // Mark Resolved (the conflict's diff header) on a file with markers asks first; Cancel stages nothing.
+  await act(async () => { unstagedList().props.onSelectionChange({ id: "x.txt" }); });
+  expect(button("Mark Resolved")!.props.disabled).toBe(false);
+  jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "cancel" });
+  await act(async () => { button("Mark Resolved")!.props.onPress(); });
+  expect(git.hasConflictMarkers).toHaveBeenLastCalledWith("x.txt", expect.anything());
+  expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "warning", title: "Mark “x.txt” as resolved anyway?", buttons: [{ id: "confirm", label: "Mark Resolved" }, { id: "cancel", label: "Cancel" }], defaultButtonId: "cancel" }));
+  expect(git.stageFile).not.toHaveBeenCalled();
+  // Once edited (no markers), it stages without asking; so does Stage on a conflicted row.
+  git.hasConflictMarkers.mockResolvedValue(false);
+  const asked = jest.mocked(showMessage).mock.calls.length;
+  await act(async () => { button("Mark Resolved")!.props.onPress(); });
+  expect(git.stageFile).toHaveBeenLastCalledWith("x.txt", expect.anything());
+  expect(jest.mocked(showMessage).mock.calls.length).toBe(asked);
+  // The file's context menu offers Mark Resolved too.
+  jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: false, itemId: "mark-resolved" });
+  await act(async () => { unstagedList().findAllByType(SidebarItem).find(item => item.props.id === "y.txt")!.props.onContextMenu({ windowPosition: { x: 1, y: 2 } }); });
+  expect(menuLabels()).toEqual(["Mark Resolved", "-", "Show File History"]);
+  expect(git.stageFile).toHaveBeenLastCalledWith("y.txt", expect.anything());
+
+  // With no conflicts left Continue is enabled; it continues the merge, the bar goes away and the unedited message clears.
+  git.status.mockResolvedValue({ branch, entries: [{ kind: "ordinary", path: "x.txt", indexStatus: "M", worktreeStatus: "." }] });
+  git.operationState.mockResolvedValue({ ...merging, conflicts: 0 });
+  await act(async () => { lastMenu().onAction({ itemId: "refresh" }); });
+  expect(renderer.root.findByType(StateBar).findAllByType(Button)[1]!.props.disabled).toBe(false);
+  // An edited message is the merge commit's (a commit while MERGE_HEAD exists); here a hook refused it, so the merge goes on.
+  git.commit.mockRejectedValueOnce(new Error("hook said no"));
+  await act(async () => { inputs()[0]!.props.onChangeText("Merge feature for the release"); });
+  await act(async () => { renderer.root.findByType(StateBar).findAllByType(Button)[1]!.props.onPress(); });
+  expect(git.commit).toHaveBeenLastCalledWith(expect.objectContaining({ message: "Merge feature for the release\n" }), expect.anything());
+  expect(git.continueOperation).not.toHaveBeenCalled();
+  expect(renderer.root.findAllByType(StateBar).map(node => node.props.text)).toEqual(["Merging “feature” into “main”", "hook said no"]);
+  // Unedited, Continue continues the merge with Git's message.
+  await act(async () => { inputs()[0]!.props.onChangeText("Merge branch 'feature'"); });
+  git.continueOperation.mockImplementationOnce(async () => { git.operationState.mockResolvedValue(null); git.status.mockResolvedValue({ branch, entries: [] }); });
+  await act(async () => { renderer.root.findAllByType(StateBar)[0]!.findAllByType(Button)[1]!.props.onPress(); });
+  expect(git.continueOperation).toHaveBeenCalledWith("merge", expect.anything());
+  expect(renderer.root.findAllByType(StateBar)).toHaveLength(0);
+  expect(inputs().map(input => input.props.value)).toEqual(["", ""]);
+
+  // A branch merged already gets Git's "Already up to date." and no merge; a fast-forward says so; Git's refusal is shown.
+  git.mergeKind.mockResolvedValueOnce("up-to-date");
+  const merges = git.merge.mock.calls.length;
+  await act(async () => { sidebar().props.onSelectionChange({ id: "ref:refs/heads/feature" }); });
+  await act(async () => { lastMenu().onAction({ itemId: "merge-ref" }); });
+  expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "info", title: "Already up to date.", message: "“main” already has every commit of “feature”." }));
+  expect(git.merge.mock.calls.length).toBe(merges);
+  git.mergeKind.mockResolvedValueOnce("fast-forward");
+  git.merge.mockRejectedValueOnce(new Error("error: Your local changes to the following files would be overwritten by merge:\n\ta.txt\nPlease commit your changes or stash them before you merge.\nAborting"));
+  jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "merge" });
+  jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: false, itemId: "merge-ref" });
+  await act(async () => { row("ref:refs/remotes/origin/fix").props.onContextMenu({ windowPosition: { x: 1, y: 2 } }); });
+  expect(menuLabels()).toEqual(["Check Out", "New Branch from “origin/fix”…", "-", "Merge “origin/fix” into “main”…", "-", "Copy Name"]);
+  expect(jest.mocked(showMessage).mock.calls.at(-2)![0]).toMatchObject({ title: "Merge “origin/fix” into “main”?", message: expect.stringContaining("Git fast-forwards “main” to “origin/fix”") });
+  expect(git.merge).toHaveBeenLastCalledWith("refs/remotes/origin/fix", expect.anything());
+  expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "warning", title: "Couldn’t Merge “origin/fix” into “main”", message: expect.stringMatching(/^Your local changes .*overwritten by merge:[\s\S]*Please commit your changes or stash them before you merge\.\nAborting$/) }));
+
+  // From the menu bar without a branch selected, it asks for the name; Cancel merges nothing.
+  await act(async () => { sidebar().props.onSelectionChange({ id: "changes" }); });
+  jest.mocked(showPrompt).mockResolvedValueOnce({ canceled: true });
+  await act(async () => { lastMenu().onAction({ itemId: "merge-ref" }); });
+  expect(showPrompt).toHaveBeenLastCalledWith(expect.objectContaining({ title: "Merge into “main”" }));
+  jest.mocked(showPrompt).mockResolvedValueOnce({ canceled: false, value: "feature" });
+  jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "cancel" });
+  await act(async () => { lastMenu().onAction({ itemId: "merge-ref" }); });
+  expect(git.mergeKind).toHaveBeenLastCalledWith("refs/heads/feature", expect.anything());
+  expect(git.merge.mock.calls.length).toBe(merges + 1);
   await act(async () => { renderer.unmount(); });
 });
 

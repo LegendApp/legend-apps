@@ -110,6 +110,7 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
   const applyLines = useRef<(() => void) | null>(null);
   const discardLines = useRef<(() => void) | null>(null);
   const commit = useRef<(() => void) | null>(null);
+  const editedMergeMessage = useRef<(() => string | null) | null>(null);
   const generator = useRef<CommitMessageGenerator | null>(null);
   const [generating, setGenerating] = useState(false);
   const conflicts = conflictedEntries(changes.status).length;
@@ -205,6 +206,51 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
       if (!await confirmStashAndSwitch(windowId, error.branch, error.message)) return false;
       try { switched(await owner.stashAndCheckout(entry)); return true; } catch (failed) { await reportBranchError(`Couldn’t Switch to “${entry.ref.name}”`, failed); return false; }
     }
+  }
+
+  /**
+   * Merges a local or remote branch into the current one (`git merge --no-edit`) after a sheet saying what happens; asks for
+   * the branch's name when none is given. A branch merged already gets Git's "Already up to date."; a merge that stops with
+   * conflicts shows Changes, with the operation bar above it.
+   */
+  async function mergeRef(ref?: string) {
+    const owner = refsController.current, into = currentBranch, repository = rootRef.current;
+    if (!owner || !into) return;
+    // Another repository opened while a sheet was up.
+    const moved = () => refsController.current !== owner || rootRef.current !== repository;
+    let entry = ref ? findRef(owner.current().refs, ref) : null;
+    if (ref && !entry) return;
+    if (!entry) {
+      const result = await showPrompt({ windowId, title: `Merge into “${into}”`, message: `Enter the name of a local or remote branch to merge into “${into}”.`, placeholder: "Branch name", confirmLabel: "Continue" })
+        .catch((error: unknown) => { console.error(error); return { canceled: true as const }; });
+      if (result.canceled || !result.value.trim() || moved()) return;
+      entry = resolveBranchName(owner.current().refs, result.value.trim());
+      if (!entry) { await reportBranchError(`There’s No Branch Named “${result.value.trim()}”`, "Check the name, or pick a branch in the sidebar."); return; }
+    }
+    if (entry.kind === "tag" || (entry.kind === "branch" && entry.ref.current)) return;
+    const name = entry.ref.name, title = `Couldn’t Merge “${name}” into “${into}”`;
+    const upToDate = () => showMessage({ windowId, kind: "info", title: "Already up to date.", message: `“${into}” already has every commit of “${name}”.` }).catch(console.error);
+    let kind: Awaited<ReturnType<typeof owner.mergeKind>>;
+    try { kind = await owner.mergeKind(entry.ref.ref); } catch (error) { await reportBranchError(title, error); return; }
+    if (kind === "up-to-date") { await upToDate(); return; }
+    if (!await confirmMerge(windowId, name, into, kind) || moved()) return;
+    try {
+      const result = await owner.merge(entry.ref.ref, into);
+      if (result === "up-to-date") await upToDate();
+      else if (result === "stopped") setSection("changes");
+    } catch (error) { await reportBranchError(title, error); }
+    finally { if (!moved()) { void controller.current?.refresh(); void historyController.current?.refresh(); } }
+  }
+
+  /** Stages a conflicted file to mark it resolved; one that still has conflict markers asks first. */
+  async function markResolved(path: string) {
+    const owner = controller.current, repository = rootRef.current;
+    if (!owner) return;
+    let markers: boolean;
+    try { markers = await owner.hasConflictMarkers(path); } catch (error) { await reportBranchError("Couldn’t Mark the File Resolved", error); return; }
+    if (markers && !await confirmDestructive(windowId, `Mark “${path.split("/").pop()}” as resolved anyway?`, "Mark Resolved",
+      "It still has conflict markers (lines starting with <<<<<<< or >>>>>>>). Marked resolved, they are staged and committed as they are.", true)) return;
+    if (controller.current === owner && rootRef.current === repository) await owner.changeFile(path, true);
   }
 
   /**
@@ -599,6 +645,7 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     queue,
     recents,
     operation,
+    conflicted: root ? conflictedEntries(changes.status).map(entry => entry.path) : [],
     gitHub,
     pullRequests: root && gitHub.status === "signed-in" && pulls.remote ? pulls.pulls?.map(pull => pull.number) ?? [] : [],
     pullWriting: pulls.writing,
@@ -608,7 +655,12 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
       openRepository: () => void chooseRepository(),
       openRecent,
       abortOperation: () => void abortOperation(),
-      continueOperation: () => { if (canContinue(operation)) void controller.current?.continueOperation(operation.kind); },
+      // A merge message edited in the composer is the merge commit's message; otherwise Git's prepared one is used.
+      continueOperation: () => {
+        if (!canContinue(operation)) return;
+        const message = operation.kind === "merge" ? editedMergeMessage.current?.() : null;
+        void (message ? controller.current?.commit({ message }) : controller.current?.continueOperation(operation.kind));
+      },
       toggleSidebar: () => setSidebarCollapsed(value => !value),
       showSection: setSection,
       refresh: () => { void controller.current?.refresh(); void historyController.current?.refresh(); void pullsController.current?.refresh(); },
@@ -637,6 +689,8 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
       toggleGenerate: () => generator.current?.toggle(),
       commit: () => { if (queueWorktree) void commitQueueWorktree(); else commit.current?.(); },
       checkout: ref => void checkout(ref),
+      mergeRef: ref => void mergeRef(ref),
+      markResolved: path => void markResolved(path),
       switchBranch: () => void switchBranch(),
       newBranch: start => void newBranch(start),
       renameBranch: ref => void renameBranch(ref),
@@ -678,7 +732,7 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
       { type: "submenu", id: "view", label: "View", target: { menu: "view" }, items: [item("show-changes"), item("show-history"), item("show-review"), { type: "separator" }, item("show-file-history"), item("show-all-history")] },
       { type: "submenu", id: "repository", label: "Repository", placement: { before: { menu: "window" } }, items: [item("fetch"), item("pull"), item("push"), item("cancel-network"), { type: "separator" }, item("refresh"), { type: "separator" }, item("create-pull-request"), item("open-github"), { type: "separator" }, item("sign-in-github"), item("sign-out-github")] },
       { type: "submenu", id: "pull-request", label: "Pull Request", placement: { before: { menu: "window" } }, items: [item("review-pull-request"), { type: "separator" }, item("checkout-pull-request"), item("pull-request-worktree")] },
-      { type: "submenu", id: "branch", label: "Branch", placement: { before: { menu: "window" } }, items: [item("switch-branch"), item("new-branch"), { type: "separator" }, item("rename-branch"), item("delete-branch"), { type: "separator" }, item("abort-operation"), item("continue-operation")] },
+      { type: "submenu", id: "branch", label: "Branch", placement: { before: { menu: "window" } }, items: [item("switch-branch"), item("new-branch"), { type: "separator" }, item("rename-branch"), item("delete-branch"), { type: "separator" }, item("merge-ref"), { type: "separator" }, item("abort-operation"), item("continue-operation")] },
       { type: "submenu", id: "worktree", label: "Worktree", placement: { before: { menu: "window" } }, items: [item("new-worktree"), item("open-review-worktree"), { type: "separator" }, item("reveal-worktree"), item("remove-worktree")] },
       {
         type: "submenu", id: "changes", label: "Changes", placement: { before: { menu: "window" } },
@@ -808,7 +862,9 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
   };
 
   function showFileMenu(path: string, position: { x: number; y: number }) {
-    showContextMenu({ windowId, position, items: [commandMenuItem("show-file-history", contextRef.current, { target: path, shortcut: false })] })
+    const menuContext = contextRef.current;
+    const resolve = menuContext.conflicted.includes(path) ? [commandMenuItem("mark-resolved", menuContext, { target: path, shortcut: false }), { type: "separator" as const }] : [];
+    showContextMenu({ windowId, position, items: [...resolve, commandMenuItem("show-file-history", menuContext, { target: path, shortcut: false })] })
       .then(result => { if (!result.canceled) runCommand(result.itemId, contextRef.current, path); }, console.error);
   }
 
@@ -852,9 +908,11 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     const menuContext = contextRef.current;
     const entry = findRef(menuContext.refs, ref);
     if (!entry) return;
-    const ids: (CommandId | null)[] = entry.kind === "branch" ? ["checkout-ref", "new-branch", null, "rename-branch", "delete-branch", null, ...entry.ref.current ? ["create-pull-request", null] as const : [], "copy-ref-name"]
-      : entry.kind === "remote" ? ["checkout-ref", "new-branch", null, "copy-ref-name"] : ["new-branch", null, "copy-ref-name"];
-    const items = ids.map(id => id ? { ...commandMenuItem(id, menuContext, { target: ref, shortcut: false }), ...id === "new-branch" ? { label: `New Branch from “${entry.ref.name}”…` } : {} } : { type: "separator" as const });
+    const merge = entry.kind === "remote" || (entry.kind === "branch" && !entry.ref.current) ? ["merge-ref", null] as const : [];
+    const ids: (CommandId | null)[] = entry.kind === "branch" ? ["checkout-ref", "new-branch", null, ...merge, "rename-branch", "delete-branch", null, ...entry.ref.current ? ["create-pull-request", null] as const : [], "copy-ref-name"]
+      : entry.kind === "remote" ? ["checkout-ref", "new-branch", null, ...merge, "copy-ref-name"] : ["new-branch", null, "copy-ref-name"];
+    const labels: Partial<Record<CommandId, string>> = { "new-branch": `New Branch from “${entry.ref.name}”…`, "merge-ref": `Merge “${entry.ref.name}” into “${menuContext.currentBranch ?? "the current branch"}”…` };
+    const items = ids.map(id => id ? { ...commandMenuItem(id, menuContext, { target: ref, shortcut: false }), ...labels[id] ? { label: labels[id] } : {} } : { type: "separator" as const });
     showContextMenu({ windowId, position, items })
       .then(result => { if (!result.canceled) runCommand(result.itemId, contextRef.current, ref); }, console.error);
   }
@@ -1010,13 +1068,14 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
   const changesList = <View style={[styles.listPane, section !== "changes" && styles.hidden]}>
     <ChangesList title="Unstaged" entries={unstaged.filter(matches("unstaged"))} filtered={!!filter} selectedPath={selected?.section === "unstaged" ? selected.path : null}
       onSelect={path => void controller.current?.select(path === null ? null : { section: "unstaged", path })}
-      action="Stage" disabled={busy} onAction={path => void controller.current?.changeFile(path, true)} onContextMenu={showFileMenu}
+      action="Stage" disabled={busy} onAction={path => { if (context.conflicted.includes(path)) void markResolved(path); else void controller.current?.changeFile(path, true); }} onContextMenu={showFileMenu}
       secondaryAction="Discard…" secondaryDisabled={!canDiscardFile} onSecondaryAction={() => void discardFile()} />
     <ChangesList title="Staged" entries={staged.filter(matches("staged"))} filtered={!!filter} selectedPath={selected?.section === "staged" ? selected.path : null}
       onSelect={path => void controller.current?.select(path === null ? null : { section: "staged", path })}
       action="Unstage" disabled={busy} onAction={path => void controller.current?.changeFile(path, false)} onContextMenu={showFileMenu} />
     <CommitComposer disabled={busy} stagedCount={staged.length} conflictCount={conflicts} merging={changes.merging} unborn={changes.status?.branch.oid === "(initial)"} root={root!}
       commitRef={commit} onCommit={input => controller.current?.commit(input) ?? Promise.resolve(false)} headMessage={() => controller.current?.headMessage() ?? Promise.resolve(null)}
+      mergeMessage={() => controller.current?.mergeMessage() ?? Promise.resolve(null)} editedMergeMessageRef={editedMergeMessage}
       readStaged={signal => controller.current?.stagedDiff(signal) ?? Promise.reject(new Error("Open a repository first."))}
       confirmReplace={() => confirmDestructive(windowId, "Replace the commit message?", "Replace", "The generated message replaces the summary and description you wrote.")}
       generatorRef={generator} onGeneratingChange={setGenerating} />
@@ -1062,7 +1121,9 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     : <EmptyState title={pulls.filesLoading && !pulls.files ? "Loading Pull Request…" : pulls.filesError ? "Couldn’t Read the Pull Request" : pullFile?.error ? "Couldn’t Show the Diff" : pullFile ? "No Diff to Show" : pulls.files?.length === 0 ? "No Changes" : "No Selection"}
       message={pulls.filesError ?? pullFile?.error ?? (pullFile ? "GitHub doesn’t show a diff for this file (binary, or too large)." : undefined)} />;
 
-  const changesDetail = changes.patch ? <DiffPane patch={changes.patch} disabled={busy} applyRef={applyLines} discardRef={discardLines}
+  const resolveButton = changes.patch?.conflicted ? <Button style={styles.markResolved} disabled={!commandEnabled("mark-resolved", context, changes.patch.path)}
+    onPress={() => runCommand("mark-resolved", contextRef.current, changes.patch?.path)}>Mark Resolved</Button> : null;
+  const changesDetail = changes.patch ? <DiffPane patch={changes.patch} disabled={busy} applyRef={applyLines} discardRef={discardLines} accessory={resolveButton}
     onLineChange={target => setBlameTarget(changesBlameTarget(target))}
     onLineContextMenu={(target, position) => { const blame = changesBlameTarget(target); if (blame) showLineMenu(blame, position); }}
     onApply={(keys, text) => void controller.current?.changeLines(keys, text)}
@@ -1369,6 +1430,17 @@ async function confirmStashAndSwitch(windowId: string, branch: string, gitMessag
  * A native warning sheet on the main window; resolves true when the user picks the action. With `safeDefault`,
  * Return picks Cancel (for actions that can lose work without a backup).
  */
+/** The Merge sheet: both branches, and whether Git fast-forwards or makes a merge commit. */
+async function confirmMerge(windowId: string, name: string, into: string, kind: "fast-forward" | "merge") {
+  const message = kind === "fast-forward"
+    ? `“${into}” has no commits of its own since “${name}” branched off, so Git fast-forwards “${into}” to “${name}”. No merge commit is made.`
+    : `Git makes a merge commit on “${into}” with its default message. If both branches changed the same lines, the merge stops so you can resolve the conflicts, then continue or abort it.`;
+  try {
+    const result = await showMessage({ windowId, kind: "info", title: `Merge “${name}” into “${into}”?`, message, buttons: [{ id: "merge", label: "Merge" }, { id: "cancel", label: "Cancel" }], defaultButtonId: "merge", cancelButtonId: "cancel" });
+    return result.buttonId === "merge";
+  } catch (error) { console.error(error); return false; }
+}
+
 async function confirmDestructive(windowId: string, title: string, action: string, message = "Legend Git saves a backup first. Use Changes ▸ Restore Last Discard to bring the changes back.", safeDefault = false) {
   try {
     const result = await showMessage({ windowId, kind: "warning", title, message, buttons: [{ id: "confirm", label: action }, { id: "cancel", label: "Cancel" }], defaultButtonId: safeDefault ? "cancel" : "confirm", cancelButtonId: "cancel" });
@@ -1427,6 +1499,7 @@ const styles = StyleSheet.create({
   sidebarIcon: { width: 18, height: 18, alignItems: "center", justifyContent: "center" },
   label: { flex: 1, fontSize: 13, color: PlatformColor("labelColor") },
   addComment: { width: 120, height: 24 },
+  markResolved: { width: 110, height: 24 },
   unplaced: { paddingVertical: 4, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: PlatformColor("separatorColor") },
   count: { fontSize: 12, color: PlatformColor("secondaryLabelColor"), fontVariant: ["tabular-nums"] },
   sidebarNote: { paddingHorizontal: 10, paddingVertical: 6, fontSize: 13, color: PlatformColor("secondaryLabelColor") },

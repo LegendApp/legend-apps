@@ -77,6 +77,8 @@ export type CommandContext = {
   recents: readonly string[];
   /** The merge, rebase, cherry-pick, revert or bisect Git has paused. */
   operation: GitOperation | null;
+  /** Paths with merge conflicts. */
+  conflicted: readonly string[];
   /** The GitHub account pull requests are read with. */
   gitHub: GitHubAccountState;
   /** Open pull requests' numbers (signed in, on a GitHub repository), and whether a comment or review is being posted. */
@@ -117,6 +119,10 @@ export type CommandContext = {
     newBranch(start?: string): void;
     renameBranch(ref: string): void;
     deleteBranch(ref: string): void;
+    /** Merges a local or remote branch into the current one after a confirm sheet; without a ref, asks for its name first. */
+    mergeRef(ref?: string): void;
+    /** Stages a conflicted file, asking first when it still has conflict markers. */
+    markResolved(path: string): void;
     copyText(text: string): void;
     stashChanges(includeUntracked: boolean): void;
     applyStash(oid: string): void;
@@ -162,6 +168,12 @@ const renameTarget = (context: CommandContext, target?: string) => {
   return target ? null : context.refs?.branches.find(branch => branch.current) ?? null;
 };
 const canWriteBranch = (context: CommandContext) => context.hasRepository && !context.branchBusy && !context.unborn;
+/** A local branch other than the current one, or a remote branch, that a merge can take (the context menu's, else the selected one). */
+const mergeable = (context: CommandContext, target?: string) => {
+  const entry = ref(context, target);
+  return entry?.kind === "remote" || (entry?.kind === "branch" && !entry.ref.current) ? entry : null;
+};
+const canMerge = (context: CommandContext) => canWriteBranch(context) && !!context.currentBranch && !context.operation && !context.busy;
 /** The stash a stash command acts on: the context menu's, else the selected one. */
 const stash = (context: CommandContext, target?: string) => {
   const oid = target ?? sectionStash(context.section);
@@ -308,6 +320,18 @@ export const commands = [
     id: "delete-branch", label: "Delete Branch…",
     enabled: (context, target) => { const entry = ref(context, target); return canWriteBranch(context) && entry?.kind === "branch" && !entry.ref.current; },
     run: (context, target) => context.run.deleteBranch(ref(context, target)!.ref.ref),
+  },
+  {
+    // The Branch menu merges the selected branch, or asks for a name; a context menu names both branches.
+    id: "merge-ref", label: "Merge into Current Branch…",
+    enabled: (context, target) => canMerge(context) && (target ? !!mergeable(context, target)
+      : !!(context.refs?.branches.some(branch => !branch.current) || context.refs?.remotes.some(remote => remote.branches.length))),
+    run: (context, target) => context.run.mergeRef(mergeable(context, target)?.ref.ref),
+  },
+  {
+    id: "mark-resolved", label: "Mark Resolved",
+    enabled: (context, target) => { const path = target ?? (context.section === "changes" ? context.selectedFile : null); return context.hasRepository && !context.busy && !!path && context.conflicted.includes(path); },
+    run: (context, target) => context.run.markResolved((target ?? context.selectedFile)!),
   },
   {
     id: "copy-ref-name", label: "Copy Name",

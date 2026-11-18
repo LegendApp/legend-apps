@@ -7,9 +7,13 @@ import { createCommitMessageGenerator, type CommitMessageGeneration } from "./co
 
 export type CommitMessageGenerator = ReturnType<typeof createCommitMessageGenerator>;
 
-export function CommitComposer({ disabled, stagedCount, conflictCount, merging, unborn, root, onCommit, headMessage, commitRef, readStaged, confirmReplace, generatorRef, onGeneratingChange }: {
+export function CommitComposer({ disabled, stagedCount, conflictCount, merging, unborn, root, onCommit, headMessage, mergeMessage, editedMergeMessageRef, commitRef, readStaged, confirmReplace, generatorRef, onGeneratingChange }: {
   disabled: boolean; stagedCount: number; conflictCount: number; merging: boolean; unborn: boolean; root: string;
   onCommit: (input: GitCommitInput) => Promise<boolean>; headMessage: () => Promise<string | null>;
+  /** The merge message Git prepared, shown while a merge is in progress. */
+  mergeMessage: () => Promise<string | null>;
+  /** Set to read the merge message when the user edited Git's, else null. */
+  editedMergeMessageRef?: { current: (() => string | null) | null };
   commitRef?: { current: (() => void) | null };
   readStaged: (signal: AbortSignal) => Promise<{ root: string; staged: GitStagedDiff }>;
   confirmReplace: () => Promise<boolean>;
@@ -68,6 +72,30 @@ export function CommitComposer({ disabled, stagedCount, conflictCount, merging, 
     commitRef.current = () => void commit();
     return () => { commitRef.current = null; };
   });
+  // A merge in progress fills empty fields with Git's message, edited or not; they empty again when the merge ends.
+  const merged = useRef<CommitDraft | null>(null);
+  useEffect(() => {
+    if (!merging) {
+      if (merged.current) setDraft({ subject: "", body: "" });
+      merged.current = null;
+      return;
+    }
+    let live = true;
+    void mergeMessage().then(message => {
+      if (!live || !message || draftRef.current.subject || draftRef.current.body) return;
+      merged.current = splitMessage(message);
+      setDraft(merged.current);
+    });
+    return () => { live = false; };
+  }, [merging, root]); // eslint-disable-line react-hooks/exhaustive-deps -- read once per merge
+  useEffect(() => {
+    if (!editedMergeMessageRef) return;
+    editedMergeMessageRef.current = () => {
+      const loaded = merged.current, current = draftRef.current;
+      return loaded && current.subject.trim() && (current.subject !== loaded.subject || current.body !== loaded.body) ? composeMessage(current) : null;
+    };
+    return () => { editedMergeMessageRef.current = null; };
+  }, [editedMergeMessageRef]);
   useEffect(() => { if (unborn && amend) { setAmend(false); savedDraft.current = null; } }, [unborn, amend]);
   useEffect(() => () => generator.reset(), [root, generator]);
   useEffect(() => {

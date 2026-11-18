@@ -1,9 +1,9 @@
 import type { GitOperation, GitOperationKind } from "@legend-apps/git-core";
 
 const quoted = (value: string | null, fallback: string) => value ? `“${value}”` : fallback;
-const conflictText = (count: number) => count === 1 ? "1 conflict" : `${count} conflicts`;
+const conflictText = (count: number) => count === 1 ? "1 conflicted file" : `${count} conflicted files`;
 
-/** The state bar's line, e.g. "Merging “feature” into “main” — 2 conflicts". */
+/** The state bar's line, e.g. "Merging “feature” into “main” — 2 conflicted files". */
 export function operationText(operation: GitOperation) {
   const branch = quoted(operation.branch, "the detached HEAD");
   const commit = operation.commit ? `“${operation.commit.subject || operation.commit.oid}” (${operation.commit.oid})` : "a commit";

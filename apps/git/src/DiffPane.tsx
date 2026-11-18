@@ -172,7 +172,7 @@ export function DiffPane({ patch, disabled, readOnly = false, accessory, onApply
     discardRef.current = () => { if (!disabled && selected.size) discard?.(selected, patch.text, linesLabel(selected.size)); };
     return () => { discardRef.current = null; };
   });
-  const message = patch.conflicted ? "This file has merge conflicts. Resolve them in the file, then stage the whole file to mark it resolved."
+  const message = patch.conflicted ? "This file has merge conflicts. Resolve them in the file, then Mark Resolved."
     : patch.file?.binary ? readOnly ? "Binary file." : `Binary file. ${verb}${discard ? " or discard" : ""} the whole file from the list.`
     : !patch.file ? "No changes to show."
     : !patch.file.hunks.length ? readOnly ? "No content changes (mode or rename only)." : `No content changes. ${verb} the whole file to include mode or rename changes.`

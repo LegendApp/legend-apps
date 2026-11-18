@@ -54,6 +54,8 @@ export type GitErrorCode = "aborted" | "index-locked" | "command-failed" | "time
 /** One path's worktree state saved by a discard: its mode and blob, or `mode: null` when the path did not exist. */
 export type GitBackupEntry = { path: string; mode: "100644" | "100755" | "120000"; oid: string } | { path: string; mode: null; oid?: undefined };
 export type GitDiscardBackup = { ref: string; oid: string; entries: GitBackupEntry[] };
+/** How `GitService.merge` ended: nothing to merge, a fast-forward, a merge commit, or stopped with the merge in progress. */
+export type GitMergeResult = "up-to-date" | "fast-forward" | "merge" | "stopped";
 export type GitCommitInput = { message: string; amend?: boolean; signoff?: boolean };
 /** A local branch; `upstream` is the short name of the branch it tracks. */
 /** `ahead`/`behind` count commits against the upstream (0 without one); `gone` is set when the upstream ref no longer exists. */
@@ -1124,6 +1126,68 @@ export class GitService {
   async renameBranch(from: string, to: string, options: GitReadOptions = {}) {
     await this.validateBranchName(to, options);
     return this.branchWrite(options, () => this.git(["branch", "-m", "--end-of-options", from, to], options));
+  }
+
+  /**
+   * What merging `ref` into HEAD does: nothing (HEAD has its commits), fast-forward HEAD to it, or make a merge commit
+   * (also when `merge.ff` is false). Unrelated histories count as a merge (Git refuses it).
+   */
+  mergeKind(ref: string, options: GitReadOptions = {}): Promise<Exclude<GitMergeResult, "stopped">> {
+    return this.enqueue(options, async () => {
+      const [ours = 0, theirs = 0] = (await this.git(["rev-list", "--left-right", "--count", "--end-of-options", `HEAD...${ref}`], options, 30_000)).trim().split(/\s+/).map(Number);
+      const fastForward = (await this.git(["config", "--get", "merge.ff"], options, 5_000, undefined, [0, 1])).trim() !== "false";
+      return !theirs ? "up-to-date" : !ours && fastForward ? "fast-forward" : "merge";
+    });
+  }
+
+  /**
+   * Merges `ref` (a full ref name or a commit) into the current branch with `git merge --no-edit` on the repository queue
+   * after checking index.lock: fast-forwards when it can, else commits with Git's default message. Hooks and the user's merge configuration apply;
+   * never forces or stashes (`--no-autostash`). With `branch`, refuses unless that branch is still checked out. Resolves "stopped" when Git stopped with the merge in progress (conflicts, or a hook refused
+   * the commit; see operationState). Rejects with Git's message, having changed nothing, when Git refuses (changes in the
+   * way, unrelated histories, another operation in progress).
+   */
+  merge(ref: string, { branch, ...options }: GitReadOptions & { branch?: string } = {}): Promise<GitMergeResult> {
+    return this.branchWrite(options, async () => {
+      if (branch !== undefined && (await this.git(["symbolic-ref", "-q", "--short", "HEAD"], options, 5_000, undefined, [0, 1])).trim() !== branch) {
+        throw new Error(`“${branch}” is no longer the current branch. Nothing was merged.`);
+      }
+      const target = (await this.git(["rev-parse", "--verify", "--end-of-options", `${ref}^{commit}`], options, 5_000)).trim();
+      // Once started, the merge isn't cancelled halfway.
+      const head = () => this.git(["rev-parse", "-q", "--verify", "HEAD"], {}, 5_000, undefined, [0, 1]).then(value => value.trim());
+      const before = await head();
+      // Git's message names what it was given ("Merge branch 'feature'"), so a full ref name is shortened when that is unambiguous.
+      const short = ref.replace(/^refs\/(heads|remotes)\//, "");
+      const name = short !== ref && !short.startsWith("-") && (await this.git(["rev-parse", "--symbolic-full-name", short], {}, 5_000, undefined, [0, 128])).trim() === ref ? short : ref;
+      const mergeHead = () => this.git(["rev-parse", "-q", "--verify", "MERGE_HEAD"], {}, 5_000, undefined, [0, 1]).then(value => !!value.trim());
+      const merging = await mergeHead();
+      try {
+        await this.git(["merge", "--no-edit", "--no-autostash", "--end-of-options", name], { processEnv: { GIT_EDITOR: "true" } }, 600_000);
+      } catch (error) {
+        if (error instanceof GitServiceError && error.code === "command-failed" && !merging && await mergeHead()) return "stopped";
+        throw error;
+      }
+      const after = await head();
+      return after === before ? "up-to-date" : after === target ? "fast-forward" : "merge";
+    });
+  }
+
+  /** The merge message Git prepared (MERGE_MSG) without its comment lines, or null when there is none. */
+  mergeMessage(options: GitReadOptions = {}) {
+    return this.enqueue(options, async (gitDir) => {
+      const text = await this.process("sh", ["-c", 'cat "$1/MERGE_MSG" 2>/dev/null || true', "legend-git-merge-message", gitDir], options);
+      return text.split("\n").filter(line => !line.startsWith("#")).join("\n").trim() || null;
+    });
+  }
+
+  /** Whether worktree file `path` still has a conflict marker line (`<<<<<<< ` or `>>>>>>> `); false when the file is gone. */
+  hasConflictMarkers(path: string, options: GitReadOptions = {}) {
+    if (!isRepoPath(path)) return Promise.reject(new Error("Expected a repository-relative file path."));
+    return this.enqueue(options, async () => {
+      const root = (await this.git(["rev-parse", "--show-toplevel"], options)).replace(/\n$/, "");
+      const found = await this.process("sh", ["-c", 'grep -qE "^(<<<<<<<|>>>>>>>)( |$)" -- "$1" 2>/dev/null && echo yes || true', "legend-git-markers", `${root}/${path}`], options);
+      return found.trim() === "yes";
+    });
   }
 
   /**

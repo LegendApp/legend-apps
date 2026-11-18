@@ -16,8 +16,11 @@ export type ChangesState = {
 };
 export const emptyChanges: ChangesState = { root: null, status: null, loading: false, writing: false, error: null, selection: null, patch: null, lastDiscard: null, merging: false, operation: null, openError: null };
 
-/** Conflicted files are listed once, with the unstaged changes, where staging the whole file marks them resolved. */
-export const unstagedEntries = (status: GitStatus | null) => status?.entries.filter(entry => entry.worktreeStatus !== ".") ?? [];
+/** Conflicted files are listed once, first among the unstaged changes, where staging the whole file marks them resolved. */
+export const unstagedEntries = (status: GitStatus | null) => {
+  const entries = status?.entries.filter(entry => entry.worktreeStatus !== ".") ?? [];
+  return [...entries.filter(entry => entry.kind === "unmerged"), ...entries.filter(entry => entry.kind !== "unmerged")];
+};
 export const stagedEntries = (status: GitStatus | null) => status?.entries.filter(entry => entry.kind !== "untracked" && entry.kind !== "unmerged" && entry.indexStatus !== ".") ?? [];
 export const conflictedEntries = (status: GitStatus | null) => status?.entries.filter(entry => entry.kind === "unmerged") ?? [];
 
@@ -148,6 +151,18 @@ export function createGitChanges(onChange: (state: ChangesState) => void, watch:
       const git = service, controller = active;
       if (!git || !controller || state.status?.branch.oid === "(initial)") return null;
       try { return await git.headMessage({ signal: controller.signal }); } catch (error) { report(error, controller); return null; }
+    },
+    /** The merge message Git prepared, or null (none, or the read failed: the fields just stay empty). */
+    async mergeMessage() {
+      const git = service, controller = active;
+      if (!git || !controller) return null;
+      try { return await git.mergeMessage({ signal: controller.signal }); } catch { return null; }
+    },
+    /** Whether a conflicted file still has conflict markers; rejects when the read fails. */
+    hasConflictMarkers(path: string) {
+      const git = service, controller = active;
+      if (!git || !controller) return Promise.reject(new Error("Open a repository first."));
+      return git.hasConflictMarkers(path, { signal: controller.signal });
     },
     /** The open repository's staged diff; aborted by `signal` or by opening another repository. */
     async stagedDiff(signal: AbortSignal) {

@@ -115,6 +115,16 @@ export function createGitRefs(onChange: (state: RefsState) => void, serviceFor: 
     refresh,
     /** The last published state (newer than a render's copy right after a write or refresh). */
     current: () => state,
+    /** What merging the ref into the current branch does (see GitService.mergeKind). */
+    mergeKind(ref: string) {
+      const git = service, controller = active;
+      if (!git || !controller || closed) return Promise.reject(new Error("Open a repository first."));
+      return git.mergeKind(ref, { signal: controller.signal });
+    },
+    /** Merges the ref into `branch`, the current branch (`git merge --no-edit`); rejects with Git's message when Git refuses. */
+    merge(ref: string, branch: string) {
+      return write((git, signal) => git.merge(ref, { branch, signal }));
+    },
     /** Checks out a local branch, or a remote branch as a tracking local branch; resolves with the local branch's ref name. */
     checkout(entry: RefEntry) {
       if (entry.kind === "tag") return Promise.reject(new Error("Check out a branch, not a tag."));

@@ -4,8 +4,8 @@ import { abortLabel, abortWarning, canContinue, continueLabel, operationText } f
 const base: GitOperation = { kind: "merge", branch: "main", target: "feature", commit: null, step: null, conflicts: 0, mergeHead: true };
 
 it("describes each operation in one line with its conflicts", () => {
-  expect(operationText({ ...base, conflicts: 2 })).toBe("Merging “feature” into “main” — 2 conflicts");
-  expect(operationText({ ...base, kind: "rebase", branch: "feature", target: "main", step: { current: 1, total: 2 }, conflicts: 1 })).toBe("Rebasing “feature” onto “main”, commit 1 of 2 — 1 conflict");
+  expect(operationText({ ...base, conflicts: 2 })).toBe("Merging “feature” into “main” — 2 conflicted files");
+  expect(operationText({ ...base, kind: "rebase", branch: "feature", target: "main", step: { current: 1, total: 2 }, conflicts: 1 })).toBe("Rebasing “feature” onto “main”, commit 1 of 2 — 1 conflicted file");
   expect(operationText({ ...base, kind: "cherry-pick", target: null, commit: { oid: "abc1234", subject: "Fix it" } })).toBe("Cherry-picking “Fix it” (abc1234) onto “main”");
   expect(operationText({ ...base, kind: "revert", target: null, branch: null, commit: { oid: "abc1234", subject: "Fix it" } })).toBe("Reverting “Fix it” (abc1234) on the detached HEAD");
   expect(operationText({ ...base, kind: "bisect", target: null })).toBe("Bisecting, started on “main”");
