@@ -1,7 +1,7 @@
 import type { GitService } from "@legend-apps/git-core";
 import { createGitHubAccount } from "../gitHubAccount";
 import { createPullRequests, type PullRequestsState } from "../gitPullRequests";
-import { GitHubError, type GitHubPullRequest, type ReviewThread } from "../github";
+import { GitHubError, type GitHubPullRequest, type MergedPullRequest, type ReviewThread } from "../github";
 
 const pr = (number: number): GitHubPullRequest => ({ number, title: `PR ${number}`, author: "ana", state: "open", draft: false, merged: false, base: "main", head: "feature", headSha: `sha${number}`, url: "" });
 const service = (remotes: Record<string, string>, override: string | null = null) => ({
@@ -18,6 +18,8 @@ function setup(remotes: Record<string, string> = { origin: "git@github.com:me/ap
     replyToReviewComment: jest.fn(async () => {}),
     reviews: jest.fn(async () => []),
     submitReview: jest.fn(async () => {}),
+    createPullRequest: jest.fn(async (_repo: unknown, input: { head: string; title: string }): Promise<GitHubPullRequest> => ({ ...pr(9), title: input.title, head: input.head })),
+    mergedPullRequests: jest.fn(async (): Promise<MergedPullRequest[]> => []),
   };
   const clientFor = jest.fn((_token: string, _apiUrl: string) => client);
   const owner = createPullRequests(next => { state = next; }, { serviceFor: () => service(remotes, override), clientFor });
@@ -63,7 +65,7 @@ it("prefers the upstream remote, honours only a loopback API override, lists, se
 
 it("forgets one repository's API override when another opens", async () => {
   let override: string | null = "http://127.0.0.1:8123";
-  const clientFor = jest.fn((_token: string, _apiUrl: string) => ({ pullRequests: jest.fn(async () => []), pullRequestFiles: jest.fn(async () => []), reviewThreads: jest.fn(async () => ({ headSha: "", threads: [] })), addReviewComment: jest.fn(), replyToReviewComment: jest.fn(), reviews: jest.fn(async () => []), submitReview: jest.fn() }));
+  const clientFor = jest.fn((_token: string, _apiUrl: string) => ({ pullRequests: jest.fn(async () => []), pullRequestFiles: jest.fn(async () => []), reviewThreads: jest.fn(async () => ({ headSha: "", threads: [] })), addReviewComment: jest.fn(), replyToReviewComment: jest.fn(), reviews: jest.fn(async () => []), submitReview: jest.fn(), createPullRequest: jest.fn(), mergedPullRequests: jest.fn(async () => []) }));
   const owner = createPullRequests(() => {}, { serviceFor: () => ({ remoteUrl: async () => "git@github.com:me/app.git", configValue: async () => override }) as unknown as GitService, clientFor });
   owner.setToken("t");
   await owner.setRoot("/a");

@@ -21,7 +21,8 @@ import { openURL } from "@legendapp/spark/links";
 import { subscribeToOpenRequests } from "@legendapp/spark/app/documents";
 import { EmptyState } from "./EmptyState";
 import { gitHubAccount, gitHubCliToken, useGitHubAccount } from "./gitHubAccount";
-import { createPullRequests, emptyPullRequests, pullRequestBranch, type PullRequestsState } from "./gitPullRequests";
+import { createPullRequests, emptyPullRequests, pullRequestBases, pullRequestBranch, pushedAs, type PullRequestsState } from "./gitPullRequests";
+import { CreatePullRequestSheet, type PullRequestInput } from "./CreatePullRequestSheet";
 import { GitHubError, reviewSummary, type GitHubPullRequest, type ReviewEvent, type ReviewThread } from "./github";
 import { commentCounts, commentRange, placeThreads, threadLines } from "./reviewThreads";
 import { CommentSheet, ReviewThreadView } from "./ReviewThreadView";
@@ -78,7 +79,12 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
   const [pullRange, setPullRange] = useState<{ start: DiffLineTarget; end: DiffLineTarget } | null>(null);
   // A line comment or reply, or (with `review`) a review of the whole pull request.
   const [commentSheet, setCommentSheet] = useState<{ title: string; context: string; review?: boolean; post: (body: string, event: ReviewEvent) => Promise<void> } | null>(null);
+  // Create Pull Request…: the branch it is for, the base choices and the prefilled title; `creating` while publishing or posting.
+  const [createSheet, setCreateSheet] = useState<{ branch: string; bases: string[]; base: string; title: string } | null>(null);
+  const [creating, setCreating] = useState(false);
   const root = changes.root;
+  const rootRef = useRef(root);
+  rootRef.current = root;
   const recents = useRecentRepositories();
   const operation = root ? changes.operation : null;
   const queue = useMemo(() => root ? reviewQueue(refs) : [], [root, refs]);
@@ -94,6 +100,8 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
   // The comment sheet belongs to one file of one pull request; the review sheet to the pull request.
   useEffect(() => { setCommentSheet(null); }, [selectedPull?.number]);
   useEffect(() => { setCommentSheet(sheet => sheet?.review ? sheet : null); }, [pulls.selectedPath]);
+  // The Create Pull Request sheet belongs to one repository and account.
+  useEffect(() => { setCreateSheet(null); }, [changes.root, gitHub.status]);
   const selectedCommit = root && showsHistory ? history.selectedOid : null;
   const unstaged = unstagedEntries(changes.status);
   const staged = stagedEntries(changes.status);
@@ -368,9 +376,16 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     const entry = findRef(refsRef.current.refs, ref), owner = refsController.current;
     if (entry?.kind !== "branch" || !owner) return;
     const name = entry.ref.name;
-    if (!await confirmDestructive(windowId, `Delete the branch “${name}”?`, "Delete", "Its commits stay in the repository only while another branch or tag contains them.")) return;
+    // A branch whose pull request was merged (squashed or rebased, so Git calls it unmerged) is deleted after one question.
+    const mark = pullsRef.current.merged[name];
+    const merged = mark?.oid === entry.ref.oid ? mark.number : null;
+    if (!await confirmDestructive(windowId, `Delete the branch “${name}”?`, "Delete", merged !== null
+      ? `Its pull request #${merged} was merged on GitHub.` : "Its commits stay in the repository only while another branch or tag contains them.")) return;
     try {
-      await owner.delete(name);
+      // Forced only while the branch is still at the merged tip; a commit made meanwhile gets Git's check again.
+      if (merged !== null) await owner.refresh();
+      const still = merged !== null && findRef(owner.current().refs, ref)?.ref.oid === mark!.oid;
+      await owner.delete(name, still);
     } catch (error) {
       if (!(error instanceof GitBranchNotMergedError)) { await reportBranchError(`Couldn’t Delete “${name}”`, error); return; }
       const upstream = entry.ref.upstream;
@@ -382,17 +397,19 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
   /** Runs a fetch, pull or push; Git's message goes in a warning sheet, a cancelled one says nothing. Changes and History re-read after. */
   async function runNetwork(operation: NetworkOperation, start: (owner: ReturnType<typeof createGitNetwork>) => Promise<void>, upstream?: string | null) {
     const owner = networkController.current;
-    if (!owner) return;
+    if (!owner) return false;
     const branch = changes.status?.branch;
     try {
       await start(owner);
+      return true;
     } catch (error) {
-      if (error instanceof GitServiceError && error.code === "aborted") return;
+      if (error instanceof GitServiceError && error.code === "aborted") return false;
       const text = (error instanceof Error ? error.message : String(error)).replace(/^hint:.*(?:\n|$)/gm, "").trim();
       if (error instanceof GitPushRejectedError) await reportBranchError(`“${(upstream === undefined ? branch?.upstream : upstream) ?? "The remote"}” Has Commits You Don’t Have`, `Pull first, then push again.\n\n${text}`);
       else if (error instanceof GitPullDivergedError) {
         await reportBranchError("Couldn’t Pull", `${text}\n\n“${branch?.head}” and “${branch?.upstream}” both have new commits. Legend Git pulls only by fast-forward for now; merge or rebase the branch in Terminal.`);
       } else await reportBranchError({ fetch: "Couldn’t Fetch", pull: "Couldn’t Pull", push: "Couldn’t Push", publish: "Couldn’t Publish the Branch" }[operation], text);
+      return false;
     } finally {
       if (networkController.current === owner) { void controller.current?.refresh(); void historyController.current?.refresh(); }
     }
@@ -475,17 +492,56 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     catch (error) { await reportBranchError("Couldn’t Sign In to GitHub", error); }
   }
 
+  /** GitHub's message for a refused write; a 401 offers Sign In… (closing the sheet the write came from). */
+  async function reportGitHubError(title: string, error: unknown, closeSheet: () => void) {
+    if (!(error instanceof GitHubError && error.kind === "unauthorized")) { await reportBranchError(title, error); return; }
+    const choice = await showMessage({ windowId, kind: "warning", title, message: error.message,
+      buttons: [{ id: "sign-in", label: "Sign In…" }, { id: "cancel", label: "Cancel" }], defaultButtonId: "sign-in", cancelButtonId: "cancel" }).catch((failed: unknown) => { console.error(failed); return { buttonId: "cancel" }; });
+    if (choice.buttonId === "sign-in") { closeSheet(); runCommand("sign-in-github", contextRef.current); }
+  }
+
   /** Posts from the comment sheet; on failure the sheet stays open with the text, GitHub's message shows, and a 401 offers Sign In…. */
   async function postComment(sheet: NonNullable<typeof commentSheet>, body: string, event: ReviewEvent) {
-    const title = sheet.review ? "Couldn’t Submit the Review" : "Couldn’t Post the Comment";
     try { await sheet.post(body, event); setCommentSheet(null); }
-    catch (error) {
-      if (error instanceof GitHubError && error.kind === "unauthorized") {
-        const choice = await showMessage({ windowId, kind: "warning", title, message: error.message,
-          buttons: [{ id: "sign-in", label: "Sign In…" }, { id: "cancel", label: "Cancel" }], defaultButtonId: "sign-in", cancelButtonId: "cancel" }).catch((failed: unknown) => { console.error(failed); return { buttonId: "cancel" }; });
-        if (choice.buttonId === "sign-in") { setCommentSheet(null); runCommand("sign-in-github", contextRef.current); }
-      } else await reportBranchError(title, error);
-    }
+    catch (error) { await reportGitHubError(sheet.review ? "Couldn’t Submit the Review" : "Couldn’t Post the Comment", error, () => setCommentSheet(null)); }
+  }
+
+  /** Create Pull Request…: the sheet for the current branch, its base preselected and its title from its only commit. */
+  async function openCreatePullRequest() {
+    const owner = pullsController.current, branch = refsController.current?.current().refs?.branches.find(entry => entry.current);
+    if (!owner || !branch || createSheet) return;
+    const { bases, base } = pullRequestBases(refsRef.current.refs, pullsRef.current.remote);
+    const title = await owner.suggestedTitle(branch.name, base);
+    if (pullsController.current === owner) setCreateSheet({ branch: branch.name, bases, base, title });
+  }
+
+  /**
+   * Publishes the branch (after the sheet naming the remote) when it has no upstream, or pushes commits it hasn't pushed,
+   * then opens the pull request and selects it. On failure the sheet keeps what was typed.
+   */
+  async function submitCreatePullRequest(input: PullRequestInput) {
+    const sheet = createSheet, refsOwner = refsController.current, network = networkController.current, owner = pullsController.current, start = root;
+    const branch = sheet && refsOwner?.current().refs?.branches.find(entry => entry.name === sheet.branch);
+    if (!sheet || !refsOwner || !network || !owner || !branch || !start || creating) return;
+    setCreating(true);
+    try {
+      let target = pushedAs(refsOwner.current().refs!, branch);
+      if (!target) {
+        const remote = await network.publishRemote().catch((error: unknown) => { console.error(error); return null; });
+        if (!remote) { await reportBranchError("There’s No Remote to Publish To", "Add a remote to the repository (git remote add), then publish the branch."); return; }
+        if (!await confirmPublish(windowId, branch.name, remote) || !await runNetwork("publish", current => current.publishBranch(branch.name, remote))) return;
+        target = { remote, branch: branch.name };
+      } else if (branch.ahead > 0 && !await runNetwork("push", current => current.pushBranch(branch.name), branch.upstream)) return;
+      void refsOwner.refresh();
+      // Another repository opened meanwhile (its sheet closed with it).
+      if (rootRef.current !== start) return;
+      try {
+        const number = await owner.createPullRequest({ ...input, root: start, remote: target.remote, remoteBranch: target.branch });
+        if (rootRef.current !== start) return;
+        setCreateSheet(null);
+        if (number !== null) setSection(`pr:${number}`);
+      } catch (error) { await reportGitHubError("Couldn’t Create the Pull Request", error, () => setCreateSheet(null)); }
+    } finally { setCreating(false); }
   }
   const githubSide = (target: DiffLineTarget) => target.side === "old" ? "LEFT" as const : "RIGHT" as const;
   function addPullComment() {
@@ -546,6 +602,8 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     gitHub,
     pullRequests: root && gitHub.status === "signed-in" && pulls.remote ? pulls.pulls?.map(pull => pull.number) ?? [] : [],
     pullWriting: pulls.writing,
+    pullRequestUrl: selectedPull?.url || null,
+    canCreatePullRequest: !!root && gitHub.status === "signed-in" && !!pulls.repo && !!pulls.remote && !!currentBranch && !createSheet,
     run: {
       openRepository: () => void chooseRepository(),
       openRecent,
@@ -559,6 +617,8 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
         const url = commitGitHubUrl(historyRef.current, oid);
         if (url) openURL(url).catch(console.error);
       },
+      openPullRequestOnGitHub: url => { openURL(url).catch(console.error); },
+      createPullRequest: () => void openCreatePullRequest(),
       showFileHistory: path => { showHistory(); void historyController.current?.showFileHistory(path); },
       closeFileHistory: () => {
         historyController.current?.closeFileHistory();
@@ -616,7 +676,7 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
       { type: "submenu", id: "edit", label: "Edit", target: { menu: "edit" }, items: [item("copy-sha"), { type: "separator" }, item("blame-line")] },
       // AppKit's own View ▸ Show/Hide Sidebar drives the split view, so the menu has no second one.
       { type: "submenu", id: "view", label: "View", target: { menu: "view" }, items: [item("show-changes"), item("show-history"), item("show-review"), { type: "separator" }, item("show-file-history"), item("show-all-history")] },
-      { type: "submenu", id: "repository", label: "Repository", placement: { before: { menu: "window" } }, items: [item("fetch"), item("pull"), item("push"), item("cancel-network"), { type: "separator" }, item("refresh"), { type: "separator" }, item("open-github"), { type: "separator" }, item("sign-in-github"), item("sign-out-github")] },
+      { type: "submenu", id: "repository", label: "Repository", placement: { before: { menu: "window" } }, items: [item("fetch"), item("pull"), item("push"), item("cancel-network"), { type: "separator" }, item("refresh"), { type: "separator" }, item("create-pull-request"), item("open-github"), { type: "separator" }, item("sign-in-github"), item("sign-out-github")] },
       { type: "submenu", id: "pull-request", label: "Pull Request", placement: { before: { menu: "window" } }, items: [item("review-pull-request"), { type: "separator" }, item("checkout-pull-request"), item("pull-request-worktree")] },
       { type: "submenu", id: "branch", label: "Branch", placement: { before: { menu: "window" } }, items: [item("switch-branch"), item("new-branch"), { type: "separator" }, item("rename-branch"), item("delete-branch"), { type: "separator" }, item("abort-operation"), item("continue-operation")] },
       { type: "submenu", id: "worktree", label: "Worktree", placement: { before: { menu: "window" } }, items: [item("new-worktree"), item("open-review-worktree"), { type: "separator" }, item("reveal-worktree"), item("remove-worktree")] },
@@ -792,7 +852,7 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     const menuContext = contextRef.current;
     const entry = findRef(menuContext.refs, ref);
     if (!entry) return;
-    const ids: (CommandId | null)[] = entry.kind === "branch" ? ["checkout-ref", "new-branch", null, "rename-branch", "delete-branch", null, "copy-ref-name"]
+    const ids: (CommandId | null)[] = entry.kind === "branch" ? ["checkout-ref", "new-branch", null, "rename-branch", "delete-branch", null, ...entry.ref.current ? ["create-pull-request", null] as const : [], "copy-ref-name"]
       : entry.kind === "remote" ? ["checkout-ref", "new-branch", null, "copy-ref-name"] : ["new-branch", null, "copy-ref-name"];
     const items = ids.map(id => id ? { ...commandMenuItem(id, menuContext, { target: ref, shortcut: false }), ...id === "new-branch" ? { label: `New Branch from “${entry.ref.name}”…` } : {} } : { type: "separator" as const });
     showContextMenu({ windowId, position, items })
@@ -933,7 +993,7 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     const focusRegistration = addWindowListener(windowId, "focusChanged", event => {
       if (disposed || !event.focused) return;
       setMenuWindow(windowId);
-      void pullsOwner.refresh();
+      void pullsOwner.refresh({ focus: true });
     });
     // File ▸ Open Recent (AppKit's, filled from the system's recent documents) and folders opened from Finder arrive as
     // open requests; the main window opens them, so a worktree window keeps its worktree.
@@ -1038,7 +1098,7 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
             <SidebarItem key="changes" id="changes"><SidebarRow symbol="square.and.pencil" label="Changes" count={changes.status?.entries.length} /></SidebarItem>,
             <SidebarItem key="history" id="history"><SidebarRow symbol="clock" label="History" /></SidebarItem>,
             ...queueSidebarItems(queue, showQueueMenu),
-            ...refSidebarItems(refs.refs, ref => showRefMenu(ref)),
+            ...refSidebarItems(refs.refs, ref => showRefMenu(ref), gitHub.status === "signed-in" ? pulls.merged : {}),
             ...stashSidebarItems(refs.stashes, showStashMenu),
             ...worktreeSidebarItems(refs.worktrees, root, showWorktreeMenu),
             ...pullRequestSidebarItems(pulls, gitHub.status, showPullRequestMenu),
@@ -1064,7 +1124,10 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
           </View>
         </View> : null}
         {selectedPull ? <View style={styles.listPane}><PullRequestFiles pull={selectedPull} state={pulls} filter={filter} onSelect={path => pullsController.current?.selectFile(path)}
-          review={<Button style={styles.action} disabled={!commandEnabled("review-pull-request", context)} onPress={() => runCommand("review-pull-request", contextRef.current)}>Review…</Button>} /></View> : null}
+          review={<>
+            {selectedPull.url ? <Button style={styles.openPull} onPress={() => runCommand("open-github", contextRef.current)}>Open on GitHub</Button> : null}
+            <Button style={styles.action} disabled={!commandEnabled("review-pull-request", context)} onPress={() => runCommand("review-pull-request", contextRef.current)}>Review…</Button>
+          </>} /></View> : null}
         {queueBranch ? <View style={styles.listPane}>
           <View style={[styles.heading, styles.tallHeading]}>
             <View style={styles.headingStack}>
@@ -1100,6 +1163,8 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
             </EmptyState>}
           {commentSheet && selectedPull ? <CommentSheet key={commentSheet.review ? "review" : commentSheet.title + commentSheet.context} top={contentInset} title={commentSheet.title} context={commentSheet.context} busy={pulls.writing}
             review={commentSheet.review} onCancel={() => setCommentSheet(null)} onSubmit={(body, event) => void postComment(commentSheet, body, event)} /> : null}
+          {createSheet && root ? <CreatePullRequestSheet key={createSheet.branch} top={contentInset} branch={createSheet.branch} bases={createSheet.bases} base={createSheet.base} title={createSheet.title}
+            busy={creating || pulls.writing} onCancel={() => setCreateSheet(null)} onSubmit={input => void submitCreatePullRequest(input)} /> : null}
         </View>
       }
     />
@@ -1126,16 +1191,18 @@ function SidebarRow({ symbol, label, count, current, indent, detail }: { symbol:
 }
 
 /** Branches, Remotes (each remote, then its branches) and Tags, each under a group row; an empty section is left out. */
-function refSidebarItems(refs: GitRefList | null, onContextMenu: (event: { ref: string; position: { x: number; y: number } }) => void) {
+function refSidebarItems(refs: GitRefList | null, onContextMenu: (event: { ref: string; position: { x: number; y: number } }) => void, merged: PullRequestsState["merged"]) {
   if (!refs) return [];
-  const row = (ref: string, symbol: string, label: string, options: { current?: boolean; indent?: boolean } = {}) =>
+  const row = (ref: string, symbol: string, label: string, options: { current?: boolean; indent?: boolean; detail?: string } = {}) =>
     <SidebarItem key={ref} id={`ref:${ref}`} onContextMenu={event => onContextMenu({ ref, position: event.windowPosition })}>
-      <SidebarRow symbol={symbol} label={label} current={options.current} indent={options.indent} />
+      <SidebarRow symbol={symbol} label={label} current={options.current} indent={options.indent} detail={options.detail} />
     </SidebarItem>;
+  // Only while the branch is still at the tip that was checked.
+  const mergedDetail = (branch: GitRefList["branches"][number]) => merged[branch.name]?.oid === branch.oid ? `Merged #${merged[branch.name]!.number}` : undefined;
   const group = (id: string, title: string) => <SidebarItem key={id} id={id} selectable={false}><Text style={styles.section} accessibilityRole="header">{title}</Text></SidebarItem>;
   const remotes = refs.remotes.filter(remote => remote.branches.length);
   return [
-    ...refs.branches.length ? [group("group:branches", "Branches"), ...refs.branches.map(branch => row(branch.ref, "arrow.triangle.branch", branch.name, { current: branch.current }))] : [],
+    ...refs.branches.length ? [group("group:branches", "Branches"), ...refs.branches.map(branch => row(branch.ref, "arrow.triangle.branch", branch.name, { current: branch.current, detail: mergedDetail(branch) }))] : [],
     ...remotes.length ? [group("group:remotes", "Remotes"), ...remotes.flatMap(remote => [
       <SidebarItem key={`remote:${remote.name}`} id={`remote:${remote.name}`} selectable={false}><SidebarRow symbol="network" label={remote.name} /></SidebarItem>,
       ...remote.branches.map(branch => row(branch.ref, "arrow.triangle.branch", branch.branch, { indent: true })),
@@ -1345,6 +1412,7 @@ const styles = StyleSheet.create({
   fixed: { flex: 0 },
   queueBar: { flexDirection: "row", alignItems: "center", gap: 6, height: 44, paddingHorizontal: 10, borderTopWidth: StyleSheet.hairlineWidth, borderColor: PlatformColor("separatorColor") },
   action: { width: 72, height: 24 },
+  openPull: { width: 120, height: 24 },
   stashButtons: { flexDirection: "row", gap: 8 },
   openWindow: { width: 150, height: 24 },
   fileRow: { height: 24, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 6 },

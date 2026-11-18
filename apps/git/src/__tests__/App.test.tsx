@@ -23,6 +23,7 @@ import { openURL } from "@legendapp/spark/links";
 import { openWorktreeWindow } from "../gitWindows";
 import { DiffPane } from "../DiffPane";
 import { CommentSheet, ReviewThreadView } from "../ReviewThreadView";
+import { CreatePullRequestSheet } from "../CreatePullRequestSheet";
 import { gitHubAccount } from "../gitHubAccount";
 
 jest.mock("@legend-apps/git-core", () => ({ ...jest.requireActual("@legend-apps/git-core"), getGitService: jest.fn() }));
@@ -37,7 +38,7 @@ jest.mock("@legendapp/spark/clipboard", () => ({ setStringAsync: jest.fn(async (
 jest.mock("@legendapp/spark/context-menu", () => ({ showContextMenu: jest.fn(async () => ({ canceled: false, itemId: "copy-sha" })) }));
 jest.mock("@legendapp/spark/links", () => ({ openURL: jest.fn(async () => true) }));
 jest.mock("@legend-apps/file-system-watcher", () => ({ watchDirectories: jest.fn(() => ({ remove: jest.fn() })) }));
-jest.mock("@legendapp/spark/ui", () => ({ Button: "Button", SegmentedControl: "SegmentedControl" }));
+jest.mock("@legendapp/spark/ui", () => ({ Button: "Button", SegmentedControl: "SegmentedControl", Select: "Select" }));
 jest.mock("@legendapp/spark/ui/symbol", () => ({ SFSymbol: "SFSymbol" }));
 jest.mock("@legendapp/spark/dialogs", () => ({ openFileDialog: jest.fn(async () => ({ canceled: true })), showMessage: jest.fn(async () => ({ buttonId: "confirm" })), showPrompt: jest.fn(async () => ({ canceled: true })) }));
 jest.mock("@legendapp/spark/menus", () => ({ useMenu: jest.fn() }));
@@ -1165,7 +1166,7 @@ it("fetches, pulls and pushes from the Repository menu with ↓/↑ counts and p
   const menuItem = (id: string) => lastMenu().items.flatMap(entry => entry.items ?? []).find(entry => entry.id === id);
   const toolbarItems = () => jest.mocked(setWindowOptions).mock.calls.filter(call => call[1].macos?.toolbar).at(-1)![1].macos!.toolbar!.items! as any[];
   const repository = lastMenu().items.find(entry => entry.id === "repository").items.map((entry: any) => entry.id ?? "-");
-  expect(repository).toEqual(["fetch", "pull", "push", "cancel-network", "-", "refresh", "-", "open-github", "-", "sign-in-github", "sign-out-github"]);
+  expect(repository).toEqual(["fetch", "pull", "push", "cancel-network", "-", "refresh", "-", "create-pull-request", "open-github", "-", "sign-in-github", "sign-out-github"]);
   expect(menuItem("fetch")).toMatchObject({ label: "Fetch", shortcut: "Cmd+Alt+f", disabled: false });
   expect(menuItem("pull")).toMatchObject({ label: "Pull", shortcut: "Cmd+Shift+Down", disabled: false });
   expect(menuItem("push")).toMatchObject({ label: "Push", shortcut: "Cmd+Shift+Up", disabled: false });
@@ -1675,4 +1676,136 @@ describe("pull requests", () => {
 
     function pullsFiles() { return renderer.root.findAllByType(Sidebar)[1]!; }
   });
+  it("creates a pull request for the current branch after publishing it, selects it, shows GitHub's 422, opens it on GitHub, and marks and deletes a merged branch", async () => {
+    jest.clearAllMocks();
+    jest.mocked(watchDirectories).mockReturnValue({ remove: jest.fn() });
+    jest.mocked(loadUnifiedDiff).mockReturnValue(new Promise(() => {}));
+    const { GitBranchNotMergedError } = jest.requireActual("@legend-apps/git-core");
+    const branch = (name: string, oid: string, current = false, upstream: string | null = null) => ({ name, ref: `refs/heads/${name}`, oid, current, upstream, time: 1, ahead: 0, behind: 0, gone: false });
+    let branches = [branch("main", "m1", false, "origin/main"), branch("feature", "f1", true), branch("squashed", "s1", false, "origin/squashed"), branch("wip", "w1")];
+    const remoteBranch = (remote: string, name: string) => ({ name: `${remote}/${name}`, ref: `refs/remotes/${remote}/${name}`, oid: "x", remote, branch: name });
+    const git = {
+      resolveRoot: jest.fn(async () => "/repo"), watchLocations: jest.fn(async () => ({ root: "/repo", gitDir: "/repo/.git", commonDir: "/repo/.git", ignoredPaths: [] })),
+      status: jest.fn(async () => ({ branch: { oid: "f1", head: "feature", upstream: null, ahead: 0, behind: 0 }, entries: [] })), lastDiscard: jest.fn(async () => null), operationState: jest.fn(async () => null),
+      remoteUrl: jest.fn(async (name: string) => ({ origin: "git@github.com:me/app.git", upstream: "https://github.com/LegendApp/app.git" } as Record<string, string>)[name] ?? null), configValue: jest.fn(async () => null),
+      listRefs: jest.fn(async () => ({ branches, remotes: [{ name: "origin", branches: [remoteBranch("origin", "main")] }, { name: "upstream", branches: [remoteBranch("upstream", "develop"), remoteBranch("upstream", "main")] }], tags: [], defaultBranch: "refs/remotes/origin/main" })),
+      listStashes: jest.fn(async () => []), listWorktrees: jest.fn(async () => [{ path: "/repo", head: "f1", branch: "feature", detached: false, bare: false, locked: null, prunable: null, main: true }]),
+      branchesAhead: jest.fn(async () => ({})), mergeBase: jest.fn(async () => "other"),
+      logRange: jest.fn(async () => ({ commits: [{ summary: "Add the feature" }], done: true })),
+      publishRemote: jest.fn(async () => "origin"),
+      pushBranch: jest.fn(async (name: string) => { branches = branches.map(entry => entry.name === name ? { ...entry, upstream: `origin/${name}` } : entry); }),
+      deleteBranch: jest.fn(async (name: string, options: { force?: boolean }) => {
+        if ((name === "wip" || name === "squashed") && !options.force) throw new GitBranchNotMergedError(name, `error: the branch '${name}' is not fully merged`);
+        branches = branches.filter(entry => entry.name !== name);
+      }),
+    };
+    jest.mocked(getGitService).mockReturnValue(git as unknown as GitService);
+    let created = false;
+    const posts: unknown[] = [];
+    const pull = (number: number, head: string) => ({ number, title: "Add the feature", user: { login: "me" }, state: "open", draft: true, base: { ref: "develop" }, head: { ref: head, sha: "f1", label: `me:${head}`, repo: { full_name: "me/app" } }, html_url: `https://github.com/LegendApp/app/pull/${number}` });
+    const fetch = jest.fn(async (url: string, init: { method?: string; headers: Record<string, string>; body?: string }) => {
+      const reply = (status: number, body: unknown) => ({ status, headers: { get: () => null }, json: async () => body, text: async () => JSON.stringify(body) });
+      if (url.endsWith("/user")) return reply(200, { login: "me" });
+      if (url.endsWith("/graphql")) {
+        const { query } = JSON.parse(init.body!) as { query: string };
+        if (query.includes("states: MERGED")) return reply(200, { data: { repository: { pullRequests: { nodes: [{ number: 3, headRefName: "squashed", headRefOid: "s1", headRepositoryOwner: { login: "me" } }], pageInfo: { hasNextPage: false, endCursor: null } } } } });
+        return reply(200, { data: { repository: { pullRequest: { headRefOid: "f1", reviewThreads: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } } } } });
+      }
+      if (init.method === "POST") {
+        posts.push({ url, body: JSON.parse(init.body!) });
+        if (created) return reply(422, { message: "Validation Failed", errors: [{ resource: "PullRequest", code: "custom", message: "A pull request already exists for me:feature." }] });
+        created = true;
+        return reply(201, pull(12, "feature"));
+      }
+      if (url.includes("/pulls/12/")) return reply(200, []);
+      if (url.includes("/pulls?")) return reply(200, created ? [pull(12, "feature")] : []);
+      throw new Error(`unexpected ${url}`);
+    });
+    (globalThis as { fetch?: unknown }).fetch = fetch;
+    await gitHubAccount.signIn("tok");
+    let renderer!: ReactTestRenderer;
+    await act(async () => { renderer = create(<App />); });
+    jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
+    await act(async () => { openRepository(); });
+    const sidebar = () => renderer.root.findAllByType(Sidebar)[0]!;
+    const menuItem = (id: string) => lastMenu().items.flatMap(entry => entry.items ?? []).find(entry => entry.id === id);
+    const row = (id: string) => sidebar().findAllByType(SidebarItem).find(item => item.props.id === id)!;
+    const rowText = (id: string) => row(id).findAllByType(Text).map(node => [node.props.children].flat().join("")).join(" ");
+
+    // One query for merged PRs: "squashed" (its tip is the PR's head) says so; "wip" doesn't.
+    expect(fetch.mock.calls.filter(([url]) => url.endsWith("/graphql"))).toHaveLength(1);
+    expect(rowText("ref:refs/heads/squashed")).toBe("squashed Merged #3");
+    expect(rowText("ref:refs/heads/wip")).toBe("wip");
+
+    // ⌘⇧R; the base is upstream's (the PR repository's) default, the title the branch's only commit.
+    expect(menuItem("create-pull-request")).toMatchObject({ label: "Create Pull Request…", shortcut: "Cmd+Shift+r", disabled: false });
+    jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: true } as never);
+    await act(async () => { row("ref:refs/heads/feature").props.onContextMenu({ windowPosition: { x: 1, y: 2 } }); });
+    expect(jest.mocked(showContextMenu).mock.calls.at(-1)![0].items.map((entry: object) => (entry as { id?: string }).id)).toContain("create-pull-request");
+    jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: true } as never);
+    await act(async () => { row("ref:refs/heads/wip").props.onContextMenu({ windowPosition: { x: 1, y: 2 } }); });
+    expect(jest.mocked(showContextMenu).mock.calls.at(-1)![0].items.map((entry: object) => (entry as { id?: string }).id)).not.toContain("create-pull-request");
+    await act(async () => { lastMenu().onAction({ itemId: "create-pull-request" }); });
+    const sheet = () => renderer.root.findByType(CreatePullRequestSheet);
+    expect(sheet().props).toMatchObject({ branch: "feature", bases: ["develop", "main"], base: "main", title: "Add the feature" });
+    expect(git.logRange).toHaveBeenCalledWith("refs/remotes/upstream/main", "refs/heads/feature", expect.objectContaining({ count: 1 }));
+
+    // No upstream yet: published to origin after the sheet, then opened as a fork branch, selected.
+    jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "publish" });
+    await act(async () => { sheet().props.onSubmit({ base: "develop", title: "Add the feature", body: "Why", draft: true }); });
+    expect(showMessage).toHaveBeenCalledWith(expect.objectContaining({ title: "Publish “feature” to “origin”?" }));
+    expect(git.pushBranch).toHaveBeenCalledWith("feature", expect.objectContaining({ setUpstream: "origin" }));
+    expect(posts).toEqual([{ url: "https://api.github.com/repos/LegendApp/app/pulls", body: { head: "me:feature", base: "develop", title: "Add the feature", body: "Why", draft: true } }]);
+    expect(renderer.root.findAllByType(CreatePullRequestSheet)).toHaveLength(0);
+    expect(sidebar().props.selectedId).toBe("pr:12");
+
+    // Open on GitHub: the header button and ⌃⌘G open the PR's page.
+    expect(menuItem("open-github")).toMatchObject({ shortcut: "Ctrl+Cmd+g", disabled: false });
+    await act(async () => { renderer.root.findAllByType(Button).find(node => node.props.children === "Open on GitHub")!.props.onPress(); });
+    expect(openURL).toHaveBeenLastCalledWith("https://github.com/LegendApp/app/pull/12");
+
+    // Again: published now, nothing to push; GitHub's 422 shows and the sheet keeps its text.
+    await act(async () => { lastMenu().onAction({ itemId: "create-pull-request" }); });
+    jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "ok" });
+    await act(async () => { sheet().props.onSubmit({ base: "main", title: "Again", body: "", draft: false }); });
+    expect(git.pushBranch).toHaveBeenCalledTimes(1);
+    expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ title: "Couldn’t Create the Pull Request", message: "GitHub answered 422: Validation Failed: A pull request already exists for me:feature." }));
+    expect(renderer.root.findAllByType(CreatePullRequestSheet)).toHaveLength(1);
+    await act(async () => { sheet().props.onCancel(); });
+
+    // A commit made on the merged branch while Delete asks: Git's check applies again.
+    jest.mocked(showMessage).mockImplementationOnce(async () => { branches = branches.map(entry => entry.name === "squashed" ? { ...entry, oid: "s2" } : entry); return { buttonId: "confirm" }; }).mockResolvedValueOnce({ buttonId: "cancel" });
+    jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: false, itemId: "delete-branch" } as never);
+    await act(async () => { row("ref:refs/heads/squashed").props.onContextMenu({ windowPosition: { x: 1, y: 2 } }); });
+    expect(git.deleteBranch).toHaveBeenLastCalledWith("squashed", expect.objectContaining({ force: false }));
+    expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ title: "“squashed” isn’t fully merged." }));
+    expect(rowText("ref:refs/heads/squashed")).toBe("squashed");
+    branches = branches.map(entry => entry.name === "squashed" ? { ...entry, oid: "s1" } : entry);
+    await act(async () => { lastMenu().onAction({ itemId: "refresh" }); });
+
+    // Delete asks once for the merged branch and deletes it with force; an unmerged one is asked about twice.
+    jest.mocked(showMessage).mockClear();
+    jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "confirm" });
+    jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: false, itemId: "delete-branch" } as never);
+    await act(async () => { row("ref:refs/heads/squashed").props.onContextMenu({ windowPosition: { x: 1, y: 2 } }); });
+    expect(showMessage).toHaveBeenCalledTimes(1);
+    expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ title: "Delete the branch “squashed”?", message: "Its pull request #3 was merged on GitHub." }));
+    expect(git.deleteBranch).toHaveBeenLastCalledWith("squashed", expect.objectContaining({ force: true }));
+    jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "confirm" }).mockResolvedValueOnce({ buttonId: "cancel" });
+    jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: false, itemId: "delete-branch" } as never);
+    await act(async () => { row("ref:refs/heads/wip").props.onContextMenu({ windowPosition: { x: 1, y: 2 } }); });
+    expect(showMessage).toHaveBeenCalledTimes(3);
+    expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ title: "“wip” isn’t fully merged." }));
+    expect(git.deleteBranch).toHaveBeenLastCalledWith("wip", expect.objectContaining({ force: false }));
+
+    // Sign Out clears the merged marks; the token never shows.
+    branches = [...branches, branch("squashed", "s1", false, "origin/squashed")];
+    await act(async () => { lastMenu().onAction({ itemId: "refresh" }); });
+    expect(rowText("ref:refs/heads/squashed")).toBe("squashed Merged #3");
+    await act(async () => { lastMenu().onAction({ itemId: "sign-out-github" }); });
+    expect(rowText("ref:refs/heads/squashed")).toBe("squashed");
+    expect(JSON.stringify(renderer.toJSON())).not.toContain("tok\"");
+    await act(async () => { renderer.unmount(); });
+  });
 });
+

@@ -93,6 +93,8 @@ describe("controller", () => {
       addReviewComment: jest.fn(async () => {}),
       replyToReviewComment: jest.fn(async () => {}),
       submitReview: jest.fn(async () => {}),
+      createPullRequest: jest.fn(),
+      mergedPullRequests: jest.fn(async () => []),
     };
     const owner = createPullRequests(next => { state = next; }, { serviceFor: () => ({ remoteUrl: async (name: string) => remotes[name] ?? null, configValue: async () => null }) as unknown as GitService, clientFor: () => client });
     return { owner, client, state: () => state };

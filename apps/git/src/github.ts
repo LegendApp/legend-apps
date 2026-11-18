@@ -52,6 +52,10 @@ export type ReviewState = "APPROVED" | "CHANGES_REQUESTED" | "COMMENTED" | "DISM
 export type GitHubReview = { id: number; author: string; state: ReviewState; submittedAt: string | null };
 /** Approve may go without a summary; Comment and Request Changes need one. */
 export const canSubmitReview = (event: ReviewEvent, body: string) => !!body.trim() || event === "APPROVE";
+/** A merged pull request's head as GitHub last saw it: the branch, the account whose repository it was in, and its last commit. */
+export type MergedPullRequest = { number: number; headRef: string; headOwner: string | null; headSha: string };
+/** A new pull request: `head` is the branch, or "owner:branch" for a branch in another repository (a fork). */
+export type NewPullRequest = { head: string; base: string; title: string; body: string; draft: boolean };
 /** A new line comment: `line`/`side` end it, `startLine`/`startSide` start a range. */
 export type NewReviewComment = { commitId: string; path: string; line: number; side: ReviewSide; startLine?: number; startSide?: ReviewSide; body: string };
 
@@ -70,7 +74,8 @@ async function responseError(response: Awaited<ReturnType<Fetch>>, token: string
     const details = (parsed.errors ?? []).map(error => typeof error === "string" ? error : error.message ?? [error.field, error.code].filter(Boolean).join(" ")).filter(Boolean);
     message = [parsed.message ?? "", ...details].filter(Boolean).join(": ");
   } catch { message = body.slice(0, 200); }
-  message = scrub(message.trim(), token);
+  // The sentences below add their own period.
+  message = scrub(message.trim(), token).replace(/\.+$/, "");
   const status = response.status;
   if (status === 401) return new GitHubError("unauthorized", `GitHub didn’t accept the token${message ? `: ${message}` : ""}.`, status);
   const reset = Number(response.headers.get("x-ratelimit-reset"));
@@ -88,7 +93,7 @@ type Cached = { etag: string; data: unknown; next: string | null };
  * GitHub's REST API with one token. GETs send If-None-Match with the ETag of the last answer for the same URL, so an
  * unchanged page is a 304 (which doesn't count against the rate limit) and its cached data is used.
  */
-export function createGitHubClient({ token, apiUrl = gitHubApiUrl, fetch: request = globalThis.fetch as unknown as Fetch, maxPages = 10 }: { token: string; apiUrl?: string; fetch?: Fetch; maxPages?: number }) {
+export function createGitHubClient({ token, apiUrl = gitHubApiUrl, fetch: request = globalThis.fetch as unknown as Fetch, maxPages = 10, mergedPages = 2 }: { token: string; apiUrl?: string; fetch?: Fetch; maxPages?: number; mergedPages?: number }) {
   const cache = new Map<string, Cached>();
 
   const headersFor = () => ({ Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", Authorization: `Bearer ${token}`, "Cache-Control": "no-cache" } as Record<string, string>);
@@ -146,6 +151,11 @@ export function createGitHubClient({ token, apiUrl = gitHubApiUrl, fetch: reques
   type RawReview = { id: number; user: { login: string } | null; state: ReviewState; submitted_at?: string | null };
   type RawFile = { filename: string; previous_filename?: string; status: string; additions: number; deletions: number; patch?: string };
 
+  const toPull = (repo: GitHubRepo, pull: RawPull): GitHubPullRequest => ({
+    number: pull.number, title: pull.title, author: pull.user?.login ?? "ghost", state: pull.state, draft: !!pull.draft, merged: !!pull.merged_at,
+    base: pull.base.ref, head: pull.head.repo?.full_name.toLowerCase() === `${repo.owner}/${repo.name}`.toLowerCase() ? pull.head.ref : pull.head.label, headSha: pull.head.sha, url: pull.html_url,
+  });
+
   return {
     async user(): Promise<GitHubUser> {
       const { data } = await get(`${apiUrl}/user`);
@@ -154,11 +164,29 @@ export function createGitHubClient({ token, apiUrl = gitHubApiUrl, fetch: reques
     },
     async pullRequests(repo: GitHubRepo): Promise<GitHubPullRequest[]> {
       const pulls = await list<RawPull>(`${repoPath(repo)}/pulls?state=open`);
-      const ownRepo = `${repo.owner}/${repo.name}`.toLowerCase();
-      return pulls.map(pull => ({
-        number: pull.number, title: pull.title, author: pull.user?.login ?? "ghost", state: pull.state, draft: !!pull.draft, merged: !!pull.merged_at,
-        base: pull.base.ref, head: pull.head.repo?.full_name.toLowerCase() === ownRepo ? pull.head.ref : pull.head.label, headSha: pull.head.sha, url: pull.html_url,
-      }));
+      return pulls.map(pull => toPull(repo, pull));
+    },
+    /** POST /pulls: opens a pull request (GitHub answers 422 when one exists for the head, there's nothing to merge, or the base is unknown). */
+    async createPullRequest(repo: GitHubRepo, pull: NewPullRequest): Promise<GitHubPullRequest> {
+      const created = await post(`${apiUrl}${repoPath(repo)}/pulls`, { head: pull.head, base: pull.base, title: pull.title.trim(), body: pull.body, draft: pull.draft });
+      return toPull(repo, created as RawPull);
+    },
+    /**
+     * The most recently updated merged pull requests (GraphQL, 100 a page, up to `mergedPages` pages): one read for all
+     * local branches, never one per branch.
+     */
+    async mergedPullRequests(repo: GitHubRepo): Promise<MergedPullRequest[]> {
+      const merged: MergedPullRequest[] = [];
+      let after: string | null = null;
+      for (let page = 0; page < mergedPages; page += 1) {
+        const data: MergedData = await graphql<MergedData>(mergedQuery, { owner: repo.owner, name: repo.name, after });
+        const connection = data.repository?.pullRequests;
+        if (!connection) throw new GitHubError("not-found", "GitHub couldn’t find the repository, or the token can’t read it.");
+        for (const node of connection.nodes) merged.push({ number: node.number, headRef: node.headRefName, headOwner: node.headRepositoryOwner?.login ?? null, headSha: node.headRefOid });
+        if (!connection.pageInfo.hasNextPage) break;
+        after = connection.pageInfo.endCursor;
+      }
+      return merged;
     },
     async pullRequestFiles(repo: GitHubRepo, number: number): Promise<GitHubPullFile[]> {
       const files = await list<RawFile>(`${repoPath(repo)}/pulls/${number}/files`);
@@ -237,6 +265,9 @@ const commentFields = "nodes { id databaseId author { login } body createdAt } p
 const threadsQuery = `query($owner: String!, $name: String!, $number: Int!, $after: String) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { headRefOid
   reviewThreads(first: 100, after: $after) { nodes { id path line originalLine startLine diffSide startDiffSide isResolved isOutdated comments(first: 100) { ${commentFields} } } pageInfo { hasNextPage endCursor } } } } }`;
 const commentsQuery = `query($id: ID!, $after: String) { node(id: $id) { ... on PullRequestReviewThread { comments(first: 100, after: $after) { ${commentFields} } } } }`;
+type MergedData = { repository: { pullRequests: { nodes: { number: number; headRefName: string; headRefOid: string; headRepositoryOwner: { login: string } | null }[]; pageInfo: PageInfo } } | null };
+const mergedQuery = `query($owner: String!, $name: String!, $after: String) { repository(owner: $owner, name: $name) {
+  pullRequests(states: MERGED, first: 100, after: $after, orderBy: { field: UPDATED_AT, direction: DESC }) { nodes { number headRefName headRefOid headRepositoryOwner { login } } pageInfo { hasNextPage endCursor } } } }`;
 export type GitHubClient = ReturnType<typeof createGitHubClient>;
 
 const reviewWords: Partial<Record<ReviewState, string>> = { APPROVED: "approved", CHANGES_REQUESTED: "requested changes", COMMENTED: "commented" };

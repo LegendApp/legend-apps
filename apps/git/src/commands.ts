@@ -82,6 +82,10 @@ export type CommandContext = {
   /** Open pull requests' numbers (signed in, on a GitHub repository), and whether a comment or review is being posted. */
   pullRequests: readonly number[];
   pullWriting: boolean;
+  /** The selected pull request's page, for Open on GitHub. */
+  pullRequestUrl: string | null;
+  /** Signed in, on a GitHub repository, with a branch checked out: Create Pull Request… can start. */
+  canCreatePullRequest: boolean;
   run: {
     openRepository(): void;
     openRecent(path: string): void;
@@ -93,6 +97,9 @@ export type CommandContext = {
     refresh(): void;
     copySha(oid: string): void;
     openOnGitHub(oid: string): void;
+    openPullRequestOnGitHub(url: string): void;
+    /** Opens the Create Pull Request sheet for the current branch. */
+    createPullRequest(): void;
     showFileHistory(path: string): void;
     closeFileHistory(): void;
     blameLine(): void;
@@ -239,9 +246,17 @@ export const commands = [
   },
   { id: "copy-sha", label: "Copy SHA", shortcut: "Cmd+Shift+c", enabled: (context, target) => !!commit(context, target), run: (context, target) => context.run.copySha(commit(context, target)!) },
   {
-    id: "open-github", label: "Open on GitHub",
-    enabled: (context, target) => { const oid = commit(context, target); return !!oid && !!context.gitHubUrl(oid); },
-    run: (context, target) => context.run.openOnGitHub(commit(context, target)!),
+    // A commit (a context menu's, or History's selected one), else the selected pull request.
+    id: "open-github", label: "Open on GitHub", shortcut: "Ctrl+Cmd+g",
+    enabled: (context, target) => { const oid = commit(context, target); return oid ? !!context.gitHubUrl(oid) : !!context.pullRequestUrl; },
+    run: (context, target) => { const oid = commit(context, target); if (oid) context.run.openOnGitHub(oid); else context.run.openPullRequestOnGitHub(context.pullRequestUrl!); },
+  },
+  {
+    // Also from the current branch's context menu (its ref is the target); another branch would have to be checked out first.
+    id: "create-pull-request", label: "Create Pull Request…", shortcut: "Cmd+Shift+r",
+    enabled: (context, target) => context.canCreatePullRequest && !context.network && !context.pullWriting && !context.unborn
+      && (!target || context.refs?.branches.find(branch => branch.ref === target)?.current === true),
+    run: context => context.run.createPullRequest(),
   },
   {
     id: "show-file-history", label: "Show File History", shortcut: "Cmd+Shift+h",
