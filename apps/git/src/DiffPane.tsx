@@ -172,7 +172,7 @@ export function DiffPane({ patch, disabled, readOnly = false, accessory, onApply
     discardRef.current = () => { if (!disabled && selected.size) discard?.(selected, patch.text, linesLabel(selected.size)); };
     return () => { discardRef.current = null; };
   });
-  const message = patch.conflicted ? "This file has merge conflicts. Resolve them in the file, then Mark Resolved."
+  const message = patch.conflicted ? "This file has merge conflicts. Use one side or both, or resolve them in the file, then Mark Resolved."
     : patch.file?.binary ? readOnly ? "Binary file." : `Binary file. ${verb}${discard ? " or discard" : ""} the whole file from the list.`
     : !patch.file ? "No changes to show."
     : !patch.file.hunks.length ? readOnly ? "No content changes (mode or rename only)." : `No content changes. ${verb} the whole file to include mode or rename changes.`
@@ -189,8 +189,9 @@ export function DiffPane({ patch, disabled, readOnly = false, accessory, onApply
   return <View style={styles.root}>
     <View style={styles.header}>
       <Text style={styles.path} numberOfLines={1} accessibilityRole="header">{name}{folder ? <Text style={styles.folder}>{`  ${folder}`}</Text> : null}</Text>
-      {discard ? <Button style={styles.action} disabled={disabled || !selected.size || !!message} onPress={() => discard(selected, patch.text, linesLabel(selected.size))}>Discard Lines…</Button> : null}
-      {readOnly ? null : <Button style={styles.action} disabled={disabled || !selected.size} onPress={() => onApply(selected, patch.text)}>{`${verb} Lines`}</Button>}
+      {/* A conflicted file has no lines to act on; its accessory holds the conflict picks. */}
+      {discard && !patch.conflicted ? <Button style={styles.action} disabled={disabled || !selected.size || !!message} onPress={() => discard(selected, patch.text, linesLabel(selected.size))}>Discard Lines…</Button> : null}
+      {readOnly || patch.conflicted ? null : <Button style={styles.action} disabled={disabled || !selected.size} onPress={() => onApply(selected, patch.text)}>{`${verb} Lines`}</Button>}
       {accessory}
     </View>
     {message ? <Text style={styles.message}>{message}</Text> : loaded && <>

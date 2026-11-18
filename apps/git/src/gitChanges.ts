@@ -1,11 +1,14 @@
-import { getGitService, watchGitRepo, type GitCommitInput, type GitDirectoryWatcher, type GitDiscardBackup, type GitOperation, type GitOperationKind, type GitService, type GitStatus, type GitStatusEntry } from "@legend-apps/git-core";
+import { getGitService, watchGitRepo, type GitCommitInput, type GitConflictFile, type GitConflictSide, type GitDirectoryWatcher, type GitDiscardBackup, type GitOperation, type GitOperationKind, type GitService, type GitStatus, type GitStatusEntry } from "@legend-apps/git-core";
+import type { ConflictEntry } from "./gitOperation";
 import { applyPatchSelection, discardPatchSelection, loadFilePatch, type FilePatch } from "./gitPatch";
 
 export type ChangesSection = "unstaged" | "staged";
 export type ChangesSelection = { section: ChangesSection; path: string };
 export type ChangesState = {
   root: string | null; status: GitStatus | null; loading: boolean; writing: boolean; error: string | null;
-  selection: ChangesSelection | null; patch: (FilePatch & ChangesSelection & { conflicted: boolean }) | null;
+  selection: ChangesSelection | null;
+  /** A conflicted file's patch has no diff; `conflict` says which picks apply (null when the read failed). */
+  patch: (FilePatch & ChangesSelection & { conflicted: boolean; conflict?: GitConflictFile | null }) | null;
   lastDiscard: GitDiscardBackup | null;
   /** A merge is in progress, so committing concludes it even when the index matches HEAD. */
   merging: boolean;
@@ -23,6 +26,16 @@ export const unstagedEntries = (status: GitStatus | null) => {
 };
 export const stagedEntries = (status: GitStatus | null) => status?.entries.filter(entry => entry.kind !== "untracked" && entry.kind !== "unmerged" && entry.indexStatus !== ".") ?? [];
 export const conflictedEntries = (status: GitStatus | null) => status?.entries.filter(entry => entry.kind === "unmerged") ?? [];
+/**
+ * A conflicted file's sides from its status entry (a side whose index mode is 000000 deleted it), or from `file` when it was
+ * read (the selected file); a link or submodule counts as binary.
+ */
+export const conflictSides = (entry: GitStatusEntry, file?: GitConflictFile | null): ConflictEntry => ({
+  path: entry.path,
+  ours: file?.ours ?? entry.modes?.[1] !== "000000",
+  theirs: file?.theirs ?? entry.modes?.[2] !== "000000",
+  binary: file?.binary ?? [entry.modes?.[1], entry.modes?.[2]].some(mode => mode === "120000" || mode === "160000"),
+});
 
 function selectedEntry(status: GitStatus | null, selection: ChangesSelection | null): GitStatusEntry | undefined {
   if (!selection) return undefined;
@@ -52,7 +65,9 @@ export function createGitChanges(onChange: (state: ChangesState) => void, watch:
     const selection = state.selection;
     const entry = selectedEntry(status, selection);
     const conflicted = entry?.kind === "unmerged";
-    const patch = entry && selection ? { ...selection, conflicted, ...conflicted ? { text: "", file: null } : await loadFilePatch(git, entry, selection.section === "staged", controller.signal) } : null;
+    const patch = entry && selection ? { ...selection, conflicted, ...conflicted
+      ? { text: "", file: null, conflict: await git.conflictFile(entry.path, { signal: controller.signal }).catch(() => null) }
+      : await loadFilePatch(git, entry, selection.section === "staged", controller.signal) } : null;
     if (current(controller) && run === generation && selection === state.selection) publish({ status, lastDiscard, merging, operation, error: null, patch, selection: entry ? selection : null });
   };
   /** Runs one write, then re-reads status; resolves true when the write succeeded. */
@@ -163,6 +178,16 @@ export function createGitChanges(onChange: (state: ChangesState) => void, watch:
       const git = service, controller = active;
       if (!git || !controller) return Promise.reject(new Error("Open a repository first."));
       return git.hasConflictMarkers(path, { signal: controller.signal });
+    },
+    /** What a conflict pick can do with `path` (null when it isn't conflicted); rejects when the read fails. */
+    conflictFile(path: string) {
+      const git = service, controller = active;
+      if (!git || !controller) return Promise.reject(new Error("Open a repository first."));
+      return git.conflictFile(path, { signal: controller.signal });
+    },
+    /** Resolves a conflicted file with Git's "ours" or "theirs" side, or both, and stages it. */
+    resolveConflict(path: string, side: GitConflictSide) {
+      return write((git, signal) => git.resolveConflict(path, side, { signal }));
     },
     /** The open repository's staged diff; aborted by `signal` or by opening another repository. */
     async stagedDiff(signal: AbortSignal) {

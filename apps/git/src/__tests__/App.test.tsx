@@ -1409,7 +1409,8 @@ it("merges a branch into the current one after a sheet, shows the stopped merge 
     revParse: jest.fn(async () => head), refDecorations: jest.fn(async () => new Map()), remoteUrl: jest.fn(async () => null), currentBranch: jest.fn(async () => "main"),
     listRefs: jest.fn(async () => refs), listStashes: jest.fn(async () => []), listWorktrees: jest.fn(async () => []), fileDiff: jest.fn(async () => ""),
     mergeKind: jest.fn(async () => "merge"), merge: jest.fn(async () => "stopped"), mergeMessage: jest.fn(async () => "Merge branch 'feature'"),
-    hasConflictMarkers: jest.fn(async () => true), stageFile: jest.fn(async () => {}), continueOperation: jest.fn(async () => {}), commit: jest.fn(async () => {}) };
+    hasConflictMarkers: jest.fn(async () => true), stageFile: jest.fn(async () => {}), continueOperation: jest.fn(async () => {}), commit: jest.fn(async () => {}),
+    conflictFile: jest.fn(async () => ({ ours: true, theirs: true, binary: false, edited: false })) };
   jest.mocked(getGitService).mockReturnValue(git as unknown as GitService);
   jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
   let renderer!: ReactTestRenderer;
@@ -1470,10 +1471,10 @@ it("merges a branch into the current one after a sheet, shows the stopped merge 
   await act(async () => { button("Mark Resolved")!.props.onPress(); });
   expect(git.stageFile).toHaveBeenLastCalledWith("x.txt", expect.anything());
   expect(jest.mocked(showMessage).mock.calls.length).toBe(asked);
-  // The file's context menu offers Mark Resolved too.
+  // The file's context menu offers the picks and Mark Resolved too.
   jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: false, itemId: "mark-resolved" });
   await act(async () => { unstagedList().findAllByType(SidebarItem).find(item => item.props.id === "y.txt")!.props.onContextMenu({ windowPosition: { x: 1, y: 2 } }); });
-  expect(menuLabels()).toEqual(["Mark Resolved", "-", "Show File History"]);
+  expect(menuLabels()).toEqual(["Use “main”", "Use “feature”", "Use Both", "Mark Resolved", "-", "Show File History"]);
   expect(git.stageFile).toHaveBeenLastCalledWith("y.txt", expect.anything());
 
   // With no conflicts left Continue is enabled; it continues the merge, the bar goes away and the unedited message clears.
@@ -1548,7 +1549,8 @@ it("rebases the current branch after a sheet, shows a stopped rebase with its st
     listRefs: jest.fn(async () => refs), listStashes: jest.fn(async () => []), listWorktrees: jest.fn(async () => []), fileDiff: jest.fn(async () => ""),
     rebasePlan: jest.fn(async () => ({ branch: "topic", commits: 3, behind: 2, pushed: true })), rebase: jest.fn(async () => "rebased"),
     cherryPick: jest.fn(async () => "committed"), revert: jest.fn(async () => "committed"), mergeMessage: jest.fn(async () => "Fix the title\n\n(cherry picked from commit cccc)"),
-    continueOperation: jest.fn(async () => {}), commit: jest.fn(async () => {}), commitDetails: jest.fn(() => new Promise(() => {})) };
+    continueOperation: jest.fn(async () => {}), commit: jest.fn(async () => {}), commitDetails: jest.fn(() => new Promise(() => {})),
+    conflictFile: jest.fn(async () => ({ ours: true, theirs: true, binary: false, edited: false })) };
   jest.mocked(getGitService).mockReturnValue(git as unknown as GitService);
   jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
   let renderer!: ReactTestRenderer;
@@ -1590,6 +1592,9 @@ it("rebases the current branch after a sheet, shows a stopped rebase with its st
   expect(menuItem("continue-operation")).toMatchObject({ label: "Continue Rebase", disabled: true });
   expect(toolbarBranch()).toBe("topic");
   expect(inputs()[0]!.props.value).toBe("");
+  // The conflict's header names the sides by branch: during a rebase, ours is the branch rebased onto.
+  await act(async () => { renderer.root.findAllByType(Sidebar)[1]!.props.onSelectionChange({ id: "a.txt" }); });
+  expect(renderer.root.findByType(DiffPane).findAllByType(Button).map(node => node.props.children)).toEqual(["Use “main”", "Use “topic”", "Use Both", "Mark Resolved"]);
   // Resolved, Continue runs `git rebase --continue`.
   git.status.mockResolvedValue({ branch: { ...branch, head: "(detached)" }, entries: [{ kind: "ordinary", path: "a.txt", indexStatus: "M", worktreeStatus: "." }] });
   git.operationState.mockResolvedValue({ ...rebasing, conflicts: 0 });
@@ -2070,3 +2075,86 @@ describe("pull requests", () => {
   });
 });
 
+
+it("resolves conflicted files with the side named for the operation, or both, from the diff header and menus", async () => {
+  jest.clearAllMocks();
+  jest.mocked(watchDirectories).mockReturnValue({ remove: jest.fn() });
+  const head = "a".repeat(40);
+  jest.mocked(openGitHistory).mockImplementation(async () => ({ head: { handle: 1, headOid: head, unborn: false, detached: false }, page: jest.fn(async (offset: number) => ({ offset, commits: [], done: true })), close: jest.fn() }));
+  jest.mocked(loadUnifiedDiff).mockReturnValue(new Promise(() => {}));
+  const branch = { oid: head, head: "main", upstream: null, ahead: 0, behind: 0 };
+  const conflicted = (path: string, theirs = "100644") => ({ kind: "unmerged" as const, path, indexStatus: "U", worktreeStatus: theirs === "000000" ? "D" : "U", modes: ["100644", "100644", theirs, "100644"] });
+  let entries: unknown[] = [conflicted("a.txt"), conflicted("gone.txt", "000000"), conflicted("logo.png"), { kind: "ordinary", path: "b.txt", indexStatus: "M", worktreeStatus: "." }];
+  const merging = () => ({ kind: "merge", branch: "main", target: "feature", commit: null, step: null, conflicts: entries.filter((entry: any) => entry.kind === "unmerged").length, mergeHead: true });
+  const files: Record<string, { ours: boolean; theirs: boolean; binary: boolean; edited: boolean }> = {
+    "a.txt": { ours: true, theirs: true, binary: false, edited: false }, "gone.txt": { ours: true, theirs: false, binary: false, edited: true }, "logo.png": { ours: true, theirs: true, binary: true, edited: false },
+  };
+  const git = { repoRoot: "/repo", resolveRoot: jest.fn(async () => "/repo"), watchLocations: jest.fn(async () => ({ root: "/repo", gitDir: "/repo/.git", commonDir: "/repo/.git", ignoredPaths: [] })),
+    status: jest.fn(async () => ({ branch, entries })), lastDiscard: jest.fn(async () => null), operationState: jest.fn(async () => merging()),
+    revParse: jest.fn(async () => head), refDecorations: jest.fn(async () => new Map()), remoteUrl: jest.fn(async () => null), currentBranch: jest.fn(async () => "main"),
+    listRefs: jest.fn(async () => ({ branches: [], remotes: [], tags: [] })), listStashes: jest.fn(async () => []), listWorktrees: jest.fn(async () => []), fileDiff: jest.fn(async () => ""),
+    mergeMessage: jest.fn(async () => "Merge branch 'feature'"), continueOperation: jest.fn(async () => {}),
+    conflictFile: jest.fn(async (path: string): Promise<(typeof files)[string] | null> => files[path] ?? null),
+    resolveConflict: jest.fn(async (path: string) => { entries = entries.map((entry: any) => entry.path === path ? { kind: "ordinary", path, indexStatus: "M", worktreeStatus: "." } : entry); }) };
+  jest.mocked(getGitService).mockReturnValue(git as unknown as GitService);
+  jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
+  let renderer!: ReactTestRenderer;
+  await act(async () => { renderer = create(<App />); });
+  await act(async () => { openRepository(); });
+  const unstagedList = () => renderer.root.findAllByType(Sidebar)[1]!;
+  const select = (id: string) => act(async () => { unstagedList().props.onSelectionChange({ id }); });
+  const headerButtons = () => renderer.root.findByType(DiffPane).findAllByType(Button);
+  const headerLabels = () => headerButtons().map(node => node.props.children);
+  const menuItem = (id: string) => lastMenu().items.find(entry => entry.id === "changes").items.find((entry: any) => entry.id === id);
+  const bar = () => renderer.root.findAllByType(StateBar)[0]!;
+  expect(bar().props.text).toBe("Merging “feature” into “main” — 3 conflicted files");
+  // Nothing selected: the Changes menu's picks are there, disabled.
+  expect(menuItem("use-ours")).toMatchObject({ label: "Use “main”", disabled: true });
+
+  // A text file both sides changed: Use “main” (ours), Use “feature” (theirs), Use Both; the Changes menu names them too.
+  await select("a.txt");
+  expect(headerLabels()).toEqual(["Use “main”", "Use “feature”", "Use Both", "Mark Resolved"]);
+  expect(["use-ours", "use-theirs", "use-both", "mark-resolved"].map(id => menuItem(id))).toEqual([
+    expect.objectContaining({ label: "Use “main”", disabled: false }), expect.objectContaining({ label: "Use “feature”", disabled: false }),
+    expect.objectContaining({ label: "Use Both", disabled: false }), expect.objectContaining({ label: "Mark Resolved", disabled: false })]);
+  // An unedited file is resolved at once; the count drops and Continue stays off while conflicts remain.
+  const historyReads = git.revParse.mock.calls.length;
+  await act(async () => { headerButtons()[1]!.props.onPress(); });
+  expect(git.resolveConflict).toHaveBeenCalledWith("a.txt", "theirs", expect.anything());
+  expect(showMessage).not.toHaveBeenCalled();
+  expect(bar().props.text).toBe("Merging “feature” into “main” — 2 conflicted files");
+  expect(bar().findAllByType(Button)[1]!.props.disabled).toBe(true);
+  expect(renderer.root.findAllByType(TextInput)[0]!.props.value).toBe("Merge branch 'feature'");
+
+  // A file "feature" deleted: keep it or delete it, no Both. It was resolved by hand, so replacing it asks first.
+  await select("gone.txt");
+  expect(headerLabels()).toEqual(["Keep File from “main”", "Delete File as on “feature”", "Mark Resolved"]);
+  expect(menuItem("use-both")).toMatchObject({ disabled: true });
+  jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "cancel" });
+  await act(async () => { headerButtons()[0]!.props.onPress(); });
+  expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "warning", title: "Replace your edits to “gone.txt”?", defaultButtonId: "cancel",
+    buttons: [{ id: "confirm", label: "Keep File from “main”" }, { id: "cancel", label: "Cancel" }], message: expect.stringContaining("looks resolved by hand") }));
+  expect(git.resolveConflict).toHaveBeenCalledTimes(1);
+  await act(async () => { headerButtons()[0]!.props.onPress(); });
+  expect(git.resolveConflict).toHaveBeenLastCalledWith("gone.txt", "ours", expect.anything());
+
+  // A binary file's context menu (read first; it isn't selected) offers one side or the other, not Both.
+  jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: false, itemId: "use-ours" });
+  await act(async () => { unstagedList().findAllByType(SidebarItem).find(item => item.props.id === "logo.png")!.props.onContextMenu({ windowPosition: { x: 1, y: 2 } }); });
+  expect(jest.mocked(showContextMenu).mock.calls.at(-1)![0].items.map((entry: any) => entry.label ?? "-")).toEqual(["Use “main”", "Use “feature”", "Mark Resolved", "-", "Show File History"]);
+  expect(git.resolveConflict).toHaveBeenLastCalledWith("logo.png", "ours", expect.anything());
+  // No conflicts left: the bar has no count and Continue is enabled; History wasn't re-read by the picks.
+  expect(bar().props.text).toBe("Merging “feature” into “main”");
+  expect(bar().findAllByType(Button)[1]!.props.disabled).toBe(false);
+  expect(git.revParse).toHaveBeenCalledTimes(historyReads);
+  // A file no longer conflicted when picked just refreshes (the first null is the selection's read).
+  git.conflictFile.mockResolvedValueOnce(null);
+  const reads = git.status.mock.calls.length;
+  entries = [conflicted("a.txt")];
+  await act(async () => { lastMenu().onAction({ itemId: "refresh" }); });
+  await select("a.txt");
+  git.conflictFile.mockResolvedValueOnce(null);
+  await act(async () => { headerButtons()[0]!.props.onPress(); });
+  expect(git.resolveConflict).toHaveBeenCalledTimes(3);
+  expect(git.status.mock.calls.length).toBeGreaterThan(reads);
+});

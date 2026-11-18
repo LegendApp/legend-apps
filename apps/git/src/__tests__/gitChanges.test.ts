@@ -18,6 +18,7 @@ function setup() {
     lastDiscard: jest.fn(async (_options?: GitReadOptions): Promise<GitDiscardBackup | null> => null),
     discardFiles: jest.fn(async (_paths: readonly string[], _options?: GitReadOptions) => backup), discardPatch: jest.fn(async (_path: string, _patch: string, _options?: GitReadOptions) => backup),
     restoreDiscard: jest.fn(async (_ref: string, _options?: GitReadOptions) => ({ restored: backup, replaced: backup })),
+    conflictFile: jest.fn(async (_path: string, _options?: GitReadOptions) => ({ ours: true, theirs: true, binary: true, edited: false })),
     commit: jest.fn(async (_input: GitCommitInput, _options?: GitReadOptions) => {}), headMessage: jest.fn(async (_options?: GitReadOptions) => "Subject\n\nBody"),
   };
   const watch = jest.fn((_paths: string[], listener: typeof notify) => { notify = listener; return { remove }; });
@@ -169,7 +170,7 @@ it("lists conflicts once without loading their patch, and reports commit failure
   expect(unstagedEntries(t.state().status).map(entry => entry.path)).toEqual(["conflict.txt", "both.txt"]);
   expect(stagedEntries(t.state().status).map(entry => entry.path)).toEqual(["both.txt"]);
   await t.controller.select({ section: "unstaged", path: "conflict.txt" });
-  expect(t.state().patch).toMatchObject({ conflicted: true, file: null });
+  expect(t.state().patch).toMatchObject({ conflicted: true, file: null, conflict: { binary: true } });
   expect(t.git.fileDiff).not.toHaveBeenCalled();
   t.git.commit.mockRejectedValueOnce(new GitServiceError("command-failed", "pre-commit: lint failed"));
   expect(await t.controller.commit({ message: "Subject\n" })).toBe(false);

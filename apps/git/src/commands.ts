@@ -1,5 +1,5 @@
-import type { GitOperation, GitRefList, GitStash } from "@legend-apps/git-core";
-import { abortLabel, canContinue, continueLabel } from "./gitOperation";
+import type { GitConflictSide, GitOperation, GitRefList, GitStash } from "@legend-apps/git-core";
+import { abortLabel, canContinue, conflictPickable, conflictPickLabel, continueLabel, type ConflictEntry } from "./gitOperation";
 import { searchScopes, type SearchScope } from "./gitHistory";
 import { findRef, type WorktreeEntry } from "./gitRefs";
 import { networkVerb, type NetworkOperation } from "./gitNetwork";
@@ -77,8 +77,8 @@ export type CommandContext = {
   recents: readonly string[];
   /** The merge, rebase, cherry-pick, revert or bisect Git has paused. */
   operation: GitOperation | null;
-  /** Paths with merge conflicts. */
-  conflicted: readonly string[];
+  /** Files with merge conflicts and the sides that have them. */
+  conflicts: readonly ConflictEntry[];
   /** The GitHub account pull requests are read with. */
   gitHub: GitHubAccountState;
   /** Open pull requests' numbers (signed in, on a GitHub repository), and whether a comment or review is being posted. */
@@ -127,6 +127,8 @@ export type CommandContext = {
     pickCommit(kind: "cherry-pick" | "revert", oid: string): void;
     /** Stages a conflicted file, asking first when it still has conflict markers. */
     markResolved(path: string): void;
+    /** Resolves a conflicted file with one side, or both, and stages it; asks first when the file was resolved by hand. */
+    pickConflict(path: string, side: GitConflictSide): void;
     copyText(text: string): void;
     stashChanges(includeUntracked: boolean): void;
     applyStash(oid: string): void;
@@ -156,7 +158,7 @@ export type CommandContext = {
 /** `target` is the commit or file picked by a context menu; menu and toolbar commands act on the selection. */
 export type Command = {
   id: string;
-  label: string | ((context: CommandContext) => string);
+  label: string | ((context: CommandContext, target?: string) => string);
   shortcut?: string;
   enabled(context: CommandContext, target?: string): boolean;
   run(context: CommandContext, target?: string): void;
@@ -201,6 +203,16 @@ const pullRequest = (context: CommandContext, target?: string) => {
   const number = target ? Number(target) : sectionPullRequest(context.section);
   return number !== null && context.pullRequests.includes(number) ? number : null;
 };
+/** The conflicted file a conflict command acts on: the context menu's, else the file selected in Changes. */
+const conflictTarget = (context: CommandContext, target?: string) => {
+  const path = target ?? (context.section === "changes" ? context.selectedFile : null);
+  return context.conflicts.find(entry => entry.path === path) ?? null;
+};
+const conflictPick = (side: GitConflictSide) => ({
+  label: (context: CommandContext, target?: string) => conflictPickLabel(context.operation, conflictTarget(context, target), side),
+  enabled: (context: CommandContext, target?: string) => { const entry = conflictTarget(context, target); return context.hasRepository && !context.busy && !!entry && conflictPickable(entry, side); },
+  run: (context: CommandContext, target?: string) => context.run.pickConflict(conflictTarget(context, target)!.path, side),
+});
 const canStash = (context: CommandContext) => canWriteBranch(context) && context.hasChanges && !context.busy;
 
 export const commands = [
@@ -342,9 +354,12 @@ export const commands = [
   { id: "revert-commit", label: "Revert Commit…", enabled: (context, target) => canMerge(context) && !!commit(context, target), run: (context, target) => context.run.pickCommit("revert", commit(context, target)!) },
   {
     id: "mark-resolved", label: "Mark Resolved",
-    enabled: (context, target) => { const path = target ?? (context.section === "changes" ? context.selectedFile : null); return context.hasRepository && !context.busy && !!path && context.conflicted.includes(path); },
-    run: (context, target) => context.run.markResolved((target ?? context.selectedFile)!),
+    enabled: (context, target) => context.hasRepository && !context.busy && !!conflictTarget(context, target),
+    run: (context, target) => context.run.markResolved(conflictTarget(context, target)!.path),
   },
+  { id: "use-ours", ...conflictPick("ours") },
+  { id: "use-theirs", ...conflictPick("theirs") },
+  { id: "use-both", ...conflictPick("both") },
   {
     id: "copy-ref-name", label: "Copy Name",
     enabled: (context, target) => !!ref(context, target),
@@ -380,9 +395,9 @@ export const commands = [
 export type CommandId = (typeof commands)[number]["id"];
 const byId = new Map<string, Command>(commands.map(command => [command.id, command]));
 
-export function commandLabel(id: CommandId, context: CommandContext) {
+export function commandLabel(id: CommandId, context: CommandContext, target?: string) {
   const { label } = byId.get(id)!;
-  return typeof label === "function" ? label(context) : label;
+  return typeof label === "function" ? label(context, target) : label;
 }
 
 export const commandEnabled = (id: CommandId, context: CommandContext, target?: string) => byId.get(id)!.enabled(context, target);
@@ -399,7 +414,7 @@ export function runCommand(id: string, context: CommandContext, target?: string)
 export function commandMenuItem(id: CommandId, context: CommandContext, { target, shortcut = true }: { target?: string; shortcut?: boolean } = {}) {
   const command = byId.get(id)!;
   return {
-    type: "action" as const, id, label: commandLabel(id, context),
+    type: "action" as const, id, label: commandLabel(id, context, target),
     ...(shortcut && command.shortcut ? { shortcut: command.shortcut } : {}),
     disabled: !command.enabled(context, target),
   };

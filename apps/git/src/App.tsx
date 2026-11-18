@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { PlatformColor, StyleSheet, Text, View } from "react-native";
 import { watchDirectories } from "@legend-apps/file-system-watcher";
-import { GitBranchNotMergedError, GitLocalChangesError, GitPullDivergedError, GitPushRejectedError, GitServiceError, GitStashDropError, type GitRefList, type GitStash, type GitStatusEntry } from "@legend-apps/git-core";
+import { GitBranchNotMergedError, GitLocalChangesError, GitPullDivergedError, GitPushRejectedError, GitServiceError, GitStashDropError, type GitConflictFile, type GitConflictSide, type GitRefList, type GitStash, type GitStatusEntry } from "@legend-apps/git-core";
 import { Button } from "@legendapp/spark/ui";
-import { conflictedEntries, createGitChanges, emptyChanges, stagedEntries, unstagedEntries } from "./gitChanges";
+import { conflictSides, conflictedEntries, createGitChanges, emptyChanges, stagedEntries, unstagedEntries } from "./gitChanges";
 import { DiffPane, type DiffLineTarget } from "./DiffPane";
 import { CommitDetails, HistoryList, type BlameTarget, type HistoryActions } from "./HistoryView";
 import { commandEnabled, commandLabel, commandMenuItem, queueEntry, runCommand, sectionPullRequest, sectionRef, sectionReview, sectionShowsHistory, sectionStash, sectionWorktree, type CommandContext, type CommandId, type Section } from "./commands";
@@ -27,7 +27,7 @@ import { GitHubError, reviewSummary, type GitHubPullRequest, type ReviewEvent, t
 import { commentCounts, commentRange, placeThreads, threadLines } from "./reviewThreads";
 import { CommentSheet, ReviewThreadView } from "./ReviewThreadView";
 import { StateBar } from "./StateBar";
-import { abortLabel, abortWarning, canContinue, operationText } from "./gitOperation";
+import { abortLabel, abortWarning, canContinue, conflictPickable, operationText } from "./gitOperation";
 import { recentLabels, recentRepositories, useRecentRepositories } from "./gitRecents";
 import { FileRow, pathParts, useSymbolColor } from "./FileRow";
 import { CommitComposer, type CommitMessageGenerator } from "./CommitComposer";
@@ -116,6 +116,7 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
   const generator = useRef<CommitMessageGenerator | null>(null);
   const [generating, setGenerating] = useState(false);
   const conflicts = conflictedEntries(changes.status).length;
+  const conflictList = root ? conflictedEntries(changes.status).map(entry => conflictSides(entry, changes.patch?.conflicted && changes.patch.path === entry.path ? changes.patch.conflict : undefined)) : [];
   const selectedEntry = selected?.section === "unstaged" ? unstaged.find(entry => entry.path === selected.path) : undefined;
   const canDiscardFile = !busy && !!selectedEntry && selectedEntry.kind !== "unmerged";
   const lastDiscard = changes.lastDiscard;
@@ -312,6 +313,22 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     if (markers && !await confirmDestructive(windowId, `Mark “${path.split("/").pop()}” as resolved anyway?`, "Mark Resolved",
       "It still has conflict markers (lines starting with <<<<<<< or >>>>>>>). Marked resolved, they are staged and committed as they are.", true)) return;
     if (controller.current === owner && rootRef.current === repository) await owner.changeFile(path, true);
+  }
+
+  /**
+   * Resolves a conflicted file with one side or both and stages it. A file with no conflict markers left that matches neither
+   * side was resolved by hand, so replacing it asks first.
+   */
+  async function pickConflict(path: string, side: GitConflictSide) {
+    const owner = controller.current, repository = rootRef.current;
+    if (!owner) return;
+    const label = commandLabel(`use-${side}`, contextRef.current, path), name = path.split("/").pop();
+    let file: GitConflictFile | null;
+    try { file = await owner.conflictFile(path); } catch (error) { await reportBranchError("Couldn’t Resolve the Conflict", error); return; }
+    if (!file) { void owner.refresh(); return; }
+    if (file.edited && !await confirmDestructive(windowId, `Replace your edits to “${name}”?`, label,
+      `“${name}” has no conflict markers left and matches neither version, so it looks resolved by hand. ${label} replaces your edits.`, true)) return;
+    if (controller.current === owner && rootRef.current === repository) await owner.resolveConflict(path, side);
   }
 
   /**
@@ -706,7 +723,7 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     queue,
     recents,
     operation,
-    conflicted: root ? conflictedEntries(changes.status).map(entry => entry.path) : [],
+    conflicts: conflictList,
     gitHub,
     pullRequests: root && gitHub.status === "signed-in" && pulls.remote ? pulls.pulls?.map(pull => pull.number) ?? [] : [],
     pullWriting: pulls.writing,
@@ -754,6 +771,7 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
       rebaseRef: ref => void rebaseRef(ref),
       pickCommit: (kind, oid) => void pickCommit(kind, oid),
       markResolved: path => void markResolved(path),
+      pickConflict: (path, side) => void pickConflict(path, side),
       switchBranch: () => void switchBranch(),
       newBranch: start => void newBranch(start),
       renameBranch: ref => void renameBranch(ref),
@@ -801,6 +819,7 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
         type: "submenu", id: "changes", label: "Changes", placement: { before: { menu: "window" } },
         items: [
           item("apply-lines"), { type: "separator" },
+          item("use-ours"), item("use-theirs"), item("use-both"), item("mark-resolved"), { type: "separator" },
           item("discard-file"), item("discard-lines"), item("restore-discard"), { type: "separator" },
           item("stash-changes"), item("stash-all-changes"), item("apply-stash"), item("pop-stash"), item("drop-stash"), { type: "separator" },
           item("generate-message"), item("commit"),
@@ -925,11 +944,19 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     return target && { ...target, source: target.side === "new" ? staged ? "index" : "workdir" : staged ? "HEAD" : "index" };
   };
 
-  function showFileMenu(path: string, position: { x: number; y: number }) {
-    const menuContext = contextRef.current;
-    const resolve = menuContext.conflicted.includes(path) ? [commandMenuItem("mark-resolved", menuContext, { target: path, shortcut: false }), { type: "separator" as const }] : [];
-    showContextMenu({ windowId, position, items: [...resolve, commandMenuItem("show-file-history", menuContext, { target: path, shortcut: false })] })
-      .then(result => { if (!result.canceled) runCommand(result.itemId, contextRef.current, path); }, console.error);
+  /** A conflicted file's menu leads with the picks that apply to it (its binary state is read first) and Mark Resolved. */
+  async function showFileMenu(path: string, position: { x: number; y: number }) {
+    let menuContext = contextRef.current;
+    const entry = menuContext.conflicts.find(conflict => conflict.path === path);
+    if (entry && !(changes.patch?.path === path && changes.patch.conflict)) {
+      const file = await controller.current?.conflictFile(path).catch(() => null);
+      if (file) menuContext = { ...menuContext, conflicts: menuContext.conflicts.map(conflict => conflict.path === path ? { ...conflict, ...file } : conflict) };
+    }
+    const picks = (["use-ours", "use-theirs", "use-both"] as const).filter(id => commandEnabled(id, menuContext, path));
+    const resolve = entry ? [...picks, "mark-resolved" as const].map(id => commandMenuItem(id, menuContext, { target: path, shortcut: false })) : [];
+    const items = [...resolve, ...resolve.length ? [{ type: "separator" as const }] : [], commandMenuItem("show-file-history", menuContext, { target: path, shortcut: false })];
+    showContextMenu({ windowId, position, items })
+      .then(result => { if (!result.canceled) runCommand(result.itemId, menuContext, path); }, console.error);
   }
 
   function showStashMenu({ oid, position }: { oid: string; position: { x: number; y: number } }) {
@@ -1135,7 +1162,7 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
   const changesList = <View style={[styles.listPane, section !== "changes" && styles.hidden]}>
     <ChangesList title="Unstaged" entries={unstaged.filter(matches("unstaged"))} filtered={!!filter} selectedPath={selected?.section === "unstaged" ? selected.path : null}
       onSelect={path => void controller.current?.select(path === null ? null : { section: "unstaged", path })}
-      action="Stage" disabled={busy} onAction={path => { if (context.conflicted.includes(path)) void markResolved(path); else void controller.current?.changeFile(path, true); }} onContextMenu={showFileMenu}
+      action="Stage" disabled={busy} onAction={path => { if (context.conflicts.some(entry => entry.path === path)) void markResolved(path); else void controller.current?.changeFile(path, true); }} onContextMenu={showFileMenu}
       secondaryAction="Discard…" secondaryDisabled={!canDiscardFile} onSecondaryAction={() => void discardFile()} />
     <ChangesList title="Staged" entries={staged.filter(matches("staged"))} filtered={!!filter} selectedPath={selected?.section === "staged" ? selected.path : null}
       onSelect={path => void controller.current?.select(path === null ? null : { section: "staged", path })}
@@ -1188,8 +1215,19 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     : <EmptyState title={pulls.filesLoading && !pulls.files ? "Loading Pull Request…" : pulls.filesError ? "Couldn’t Read the Pull Request" : pullFile?.error ? "Couldn’t Show the Diff" : pullFile ? "No Diff to Show" : pulls.files?.length === 0 ? "No Changes" : "No Selection"}
       message={pulls.filesError ?? pullFile?.error ?? (pullFile ? "GitHub doesn’t show a diff for this file (binary, or too large)." : undefined)} />;
 
-  const resolveButton = changes.patch?.conflicted ? <Button style={styles.markResolved} disabled={!commandEnabled("mark-resolved", context, changes.patch.path)}
-    onPress={() => runCommand("mark-resolved", contextRef.current, changes.patch?.path)}>Mark Resolved</Button> : null;
+  // A conflicted file's header offers the picks that apply to it, then Mark Resolved.
+  const conflictPath = changes.patch?.conflicted ? changes.patch.path : null;
+  const conflict = conflictList.find(entry => entry.path === conflictPath);
+  const resolveButton = conflictPath ? <>
+    {conflict && (["ours", "theirs", "both"] as const).filter(side => conflictPickable(conflict, side)).map(side => {
+      const id = `use-${side}` as const, label = commandLabel(id, context, conflictPath);
+      // Sized to the label like Diff's buttons: labels name branches.
+      return <Button key={id} style={{ height: 24, width: Math.max(64, Math.ceil(label.length * 7) + 28) }} disabled={!commandEnabled(id, context, conflictPath)}
+        onPress={() => runCommand(id, contextRef.current, conflictPath)}>{label}</Button>;
+    })}
+    <Button style={styles.markResolved} disabled={!commandEnabled("mark-resolved", context, conflictPath)}
+      onPress={() => runCommand("mark-resolved", contextRef.current, conflictPath)}>Mark Resolved</Button>
+  </> : null;
   const changesDetail = changes.patch ? <DiffPane patch={changes.patch} disabled={busy} applyRef={applyLines} discardRef={discardLines} accessory={resolveButton}
     onLineChange={target => setBlameTarget(changesBlameTarget(target))}
     onLineContextMenu={(target, position) => { const blame = changesBlameTarget(target); if (blame) showLineMenu(blame, position); }}

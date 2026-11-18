@@ -50,6 +50,14 @@ export type GitOperation = {
   /** MERGE_HEAD exists, so a commit concludes a merge (also inside a rebase that recreates merges). */
   mergeHead: boolean;
 };
+/** Which index stage a conflict pick takes: Git's "ours" (stage 2) or "theirs" (stage 3), or both combined. */
+export type GitConflictSide = "ours" | "theirs" | "both";
+/**
+ * A conflicted file: whether ours and theirs have it (a side that deleted it doesn't); `binary` when both have it and they
+ * aren't both text files (binary, a link or a submodule), so they can't be combined; `edited` when the worktree file has
+ * no conflict markers and matches neither side, i.e. the user resolved it by hand and a pick would replace that.
+ */
+export type GitConflictFile = { ours: boolean; theirs: boolean; binary: boolean; edited: boolean };
 export type GitErrorCode = "aborted" | "index-locked" | "command-failed" | "timed-out" | "output-truncated";
 /** One path's worktree state saved by a discard: its mode and blob, or `mode: null` when the path did not exist. */
 export type GitBackupEntry = { path: string; mode: "100644" | "100755" | "120000"; oid: string } | { path: string; mode: null; oid?: undefined };
@@ -192,6 +200,14 @@ done`;
 const operationProbe = `for name in rebase-merge/head-name rebase-merge/onto rebase-merge/msgnum rebase-merge/end rebase-apply/head-name rebase-apply/onto rebase-apply/next rebase-apply/last rebase-apply/applying MERGE_HEAD CHERRY_PICK_HEAD REVERT_HEAD BISECT_START; do
   if test -f "$1/$name"; then printf '%s\\0' "$name"; head -n 1 "$1/$name" | tr -d '\\000\\n'; printf '\\0'; fi
 done`;
+// Prints "missing", "link" (a link or submodule) or "markers" for a conflicted worktree file, else its blob id (with Git's clean filters).
+const conflictProbe = `if test -L "$1" || test -d "$1"; then echo link; elif ! test -e "$1"; then echo missing; elif grep -qE '^(<<<<<<<|>>>>>>>)( |$)' -- "$1"; then echo markers; else git hash-object -- "$1"; fi`;
+// Writes the union of blobs ours ($1), base ($2, empty for add/add) and theirs ($3) as a blob and prints its id.
+const unionMerge = `set -e
+dir=$(mktemp -d "\${TMPDIR:-/tmp}/legend-git-union.XXXXXX"); trap 'rm -rf "$dir"' EXIT
+git cat-file blob "$1" > "$dir/ours"; if test -n "$2"; then git cat-file blob "$2" > "$dir/base"; else : > "$dir/base"; fi; git cat-file blob "$3" > "$dir/theirs"
+git merge-file -q --union "$dir/ours" "$dir/base" "$dir/theirs" || test $? -lt 127
+git hash-object -w --no-filters -- "$dir/ours"`;
 const operationCommands: Record<Exclude<GitOperationKind, "bisect">, readonly string[]> = { merge: ["merge"], rebase: ["rebase"], "cherry-pick": ["cherry-pick"], revert: ["revert"] };
 
 const diffFormat = ["-c", "diff.suppressBlankEmpty=false", "-c", "diff.noprefix=false", "diff", "--no-ext-diff", "--no-textconv", "--no-color", "--unified=3", "--src-prefix=a/", "--dst-prefix=b/", "--ignore-submodules=none"];
@@ -1292,6 +1308,85 @@ export class GitService {
       const root = (await this.git(["rev-parse", "--show-toplevel"], options)).replace(/\n$/, "");
       const found = await this.process("sh", ["-c", 'grep -qE "^(<<<<<<<|>>>>>>>)( |$)" -- "$1" 2>/dev/null && echo yes || true', "legend-git-markers", `${root}/${path}`], options);
       return found.trim() === "yes";
+    });
+  }
+
+  /**
+   * What a conflict pick can do with conflicted `path`, or null when it isn't conflicted (see GitConflictFile).
+   */
+  conflictFile(path: string, options: GitReadOptions = {}): Promise<GitConflictFile | null> {
+    if (!isRepoPath(path)) return Promise.reject(new Error("Expected a repository-relative file path."));
+    return this.enqueue(options, async () => {
+      const root = (await this.git(["rev-parse", "--show-toplevel"], options)).replace(/\n$/, "");
+      const stages = await this.conflictStages(root, path, options);
+      return stages && this.readConflict(root, path, stages, options);
+    });
+  }
+
+  /** Index stages 1–3 (base, ours, theirs) of conflicted `path`, or null when it has none. */
+  private async conflictStages(root: string, path: string, options: GitReadOptions) {
+    const records = (await this.git(["-C", root, "--literal-pathspecs", "ls-files", "-u", "-z", "--", path], options, 10_000)).split("\0").filter(Boolean);
+    const stages = new Map<number, { mode: string; oid: string }>();
+    for (const record of records) {
+      const tab = record.indexOf("\t");
+      const [mode, oid, stage] = record.slice(0, tab).split(" ");
+      if (record.slice(tab + 1) === path) stages.set(Number(stage), { mode: mode!, oid: oid! });
+    }
+    return stages.size ? stages : null;
+  }
+
+  /** Whether ours and theirs can't be combined line by line: binary, a link or a submodule. */
+  private async binaryConflict(stages: Map<number, { mode: string; oid: string }>, options: GitReadOptions) {
+    const ours = stages.get(2), theirs = stages.get(3);
+    if (!ours || !theirs) return false;
+    const regular = (mode: string) => mode === "100644" || mode === "100755";
+    // Git's own test for a binary pair: numstat prints "-" for both counts.
+    return !regular(ours.mode) || !regular(theirs.mode)
+      || (await this.git(["diff", "--numstat", "--no-ext-diff", "--no-textconv", ours.oid, theirs.oid], options, 10_000)).startsWith("-\t-\t");
+  }
+
+  private async readConflict(root: string, path: string, stages: Map<number, { mode: string; oid: string }>, options: GitReadOptions): Promise<GitConflictFile> {
+    const ours = stages.get(2), theirs = stages.get(3);
+    const file = (await this.process("sh", ["-c", conflictProbe, "legend-git-conflict", `${root}/${path}`], options)).trim();
+    const edited = /^[0-9a-f]{40,64}$/.test(file) && file !== ours?.oid && file !== theirs?.oid;
+    return { ours: !!ours, theirs: !!theirs, binary: await this.binaryConflict(stages, options), edited };
+  }
+
+  /**
+   * Resolves conflicted `path` and stages the result: "ours" or "theirs" stages that side's version from the index and writes
+   * it to the worktree (what `git checkout --ours`/`--theirs` then `git add` mean, keeping that side's mode and blob exactly),
+   * or deletes the file when that side deleted it (`git rm`); "both" keeps each conflicting region's ours lines, then its
+   * theirs lines, with no markers (`git merge-file --union` on the index stages). Rejects, changing nothing, when the path is
+   * no longer conflicted, or "both" is asked of a file a side deleted, binary, a link or a submodule.
+   */
+  resolveConflict(path: string, side: GitConflictSide, options: GitReadOptions = {}) {
+    if (!isRepoPath(path)) return Promise.reject(new Error("Expected a repository-relative file path."));
+    return this.enqueue(options, async (gitDir, commit) => {
+      await this.inspect(gitDir, options);
+      const root = (await this.git(["rev-parse", "--show-toplevel"], options)).replace(/\n$/, "");
+      const stages = await this.conflictStages(root, path, options);
+      const name = `“${path.split("/").pop()}”`;
+      if (!stages) throw new Error(`${name} is no longer conflicted. Refresh and try again.`);
+      const ours = stages.get(2), theirs = stages.get(3);
+      let mode: string, oid: string;
+      if (side === "both") {
+        if (!ours || !theirs) throw new Error(`${name} was deleted on one side, so there are no two versions to combine. Keep or delete it.`);
+        if (await this.binaryConflict(stages, options)) throw new Error(`${name} isn’t a text file, so its two versions can’t be combined. Use one of them.`);
+        commit();
+        mode = ours.mode;
+        oid = (await this.process("sh", ["-c", unionMerge, "legend-git-union", ours.oid, stages.get(1)?.oid ?? "", theirs.oid], options)).trim();
+      } else {
+        const picked = side === "ours" ? ours : theirs;
+        commit();
+        if (!picked) {
+          await this.git(["-C", root, "--literal-pathspecs", "rm", "-q", "--", path], options);
+          return;
+        }
+        ({ mode, oid } = picked);
+      }
+      // A stage-0 entry replaces the conflict's stages; checkout-index writes it with the user's smudge filters.
+      await this.git(["-C", root, "update-index", "--cacheinfo", `${mode},${oid},${path}`], options);
+      if (mode !== "160000") await this.git(["-C", root, "checkout-index", "-f", "--", path], options);
     });
   }
 
