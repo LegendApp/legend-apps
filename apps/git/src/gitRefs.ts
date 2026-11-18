@@ -1,4 +1,4 @@
-import { getGitService, type GitAddWorktreeOptions, type GitUndo, type GitBranch, type GitRefList, type GitRemoteBranch, type GitService, type GitStash, type GitTag, type GitWorktree } from "@legend-apps/git-core";
+import { getGitService, type GitAddWorktreeOptions, type GitInteractiveRebasePlan, type GitTodoEntry, type GitUndo, type GitBranch, type GitRefList, type GitRemoteBranch, type GitService, type GitStash, type GitTag, type GitWorktree } from "@legend-apps/git-core";
 
 /** A worktree and its number of changed paths (null until counted, or when its folder can't be read). */
 export type WorktreeEntry = GitWorktree & { changes: number | null };
@@ -138,6 +138,16 @@ export function createGitRefs(onChange: (state: RefsState) => void, serviceFor: 
     /** Rebases `branch`, the current branch, onto the ref (`git rebase`); rejects with Git's message when Git refuses. */
     rebase(ref: string, branch: string) {
       return write((git, signal) => git.rebase(ref, { branch, signal }));
+    },
+    /** What rebasing the current branch interactively onto `base` starts from (see GitService.interactiveRebasePlan). */
+    interactiveRebasePlan(base: string) {
+      const git = service, controller = active;
+      if (!git || !controller || closed) return Promise.reject(new Error("Open a repository first."));
+      return git.interactiveRebasePlan(base, { signal: controller.signal });
+    },
+    /** Runs the todo (see GitService.interactiveRebase); rejects with GitPushedCommitsError for pushed commits not in `allowPushed`. */
+    interactiveRebase(plan: GitInteractiveRebasePlan, todo: readonly GitTodoEntry[], updateRefs: boolean, allowPushed: readonly string[] = []) {
+      return write((git, signal) => git.interactiveRebase(plan, todo, { updateRefs, allowPushed, signal }));
     },
     /** Cherry-picks or reverts commit `oid` on `branch`, the current branch; rejects with Git's message when Git refuses. */
     pick(kind: "cherry-pick" | "revert", oid: string, branch: string) {

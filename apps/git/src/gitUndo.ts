@@ -28,5 +28,6 @@ export function undoSheet(undo: GitUndo) {
   const effect = undo.keepsChanges
     ? "Its changes stay staged, and the rest of the worktree is left as it is."
     : "The worktree and index follow; changes to other files are kept.";
-  return { title: `Undo ${what}?`, button, message: `${moved} moves ${undo.kind === "reset" ? "" : "back "}from ${from} to ${to}. ${effect}` };
+  const stacked = undo.stacked?.length ? ` ${undo.stacked.map(entry => `“${entry.name}”`).join(", ")}, which the rebase moved along, ${undo.stacked.length === 1 ? "moves" : "move"} back too.` : "";
+  return { title: `Undo ${what}?`, button, message: `${moved} moves ${undo.kind === "reset" ? "" : "back "}from ${from} to ${to}.${stacked} ${effect}` };
 }

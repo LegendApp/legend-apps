@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { PlatformColor, StyleSheet, Text, View } from "react-native";
 import { watchDirectories } from "@legend-apps/file-system-watcher";
-import { GitBranchNotMergedError, GitLocalChangesError, GitPullDivergedError, GitPushRejectedError, GitServiceError, GitStashDropError, type GitConflictFile, type GitConflictSide, type GitRefList, type GitStash, type GitStatusEntry } from "@legend-apps/git-core";
+import { GitBranchNotMergedError, GitLocalChangesError, GitPullDivergedError, GitPushedCommitsError, GitPushRejectedError, GitServiceError, GitStashDropError, type GitConflictFile, type GitInteractiveRebasePlan, type GitTodoEntry, type GitConflictSide, type GitRefList, type GitStash, type GitStatusEntry } from "@legend-apps/git-core";
 import { Button } from "@legendapp/spark/ui";
 import { conflictSides, conflictedEntries, createGitChanges, emptyChanges, stagedEntries, unstagedEntries } from "./gitChanges";
 import { DiffPane, PickButton, type DiffLineTarget } from "./DiffPane";
@@ -23,6 +23,7 @@ import { EmptyState } from "./EmptyState";
 import { gitHubAccount, gitHubCliToken, useGitHubAccount } from "./gitHubAccount";
 import { createPullRequests, emptyPullRequests, pullRequestBases, pullRequestBranch, pushedAs, type PullRequestsState } from "./gitPullRequests";
 import { CreatePullRequestSheet, type PullRequestInput } from "./CreatePullRequestSheet";
+import { InteractiveRebaseSheet } from "./InteractiveRebaseSheet";
 import { GitHubError, reviewSummary, type GitHubPullRequest, type ReviewEvent, type ReviewThread } from "./github";
 import { commentCounts, commentRange, placeThreads, threadLines } from "./reviewThreads";
 import { CommentSheet, ReviewThreadView } from "./ReviewThreadView";
@@ -86,6 +87,8 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
   // A line comment or reply, or (with `review`) a review of the whole pull request.
   const [commentSheet, setCommentSheet] = useState<{ title: string; context: string; review?: boolean; post: (body: string, event: ReviewEvent) => Promise<void> } | null>(null);
   // Create Pull Request…: the branch it is for, the base choices and the prefilled title; `creating` while publishing or posting.
+  const [rebaseSheet, setRebaseSheet] = useState<{ plan: GitInteractiveRebasePlan; onto: string; owner: object; root: string | null } | null>(null);
+  const [rebasing, setRebasing] = useState(false);
   const [createSheet, setCreateSheet] = useState<{ branch: string; bases: string[]; base: string; title: string } | null>(null);
   const [creating, setCreating] = useState(false);
   const root = changes.root;
@@ -110,6 +113,7 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
   useEffect(() => { setCommentSheet(sheet => sheet?.review ? sheet : null); }, [pulls.selectedPath]);
   // The Create Pull Request sheet belongs to one repository and account.
   useEffect(() => { setCreateSheet(null); }, [changes.root, gitHub.status]);
+  useEffect(() => { setRebaseSheet(null); }, [changes.root]);
   const selectedCommit = root && showsHistory ? history.selectedOid : null;
   const unstaged = unstagedEntries(changes.status);
   const staged = stagedEntries(changes.status);
@@ -303,6 +307,65 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
       else if (result === "stopped") setSection("changes");
     } catch (error) { await reportBranchError(title, error); }
     finally { afterOperation(moved); }
+  }
+
+  /**
+   * Opens the interactive rebase sheet for the current branch onto a branch (named in a prompt when none is given) or a
+   * commit, after git-core's plan; a refused plan (changes, an operation in progress, merge commits, nothing to rebase) says why.
+   */
+  async function openInteractiveRebase(base: { ref?: string } | { oid: string }) {
+    const owner = refsController.current, branch = currentBranch, repository = rootRef.current;
+    if (!owner || !branch || rebaseSheet) return;
+    const moved = () => refsController.current !== owner || rootRef.current !== repository;
+    let target: string, onto: string;
+    if ("oid" in base) {
+      target = base.oid;
+      const found = historyRef.current.commits.find(entry => entry.oid === base.oid);
+      onto = found?.summary ? `${base.oid.slice(0, 7)} ${found.summary}` : base.oid.slice(0, 7);
+    } else {
+      const entry = await chooseBranch(owner, base.ref, `Rebase “${branch}” Interactively`, `Enter the name of a local or remote branch to rebase “${branch}” onto.`, moved);
+      if (!entry) return;
+      target = entry.ref.ref; onto = entry.ref.name;
+    }
+    const title = `Couldn’t Rebase “${branch}” Interactively`;
+    let plan: GitInteractiveRebasePlan;
+    try { plan = await owner.interactiveRebasePlan(target); } catch (error) { await reportBranchError(title, error); return; }
+    if (moved()) return;
+    if (plan.refusal) { await reportBranchError(title, plan.refusal); return; }
+    setRebaseSheet({ plan, onto, owner, root: repository });
+  }
+
+  /**
+   * Runs the sheet's todo. Rewriting pushed commits asks first, naming them; a rebase that stops shows Changes under the
+   * operation bar; Git's refusal keeps the sheet open.
+   */
+  async function startInteractiveRebase(todo: GitTodoEntry[], updateRefs: boolean) {
+    const sheet = rebaseSheet, owner = refsController.current;
+    if (!sheet || !owner || owner !== sheet.owner || rebasing) return;
+    const moved = () => refsController.current !== owner || rootRef.current !== sheet.root;
+    const title = `Couldn’t Rebase “${sheet.plan.branch}” Interactively`;
+    setRebasing(true);
+    try {
+      let allowPushed: string[] = [];
+      for (;;) {
+        try {
+          const result = await owner.interactiveRebase(sheet.plan, todo, updateRefs, allowPushed);
+          setRebaseSheet(null);
+          if (result === "stopped") setSection("changes");
+          else if (result === "unchanged") await showMessage({ windowId, kind: "info", title: "Nothing to Rebase", message: "Every commit is picked in its order, so nothing changed." }).catch(console.error);
+          return;
+        } catch (error) {
+          if (!(error instanceof GitPushedCommitsError) || moved()) throw error;
+          const choice = await showMessage({ windowId, kind: "warning", title: "Rewrite Pushed Commits?", message: `${error.message}
+
+Rebase anyway?`,
+            buttons: [{ id: "rebase", label: "Rebase Anyway" }, { id: "cancel", label: "Cancel" }], defaultButtonId: "cancel", cancelButtonId: "cancel" }).catch(() => ({ buttonId: "cancel" }));
+          if (choice.buttonId !== "rebase" || moved()) return;
+          allowPushed = error.commits.map(entry => entry.oid);
+        }
+      }
+    } catch (error) { await reportBranchError(title, error); }
+    finally { setRebasing(false); afterOperation(moved); }
   }
 
   /**
@@ -854,6 +917,7 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
       checkout: ref => void checkout(ref),
       mergeRef: ref => void mergeRef(ref),
       rebaseRef: ref => void rebaseRef(ref),
+      interactiveRebase: base => void openInteractiveRebase(base),
       pickCommit: (kind, oid) => void pickCommit(kind, oid),
       markResolved: path => void markResolved(path),
       pickConflict: (path, side) => void pickConflict(path, side),
@@ -899,7 +963,7 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
       { type: "submenu", id: "view", label: "View", target: { menu: "view" }, items: [item("show-changes"), item("show-history"), item("show-review"), { type: "separator" }, item("show-file-history"), item("show-all-history")] },
       { type: "submenu", id: "repository", label: "Repository", placement: { before: { menu: "window" } }, items: [item("fetch"), item("pull"), item("push"), item("cancel-network"), { type: "separator" }, item("refresh"), { type: "separator" }, item("create-pull-request"), item("open-github"), { type: "separator" }, item("sign-in-github"), item("sign-out-github")] },
       { type: "submenu", id: "pull-request", label: "Pull Request", placement: { before: { menu: "window" } }, items: [item("review-pull-request"), { type: "separator" }, item("checkout-pull-request"), item("pull-request-worktree")] },
-      { type: "submenu", id: "branch", label: "Branch", placement: { before: { menu: "window" } }, items: [item("switch-branch"), item("new-branch"), { type: "separator" }, item("rename-branch"), item("delete-branch"), { type: "separator" }, item("merge-ref"), item("rebase-ref"), item("cherry-pick-commit"), item("revert-commit"), { type: "separator" }, item("abort-operation"), item("continue-operation")] },
+      { type: "submenu", id: "branch", label: "Branch", placement: { before: { menu: "window" } }, items: [item("switch-branch"), item("new-branch"), { type: "separator" }, item("rename-branch"), item("delete-branch"), { type: "separator" }, item("merge-ref"), item("rebase-ref"), item("interactive-rebase-ref"), item("cherry-pick-commit"), item("revert-commit"), { type: "separator" }, item("abort-operation"), item("continue-operation")] },
       { type: "submenu", id: "worktree", label: "Worktree", placement: { before: { menu: "window" } }, items: [item("new-worktree"), item("open-review-worktree"), { type: "separator" }, item("reveal-worktree"), item("remove-worktree")] },
       {
         type: "submenu", id: "changes", label: "Changes", placement: { before: { menu: "window" } },
@@ -1003,7 +1067,7 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
       const items = [
         commandMenuItem("compare-with-selected", menuContext, { target: oid, shortcut: false }), { type: "separator" as const },
         { ...commandMenuItem("new-branch", menuContext, { target: oid, shortcut: false }), label: "New Branch from Commit…" }, { type: "separator" as const },
-        ...(["cherry-pick-commit", "revert-commit"] as const).map(id => commandMenuItem(id, menuContext, { target: oid, shortcut: false })), { type: "separator" as const },
+        ...(["cherry-pick-commit", "revert-commit", "interactive-rebase-commit"] as const).map(id => commandMenuItem(id, menuContext, { target: oid, shortcut: false })), { type: "separator" as const },
         ...(["copy-sha", "open-github"] as const).map(id => commandMenuItem(id, menuContext, { target: oid, shortcut: false })),
       ];
       showContextMenu({ windowId, position, items })
@@ -1085,11 +1149,12 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     const menuContext = contextRef.current;
     const entry = findRef(menuContext.refs, ref);
     if (!entry) return;
-    const merge = entry.kind === "remote" || (entry.kind === "branch" && !entry.ref.current) ? ["merge-ref", "rebase-ref", null] as const : [];
+    const merge = entry.kind === "remote" || (entry.kind === "branch" && !entry.ref.current) ? ["merge-ref", "rebase-ref", "interactive-rebase-ref", null] as const : [];
     const ids: (CommandId | null)[] = entry.kind === "branch" ? ["checkout-ref", "new-branch", null, ...merge, "rename-branch", "delete-branch", null, ...entry.ref.current ? ["create-pull-request", null] as const : [], "copy-ref-name"]
       : entry.kind === "remote" ? ["checkout-ref", "new-branch", null, ...merge, "copy-ref-name"] : ["new-branch", null, "copy-ref-name"];
     const labels: Partial<Record<CommandId, string>> = { "new-branch": `New Branch from “${entry.ref.name}”…`, "merge-ref": `Merge “${entry.ref.name}” into “${menuContext.currentBranch ?? "the current branch"}”…`,
-      "rebase-ref": `Rebase “${menuContext.currentBranch ?? "the current branch"}” onto “${entry.ref.name}”…` };
+      "rebase-ref": `Rebase “${menuContext.currentBranch ?? "the current branch"}” onto “${entry.ref.name}”…`,
+      "interactive-rebase-ref": `Rebase “${menuContext.currentBranch ?? "the current branch"}” Interactively onto “${entry.ref.name}”…` };
     const items = ids.map(id => id ? { ...commandMenuItem(id, menuContext, { target: ref, shortcut: false }), ...labels[id] ? { label: labels[id] } : {} } : { type: "separator" as const });
     showContextMenu({ windowId, position, items })
       .then(result => { if (!result.canceled) runCommand(result.itemId, contextRef.current, ref); }, console.error);
@@ -1419,6 +1484,8 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
             </EmptyState>}
           {commentSheet && selectedPull ? <CommentSheet key={commentSheet.review ? "review" : commentSheet.title + commentSheet.context} top={contentInset} title={commentSheet.title} context={commentSheet.context} busy={pulls.writing}
             review={commentSheet.review} onCancel={() => setCommentSheet(null)} onSubmit={(body, event) => void postComment(commentSheet, body, event)} /> : null}
+          {rebaseSheet && root ? <InteractiveRebaseSheet key={rebaseSheet.plan.head + rebaseSheet.plan.base} top={contentInset} plan={rebaseSheet.plan} onto={rebaseSheet.onto} busy={rebasing}
+            onCancel={() => setRebaseSheet(null)} onStart={(todo, updateRefs) => void startInteractiveRebase(todo, updateRefs)} /> : null}
           {createSheet && root ? <CreatePullRequestSheet key={createSheet.branch} top={contentInset} branch={createSheet.branch} bases={createSheet.bases} base={createSheet.base} title={createSheet.title}
             busy={creating || pulls.writing} onCancel={() => setCreateSheet(null)} onSubmit={input => void submitCreatePullRequest(input)} /> : null}
         </View>

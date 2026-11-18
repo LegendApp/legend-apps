@@ -7,7 +7,7 @@ import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { SidebarSplitView } from "@legendapp/spark/ui/split-view";
 import { addWindowListener, setWindowOptions } from "@legendapp/spark/windows";
 import { addMacOSWindowListener, setToolbarItemText } from "@legendapp/spark/windows/macos";
-import { GitPullDivergedError, GitPushRejectedError, GitServiceError, type GitNetworkOptions } from "@legend-apps/git-core";
+import { GitPullDivergedError, GitPushedCommitsError, GitPushRejectedError, GitServiceError, type GitNetworkOptions } from "@legend-apps/git-core";
 import { Switch, Text, TextInput } from "react-native";
 import { useMenu } from "@legendapp/spark/menus";
 import { runCommand } from "@legendapp/spark/processes";
@@ -24,6 +24,7 @@ import { openWorktreeWindow } from "../gitWindows";
 import { DiffPane } from "../DiffPane";
 import { CommentSheet, ReviewThreadView } from "../ReviewThreadView";
 import { CreatePullRequestSheet } from "../CreatePullRequestSheet";
+import { InteractiveRebaseSheet } from "../InteractiveRebaseSheet";
 import { gitHubAccount } from "../gitHubAccount";
 
 jest.mock("@legend-apps/git-core", () => ({ ...jest.requireActual("@legend-apps/git-core"), getGitService: jest.fn() }));
@@ -685,7 +686,7 @@ it("lists Branches, Remotes and Tags in the sidebar, scopes History to a ref, an
   git.checkoutBranch.mockRejectedValueOnce(new Error("error: Your local changes to the following files would be overwritten by checkout:\n\ta.txt\nPlease commit your changes or stash them before you switch branches.\nAborting"));
   jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: false, itemId: "checkout-ref" });
   await act(async () => { row("ref:refs/heads/feature/ünï").props.onContextMenu({ windowPosition: { x: 1, y: 2 } }); });
-  expect(jest.mocked(showContextMenu).mock.calls.at(-1)![0].items.map((entry: any) => entry.label ?? "-")).toEqual(["Check Out", "New Branch from “feature/ünï”…", "-", "Merge “feature/ünï” into “main”…", "Rebase “main” onto “feature/ünï”…", "-", "Rename Branch…", "Delete Branch…", "-", "Copy Name"]);
+  expect(jest.mocked(showContextMenu).mock.calls.at(-1)![0].items.map((entry: any) => entry.label ?? "-")).toEqual(["Check Out", "New Branch from “feature/ünï”…", "-", "Merge “feature/ünï” into “main”…", "Rebase “main” onto “feature/ünï”…", "Rebase “main” Interactively onto “feature/ünï”…", "-", "Rename Branch…", "Delete Branch…", "-", "Copy Name"]);
   expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "warning", title: "Couldn’t Switch to “feature/ünï”", message: expect.stringMatching(/^Your local changes .*would be overwritten[\s\S]*Aborting$/) }));
 
   // A remote branch checks out as a tracking local branch, and its selection moves to that branch.
@@ -762,6 +763,104 @@ it("has no branches and no New Branch on an unborn HEAD", async () => {
   await act(async () => { renderer.unmount(); });
 });
 
+it("opens the interactive rebase sheet from the Branch menu and History, says why it can't start, asks before rewriting pushed commits, and runs the todo", async () => {
+  jest.clearAllMocks();
+  jest.mocked(watchDirectories).mockReturnValue({ remove: jest.fn() });
+  const head = "c".repeat(40), one = "a".repeat(40), two = "b".repeat(40), base = "f".repeat(40);
+  const commits = [
+    { oid: head, parents: [two], authorName: "Ada", authorEmail: "ada@example.test", time: 3, summary: "Three", lane: 0, color: 0, edges: [] },
+    { oid: two, parents: [one], authorName: "Ada", authorEmail: "ada@example.test", time: 2, summary: "Two", lane: 0, color: 0, edges: [] },
+  ];
+  jest.mocked(openGitHistory).mockImplementation(async () => ({ head: { handle: 1, headOid: head, unborn: false, detached: false }, page: jest.fn(async (offset: number) => ({ offset, commits: offset ? [] : commits, done: true })), close: jest.fn() }));
+  jest.mocked(loadUnifiedDiff).mockReturnValue(new Promise(() => {}));
+  const branch = { oid: head, head: "topic", upstream: null, ahead: 0, behind: 0 };
+  const refs = {
+    branches: [{ name: "main", ref: "refs/heads/main", oid: base, current: false, upstream: null, time: 2 }, { name: "topic", ref: "refs/heads/topic", oid: head, current: true, upstream: null, time: 1 }],
+    remotes: [], tags: [],
+  };
+  const commit = (oid: string, subject: string, pushed = false) => ({ oid, subject, message: `${subject}\n`, pushed });
+  const plan = { branch: "topic", base, head, stacked: ["lower"], refusal: null as string | null, commits: [commit(one, "One", true), commit(two, "Two"), commit(head, "Three")] };
+  const git = { repoRoot: "/repo", resolveRoot: jest.fn(async () => "/repo"), watchLocations: jest.fn(async () => ({ root: "/repo", gitDir: "/repo/.git", commonDir: "/repo/.git", ignoredPaths: [] })),
+    status: jest.fn(async (): Promise<unknown> => ({ branch, entries: [] })), lastDiscard: jest.fn(async () => null), operationState: jest.fn(async (): Promise<unknown> => null),
+    revParse: jest.fn(async () => head), refDecorations: jest.fn(async () => new Map()), remoteUrl: jest.fn(async () => null), currentBranch: jest.fn(async () => "topic"),
+    listRefs: jest.fn(async () => refs), listStashes: jest.fn(async () => []), listWorktrees: jest.fn(async () => []), fileDiff: jest.fn(async () => ""), commitDetails: jest.fn(() => new Promise(() => {})),
+    interactiveRebasePlan: jest.fn(async (_base: string) => plan), interactiveRebase: jest.fn(async (..._args: unknown[]): Promise<string> => "rebased") };
+  jest.mocked(getGitService).mockReturnValue(git as unknown as GitService);
+  jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
+  let renderer!: ReactTestRenderer;
+  await act(async () => { renderer = create(<App />); });
+  await act(async () => { openRepository(); });
+  const sidebar = () => renderer.root.findAllByType(Sidebar)[0]!;
+  const row = (id: string) => sidebar().findAllByType(SidebarItem).find(item => item.props.id === id)!;
+  const menuItem = (id: string) => lastMenu().items.flatMap(entry => entry.items ?? []).find(entry => entry.id === id);
+  const menuLabels = () => jest.mocked(showContextMenu).mock.calls.at(-1)![0].items.map((entry: any) => entry.label ?? "-");
+  const sheets = () => renderer.root.findAllByType(InteractiveRebaseSheet);
+  const sheetText = () => sheets()[0]!.findAllByType(Text).map(node => [node.props.children].flat().join(""));
+  const press = (label: string) => act(async () => { sheets()[0]!.findAllByType(Button).find(node => node.props.children === label)!.props.onPress(); });
+  const selects = () => sheets()[0]!.findAllByType("Select" as any);
+
+  expect(menuItem("interactive-rebase-ref")).toMatchObject({ label: "Rebase Current Branch Interactively onto…", disabled: false });
+  expect(lastMenu().items.find(entry => entry.id === "branch").items.map((entry: any) => entry.id)).toContain("interactive-rebase-ref");
+
+  // A refused plan says why, and no sheet opens.
+  git.interactiveRebasePlan.mockResolvedValueOnce({ ...plan, refusal: "“a.txt” has uncommitted changes. Commit or stash them first." });
+  jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: false, itemId: "interactive-rebase-ref" });
+  await act(async () => { row("ref:refs/heads/main").props.onContextMenu({ windowPosition: { x: 1, y: 2 } }); });
+  expect(menuLabels()).toContain("Rebase “topic” Interactively onto “main”…");
+  expect(git.interactiveRebasePlan).toHaveBeenLastCalledWith("refs/heads/main", expect.anything());
+  expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "warning", title: "Couldn’t Rebase “topic” Interactively", message: "“a.txt” has uncommitted changes. Commit or stash them first." }));
+  expect(sheets()).toHaveLength(0);
+
+  // The sheet lists the commits oldest first with Pick, the pushed one marked, and stacked branches moving along.
+  jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: false, itemId: "interactive-rebase-ref" });
+  await act(async () => { row("ref:refs/heads/main").props.onContextMenu({ windowPosition: { x: 1, y: 2 } }); });
+  expect(sheetText()).toEqual(expect.arrayContaining(["Rebase “topic” Interactively onto “main”", "aaaaaaa", "One", "Pushed", "Two", "Three",
+    "Nothing changes yet. Choose what to do with each commit, or move it."]));
+  expect(selects().map(node => node.props.value)).toEqual(["pick", "pick", "pick", "update"]);
+  // Squashing the first commit is refused in the sheet; rewording Three shows its message to edit.
+  await act(async () => { selects()[0]!.props.onValueChange("squash"); });
+  expect(sheetText()).toContain("“One” can’t be squashed or fixed up: there’s no commit kept above it to join.");
+  expect(sheets()[0]!.findAllByType(Button).find(node => node.props.children === "Start Rebase")!.props.disabled).toBe(true);
+  await act(async () => { selects()[0]!.props.onValueChange("pick"); });
+  await act(async () => { selects()[2]!.props.onValueChange("reword"); });
+  await act(async () => { sheets()[0]!.findByType(TextInput).props.onChangeText("Three, reworded"); });
+  await press("Move Up");
+  expect(sheetText()).toContain("3 commits after the rebase: reordered, 1 reworded.");
+
+  // Pushed commits: Cancel keeps the sheet; Rebase Anyway runs again with them allowed. The rebase stops: Changes shows.
+  const todo = [{ oid: one, action: "pick" }, { oid: head, action: "reword", message: "Three, reworded" }, { oid: two, action: "pick" }];
+  git.interactiveRebase.mockRejectedValueOnce(new GitPushedCommitsError([{ oid: one, subject: "One" }]));
+  jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "cancel" });
+  await press("Start Rebase");
+  expect(git.interactiveRebase).toHaveBeenLastCalledWith(plan, todo, expect.objectContaining({ updateRefs: true, allowPushed: [] }));
+  expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "warning", title: "Rewrite Pushed Commits?", message: expect.stringMatching(/^This commit was already pushed: aaaaaaa “One”\./), defaultButtonId: "cancel" }));
+  expect(sheets()).toHaveLength(1);
+  await act(async () => { selects()[3]!.props.onValueChange("leave"); });
+  git.interactiveRebase.mockRejectedValueOnce(new GitPushedCommitsError([{ oid: one, subject: "One" }])).mockResolvedValueOnce("stopped");
+  jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "rebase" });
+  await press("Start Rebase");
+  expect(git.interactiveRebase).toHaveBeenLastCalledWith(plan, todo, expect.objectContaining({ updateRefs: false, allowPushed: [one] }));
+  expect(sheets()).toHaveLength(0);
+  expect(sidebar().props.selectedId).toBe("changes");
+
+  // History's row menu rebases onto that commit; Git's refusal keeps the sheet open with a warning; Cancel closes it.
+  await act(async () => { sidebar().props.onSelectionChange({ id: "history" }); });
+  jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: false, itemId: "interactive-rebase-commit" } as never);
+  let commitRow!: ReactTestRenderer;
+  await act(async () => { commitRow = create(renderer.root.findByType("LegendList" as any).props.renderItem({ item: commits[1] })); });
+  await act(async () => { commitRow.root.findByProps({ accessibilityRole: "button" }).props.onTouchEnd({ nativeEvent: { button: 2, pageX: 1, pageY: 2 } }); });
+  expect(menuLabels()).toContain("Rebase Interactively onto This Commit…");
+  expect(git.interactiveRebasePlan).toHaveBeenLastCalledWith(two, expect.anything());
+  expect(sheetText()).toContain("Rebase “topic” Interactively onto “bbbbbbb Two”");
+  git.interactiveRebase.mockRejectedValueOnce(new Error("“topic” changed since the rebase was set up. Nothing was rebased; start it again."));
+  await act(async () => { selects()[0]!.props.onValueChange("drop"); });
+  await press("Start Rebase");
+  expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "warning", title: "Couldn’t Rebase “topic” Interactively", message: expect.stringMatching(/changed since/) }));
+  expect(sheets()).toHaveLength(1);
+  await press("Cancel");
+  expect(sheets()).toHaveLength(0);
+  await act(async () => { renderer.unmount(); });
+});
 it("offers Edit ▸ Undo for the reflog's newest operation, says why a refused one can't run, and asks before undoing", async () => {
   jest.clearAllMocks();
   jest.mocked(watchDirectories).mockReturnValue({ remove: jest.fn() });
@@ -1478,7 +1577,7 @@ it("merges a branch into the current one after a sheet, shows the stopped merge 
   const menuLabels = () => jest.mocked(showContextMenu).mock.calls.at(-1)![0].items.map((entry: any) => entry.label ?? "-");
 
   // The Branch menu has Merge into Current Branch…; a branch's context menu names both branches. The current branch has none.
-  expect(lastMenu().items.find(entry => entry.id === "branch").items.map((entry: any) => entry.id ?? "-")).toEqual(["switch-branch", "new-branch", "-", "rename-branch", "delete-branch", "-", "merge-ref", "rebase-ref", "cherry-pick-commit", "revert-commit", "-", "abort-operation", "continue-operation"]);
+  expect(lastMenu().items.find(entry => entry.id === "branch").items.map((entry: any) => entry.id ?? "-")).toEqual(["switch-branch", "new-branch", "-", "rename-branch", "delete-branch", "-", "merge-ref", "rebase-ref", "interactive-rebase-ref", "cherry-pick-commit", "revert-commit", "-", "abort-operation", "continue-operation"]);
   expect(menuItem("merge-ref")).toMatchObject({ label: "Merge into Current Branch…", disabled: false });
   jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: true } as never);
   await act(async () => { row("ref:refs/heads/main").props.onContextMenu({ windowPosition: { x: 1, y: 2 } }); });
@@ -1494,7 +1593,7 @@ it("merges a branch into the current one after a sheet, shows the stopped merge 
   jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "merge" });
   jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: false, itemId: "merge-ref" });
   await act(async () => { row("ref:refs/heads/feature").props.onContextMenu({ windowPosition: { x: 1, y: 2 } }); });
-  expect(menuLabels()).toEqual(["Check Out", "New Branch from “feature”…", "-", "Merge “feature” into “main”…", "Rebase “main” onto “feature”…", "-", "Rename Branch…", "Delete Branch…", "-", "Copy Name"]);
+  expect(menuLabels()).toEqual(["Check Out", "New Branch from “feature”…", "-", "Merge “feature” into “main”…", "Rebase “main” onto “feature”…", "Rebase “main” Interactively onto “feature”…", "-", "Rename Branch…", "Delete Branch…", "-", "Copy Name"]);
   expect(git.mergeKind).toHaveBeenCalledWith("refs/heads/feature", expect.anything());
   expect(showMessage).toHaveBeenCalledWith(expect.objectContaining({ kind: "info", title: "Merge “feature” into “main”?", message: expect.stringContaining("Git makes a merge commit on “main” with its default message."),
     buttons: [{ id: "merge", label: "Merge" }, { id: "cancel", label: "Cancel" }], defaultButtonId: "merge" }));
@@ -1563,7 +1662,7 @@ it("merges a branch into the current one after a sheet, shows the stopped merge 
   jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "merge" });
   jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: false, itemId: "merge-ref" });
   await act(async () => { row("ref:refs/remotes/origin/fix").props.onContextMenu({ windowPosition: { x: 1, y: 2 } }); });
-  expect(menuLabels()).toEqual(["Check Out", "New Branch from “origin/fix”…", "-", "Merge “origin/fix” into “main”…", "Rebase “main” onto “origin/fix”…", "-", "Copy Name"]);
+  expect(menuLabels()).toEqual(["Check Out", "New Branch from “origin/fix”…", "-", "Merge “origin/fix” into “main”…", "Rebase “main” onto “origin/fix”…", "Rebase “main” Interactively onto “origin/fix”…", "-", "Copy Name"]);
   expect(jest.mocked(showMessage).mock.calls.at(-2)![0]).toMatchObject({ title: "Merge “origin/fix” into “main”?", message: expect.stringContaining("Git fast-forwards “main” to “origin/fix”") });
   expect(git.merge).toHaveBeenLastCalledWith("refs/remotes/origin/fix", expect.anything());
   expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "warning", title: "Couldn’t Merge “origin/fix” into “main”", message: expect.stringMatching(/^Your local changes .*overwritten by merge:[\s\S]*Please commit your changes or stash them before you merge\.\nAborting$/) }));

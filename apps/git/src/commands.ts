@@ -126,6 +126,11 @@ export type CommandContext = {
     mergeRef(ref?: string): void;
     /** Rebases the current branch onto a local or remote branch after a confirm sheet; without a ref, asks for its name first. */
     rebaseRef(ref?: string): void;
+    /**
+     * Opens the interactive rebase sheet for the current branch onto a local or remote branch (`ref`, else one named in a
+     * prompt), or onto commit `oid`; says why when it can't start.
+     */
+    interactiveRebase(base: { ref?: string } | { oid: string }): void;
     /** Cherry-picks a commit onto the current branch, or reverts it there after asking. */
     pickCommit(kind: "cherry-pick" | "revert", oid: string): void;
     /** Undoes the newest operation after a sheet saying what moves where, or says why it can't. */
@@ -359,6 +364,17 @@ export const commands = [
     enabled: (context, target) => canMerge(context) && (target ? !!mergeable(context, target)
       : !!(context.refs?.branches.some(branch => !branch.current) || context.refs?.remotes.some(remote => remote.branches.length))),
     run: (context, target) => context.run.rebaseRef(mergeable(context, target)?.ref.ref),
+  },
+  {
+    id: "interactive-rebase-ref", label: "Rebase Current Branch Interactively onto…",
+    enabled: (context, target) => canMerge(context) && (target ? !!mergeable(context, target)
+      : !!(context.refs?.branches.some(branch => !branch.current) || context.refs?.remotes.some(remote => remote.branches.length))),
+    run: (context, target) => context.run.interactiveRebase({ ref: mergeable(context, target)?.ref.ref }),
+  },
+  {
+    id: "interactive-rebase-commit", label: "Rebase Interactively onto This Commit…",
+    enabled: (context, target) => canMerge(context) && !!commit(context, target),
+    run: (context, target) => context.run.interactiveRebase({ oid: commit(context, target)! }),
   },
   { id: "cherry-pick-commit", label: "Cherry-Pick Commit", enabled: (context, target) => canMerge(context) && !!commit(context, target), run: (context, target) => context.run.pickCommit("cherry-pick", commit(context, target)!) },
   { id: "revert-commit", label: "Revert Commit…", enabled: (context, target) => canMerge(context) && !!commit(context, target), run: (context, target) => context.run.pickCommit("revert", commit(context, target)!) },

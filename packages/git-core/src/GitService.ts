@@ -72,6 +72,23 @@ export type GitRebaseResult = "up-to-date" | "fast-forward" | "rebased" | "stopp
  * `behind` the ref's commits it lacks, and whether any replayed commit is already on the branch's upstream (`pushed`).
  */
 export type GitRebasePlan = { branch: string; commits: number; behind: number; pushed: boolean };
+/** What a line of an interactive rebase's todo does with its commit. */
+export type GitTodoAction = "pick" | "reword" | "squash" | "fixup" | "drop";
+/** A commit an interactive rebase replays: `message` is its full message; `pushed` when a remote-tracking branch has it. */
+export type GitTodoCommit = { oid: string; subject: string; message: string; pushed: boolean };
+/**
+ * What rebasing the current branch interactively onto `base` starts from: its `commits` oldest first, the other local branches
+ * whose tips are among them (`stacked`, which `--update-refs` moves along) and `head`, the branch's tip. `refusal` says why it
+ * can't start now (changes, an operation in progress, merge commits, nothing to rebase).
+ */
+export type GitInteractiveRebasePlan = { branch: string; base: string; head: string; commits: GitTodoCommit[]; stacked: string[]; refusal: string | null };
+/**
+ * One todo line. `message` on a pick or reword is the message of the commit its group (it and the squash and fixup lines right
+ * after it) ends up as; without one, a reword keeps the message and a squash joins the messages.
+ */
+export type GitTodoEntry = { oid: string; action: GitTodoAction; message?: string };
+/** How `GitService.interactiveRebase` ended: the todo changes nothing, the branch was rewritten, or Git stopped (conflicts). */
+export type GitInteractiveRebaseResult = "unchanged" | "rebased" | "stopped";
 /** How `GitService.cherryPick` and `revert` ended: a new commit, nothing to commit (the change is there already), or stopped. */
 export type GitPickResult = "committed" | "empty" | "stopped";
 export type GitCommitInput = { message: string; amend?: boolean; signoff?: boolean };
@@ -112,7 +129,10 @@ export type GitUndo = {
   refusal: string | null;
   /** Identifies the reflog entry, so undo() refuses when a newer operation came in between. */
   entry: string;
+  /** Other branches a rebase moved along (`--update-refs`), which undo moves back too. */
+  stacked?: GitUndoStacked[];
 };
+export type GitUndoStacked = { name: string; from: string; to: string };
 const deletedBranchesRef = "refs/legend-git/deleted-branches";
 // Per path, NUL-separated: the worktree file's blob id (with the repository's filters), "-" when missing, "x" for anything else.
 const worktreeBlobs = `for p do
@@ -121,6 +141,11 @@ const worktreeBlobs = `for p do
   elif test -e "./$p"; then printf 'x\\0'
   else printf -- '-\\0'; fi
 done`;
+// GIT_SEQUENCE_EDITOR for an interactive rebase: the todo Legend Git wrote replaces Git's, and its messages move into
+// rebase-merge, so they last exactly as long as the rebase (continuing after a stop still finds them).
+const todoEditor = 'legend_git_todo() { cp "$LEGEND_GIT_REBASE_INPUT/todo" "$1" && mv "$LEGEND_GIT_REBASE_INPUT/messages" "$LEGEND_GIT_REBASE_MERGE/legend-git-messages"; }; legend_git_todo';
+// GIT_EDITOR while that rebase runs or continues: the message saved for the commit of the last line done, else Git's own.
+const messageEditor = 'legend_git_message() { o=$(tail -n 1 "$LEGEND_GIT_REBASE_MERGE/done" 2>/dev/null | awk \'{print $2}\'); [ -n "$o" ] || return 0; for f in "$LEGEND_GIT_REBASE_MERGE"/legend-git-messages/*; do case "${f##*/}" in "$o"*) cp "$f" "$1"; return;; esac; done; return 0; }; legend_git_message';
 const deletedBranchMarker = "Legend Git deleted branch";
 const undoReflogAction = "legend-git undo";
 
@@ -244,6 +269,8 @@ function isRepoPath(path: string) {
   return !!path && !path.includes("\0") && !path.startsWith("/") && !path.split("/").some(part => part === ".." || part === "." || !part);
 }
 
+const rebaseEditors = (gitDir: string) => ({ GIT_EDITOR: messageEditor, LEGEND_GIT_REBASE_MERGE: `${gitDir}/rebase-merge` });
+
 function checkAborted(signal?: AbortSignal) {
   if (signal?.aborted) throw new GitServiceError("aborted", "Git operation was cancelled.");
 }
@@ -282,6 +309,17 @@ export class GitPullDivergedError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "GitPullDivergedError";
+  }
+}
+
+/** The todo rewrites `commits`, which a remote-tracking branch already has; nothing changed. Pass them as `allowPushed` to go on. */
+export class GitPushedCommitsError extends Error {
+  readonly commits: GitUndoCommit[];
+  constructor(commits: GitUndoCommit[]) {
+    const names = commits.map(commit => `${commit.oid.slice(0, 7)} “${commit.subject}”`);
+    super(`${commits.length === 1 ? "This commit was" : "These commits were"} already pushed: ${names.join(", ")}. Rewriting ${commits.length === 1 ? "it" : "them"} means pushing with force, which rewrites the remote branch for everyone.`);
+    this.name = "GitPushedCommitsError";
+    this.commits = commits;
   }
 }
 
@@ -960,8 +998,8 @@ export class GitService {
       const current = await this.readOperation(gitDir, options);
       if (current?.kind !== kind) throw new GitServiceError("command-failed", `There’s no ${kind} in progress.`, args);
       commit();
-      // `true` as the editor keeps the message Git prepared; nothing waits on a terminal.
-      await this.git(args, { processEnv: { GIT_EDITOR: "true" } }, 600_000);
+      // The editor keeps the message Git prepared (an interactive rebase's saved message, when there is one); nothing waits on a terminal.
+      await this.git(args, { processEnv: kind === "rebase" ? rebaseEditors(gitDir) : { GIT_EDITOR: "true" } }, 600_000);
     });
   }
 
@@ -1136,11 +1174,11 @@ export class GitService {
    * Runs `args` (a rebase, cherry-pick or revert) as part of a queued write with `true` as the editor. Resolves "stopped" when Git
    * failed and left `kind` in progress where none was before (conflicts, or a hook refused the commit); else rejects with Git's message.
    */
-  private async runOperation(gitDir: string, kind: GitOperationKind, args: readonly string[], options: GitReadOptions) {
+  private async runOperation(gitDir: string, kind: GitOperationKind, args: readonly string[], options: GitReadOptions, processEnv: Record<string, string> = { GIT_EDITOR: "true" }) {
     const before = await this.readOperation(gitDir, options);
     try {
       // Once started, the operation isn't cancelled halfway.
-      await this.git(args, { processEnv: { GIT_EDITOR: "true" } }, 600_000);
+      await this.git(args, { processEnv }, 600_000);
       return "done" as const;
     } catch (error) {
       if (error instanceof GitServiceError && error.code === "command-failed" && !before && (await this.readOperation(gitDir, {}))?.kind === kind) return "stopped" as const;
@@ -1185,6 +1223,101 @@ export class GitService {
       if (await this.runOperation(gitDir, "rebase", ["rebase", "--no-autostash", "--no-update-refs", "--end-of-options", ref], options) === "stopped") return "stopped";
       const after = await this.head();
       return after === before ? "up-to-date" : after === target ? "fast-forward" : "rebased";
+    });
+  }
+
+  private async readInteractiveRebase(gitDir: string, base: string, options: GitReadOptions): Promise<GitInteractiveRebasePlan> {
+    const state = await this.inspect(gitDir, options);
+    if (!state.branch) throw new Error("Check out a branch to rebase it.");
+    const branch = state.branch;
+    const baseOid = (await this.git(["rev-parse", "--verify", "--end-of-options", `${base}^{commit}`], options, 5_000)).trim();
+    const head = await this.head(options);
+    const fields = (await this.git(["log", "-z", "--reverse", "--format=%H%x00%P%x00%s%x00%B", "--end-of-options", `${baseOid}..${head}`, "--"], options, 30_000)).split("\0");
+    const unpushed = new Set((await this.git(["rev-list", head, `^${baseOid}`, "--not", "--remotes"], options, 30_000)).split("\n").filter(Boolean));
+    const commits: GitTodoCommit[] = [];
+    let merges = 0;
+    for (let index = 0; index + 3 < fields.length; index += 4) {
+      const oid = fields[index]!.replace(/^\n/, "");
+      if (fields[index + 1]!.includes(" ")) merges += 1;
+      commits.push({ oid, subject: fields[index + 2]!, message: fields[index + 3]!.replace(/\n+$/, "\n"), pushed: !unpushed.has(oid) });
+    }
+    const inRange = new Set(commits.map(commit => commit.oid));
+    const elsewhere = new Set((await this.git(["worktree", "list", "--porcelain", "-z"], options, 10_000)).split("\0").filter(line => line.startsWith("branch refs/heads/")).map(line => line.slice(18)));
+    const stacked = (await this.git(["for-each-ref", "--format=%(objectname) %(refname:lstrip=2)", "refs/heads"], options, 10_000)).split("\n")
+      .map(line => [line.slice(0, line.indexOf(" ")), line.slice(line.indexOf(" ") + 1)] as const)
+      .filter(([oid, name]) => inRange.has(oid) && name !== branch && !elsewhere.has(name)).map(([, name]) => name);
+    let refusal: string | null = null;
+    const operation = await this.readOperation(gitDir, options);
+    const changed = operation ? [] : (await this.git(["diff", "--no-ext-diff", "--name-only", "-z", "HEAD", "--"], options, 30_000)).split("\0").filter(Boolean);
+    if (operation) refusal = `A ${operation.kind} is in progress. Continue or abort it first.`;
+    else if (changed.length) refusal = `${changed.length === 1 ? `“${changed[0]}” has` : `${changed.length} files have, including “${changed[0]}”,`} uncommitted changes. Commit or stash them first.`;
+    else if (!commits.length) refusal = `“${branch}” has no commits that “${base}” doesn’t have.`;
+    else if (merges) refusal = `“${branch}” has merge commits since “${base}”. Rebasing interactively would flatten them, so Legend Git doesn’t.`;
+    return { branch, base: baseOid, head, commits, stacked, refusal };
+  }
+
+  /** What rebasing the current branch interactively onto `base` starts from (see GitInteractiveRebasePlan); rejects on a detached HEAD. */
+  interactiveRebasePlan(base: string, options: GitReadOptions = {}) {
+    return this.enqueue(options, gitDir => this.readInteractiveRebase(gitDir, base, options));
+  }
+
+  /**
+   * Rebases the current branch onto `base` with `git rebase -i` and `todo` (every commit of the plan, once, in the new order) as a
+   * queued write: Legend Git writes the todo for GIT_SEQUENCE_EDITOR and the messages for GIT_EDITOR, so nothing waits on a
+   * terminal. `updateRefs` moves the plan's stacked branches along (`--update-refs`). Rejects, changing nothing, when the branch
+   * moved since `plan` was read, the plan is refused now, the todo is not the plan's commits, or it rewrites pushed commits not in
+   * `allowPushed` (GitPushedCommitsError). Resolves "stopped" when Git stopped with the rebase in progress (see operationState).
+   */
+  interactiveRebase(plan: Pick<GitInteractiveRebasePlan, "branch" | "base" | "head">, todo: readonly GitTodoEntry[], { updateRefs = false, allowPushed = [], ...options }: GitReadOptions & { updateRefs?: boolean; allowPushed?: readonly string[] } = {}): Promise<GitInteractiveRebaseResult> {
+    return this.branchWrite(options, async (gitDir) => {
+      await this.requireBranch(plan.branch, "Nothing was rebased.", options);
+      const current = await this.readInteractiveRebase(gitDir, plan.base, options);
+      if (current.head !== plan.head) throw new Error(`“${plan.branch}” changed since the rebase was set up. Nothing was rebased; start it again.`);
+      if (current.refusal) throw new Error(current.refusal);
+      const byOid = new Map(current.commits.map(commit => [commit.oid, commit]));
+      if (todo.length !== byOid.size || new Set(todo.map(entry => entry.oid)).size !== todo.length || todo.some(entry => !byOid.has(entry.oid))) throw new Error("The rebase must list each of the branch’s commits once. Nothing was rebased.");
+      const kept = todo.filter(entry => entry.action !== "drop");
+      if (kept[0] && (kept[0].action === "squash" || kept[0].action === "fixup")) throw new Error("The first commit kept can’t be squashed or fixed up, because there’s no commit before it to join. Nothing was rebased.");
+      // Git keeps leading picks of unchanged commits when the base is where they start; the rest are rewritten (or dropped).
+      const ancestor = (await this.git(["merge-base", "--is-ancestor", plan.base, plan.head], {}, 10_000).then(() => true, () => false));
+      let same = 0;
+      if (ancestor) while (same < todo.length && todo[same]!.oid === current.commits[same]!.oid && todo[same]!.action === "pick" && (todo[same]!.message ?? current.commits[same]!.message).replace(/\n*$/, "\n") === current.commits[same]!.message) same += 1;
+      if (same === todo.length) return "unchanged" as const;
+      const pushed = todo.slice(same).map(entry => byOid.get(entry.oid)!).filter(commit => commit.pushed && !allowPushed.includes(commit.oid));
+      if (pushed.length) throw new GitPushedCommitsError(pushed.map(commit => ({ oid: commit.oid, subject: commit.subject })));
+      const stacked = updateRefs ? new Map<string, string[]>() : null;
+      if (stacked) for (const name of current.stacked) {
+        const oid = (await this.git(["rev-parse", "--verify", "--end-of-options", `refs/heads/${name}^{commit}`], {}, 5_000)).trim();
+        stacked.set(oid, [...stacked.get(oid) ?? [], name]);
+      }
+      // Each group (a pick or reword and the squash and fixup lines after it) gets its message where Git asks for it: at the
+      // group's last line when it squashes, else at the reword.
+      const lines: string[] = [], messages: [string, string][] = [];
+      for (let index = 0; index < todo.length; index += 1) {
+        const entry = todo[index]!;
+        let action = entry.action;
+        if (action === "pick" || action === "reword") {
+          let end = index;
+          while (todo[end + 1] && ["squash", "fixup", "drop"].includes(todo[end + 1]!.action)) end += 1;
+          const group = todo.slice(index, end + 1).filter(line => line.action !== "drop");
+          const message = entry.message === undefined ? undefined : entry.message.replace(/\n*$/, "\n");
+          if (group.some(line => line.action === "squash")) { action = "pick"; if (message !== undefined) messages.push([group[group.length - 1]!.oid, message]); }
+          else if (message !== undefined && (action === "reword" || message !== byOid.get(entry.oid)!.message)) { action = "reword"; messages.push([entry.oid, message]); }
+        }
+        lines.push(`${action} ${entry.oid} ${byOid.get(entry.oid)!.subject.replace(/\n/g, " ")}`);
+        for (const name of stacked?.get(entry.oid) ?? []) lines.push(`update-ref refs/heads/${name}`);
+      }
+      if (!kept.length) lines.push("noop");
+      const input = `${gitDir}/legend-git-rebase`;
+      await this.process("sh", ["-c", 'rm -rf "$1" && mkdir -p "$1/messages" && cat > "$1/todo"', "legend-git-todo", input], {}, 10_000, `${lines.join("\n")}\n`);
+      for (const [oid, message] of messages) await this.process("sh", ["-c", 'cat > "$1/messages/$2"', "legend-git-message", input, oid], {}, 10_000, message);
+      try {
+        const env = { ...rebaseEditors(gitDir), GIT_SEQUENCE_EDITOR: todoEditor, LEGEND_GIT_REBASE_INPUT: input };
+        const args = ["-c", "rebase.abbreviateCommands=false", "-c", "rebase.missingCommitsCheck=ignore", "rebase", "-i", "--no-autosquash", "--no-autostash", "--no-rebase-merges", updateRefs ? "--update-refs" : "--no-update-refs", "--end-of-options", plan.base];
+        return await this.runOperation(gitDir, "rebase", args, options, env) === "stopped" ? "stopped" as const : "rebased" as const;
+      } finally {
+        await this.process("sh", ["-c", 'rm -rf "$1"', "legend-git-todo", input], {}).catch(() => {});
+      }
     });
   }
 
@@ -1589,7 +1722,7 @@ export class GitService {
     if (head !== latest.oid) return null;
     const { subject } = latest;
     const previous = await this.headEntry(options, 1);
-    let kind: GitUndoKind | null = null, name: string | null = null, to = previous?.oid ?? "", toBranch: string | null = null;
+    let kind: GitUndoKind | null = null, name: string | null = null, to = previous?.oid ?? "", toBranch: string | null = null, stacked: GitUndoStacked[] = [];
     let match: RegExpExecArray | null;
     if (/^commit: /.test(subject)) kind = "commit";
     else if (/^commit \(amend\): /.test(subject)) kind = "amend";
@@ -1605,6 +1738,7 @@ export class GitService {
       const lines = (await this.git(["log", "-g", "-2", "--format=%H%x00%gs", `refs/heads/${branch}`, "--"], options, 10_000, undefined, [0, 128])).split("\n").filter(Boolean).map(line => line.split("\0"));
       if (lines.length < 2 || lines[0]![0] !== head || !/^rebase(?: -[im])? \(finish\): /.test(lines[0]![1] ?? "")) return null;
       kind = "rebase"; to = lines[1]![0]!;
+      stacked = await this.rebasedAlong(branch, to, options);
       name = /onto ([0-9a-f]+)$/.exec(lines[0]![1]!)?.[1] ?? null;
       if (name) name = await this.nameCommit(name, options);
     } else if ((match = /^checkout: moving from (.+) to (.+)$/.exec(subject))) {
@@ -1620,6 +1754,7 @@ export class GitService {
     const keepsChanges = kind === "commit" || kind === "amend";
     const plan: GitUndo = {
       kind, branch: state.branch, from: await this.commitSubject(head, options), to: await this.commitSubject(to, options), toBranch, name, keepsChanges, refusal: null, entry: latest.key,
+      ...stacked.length ? { stacked } : {},
     };
     const operation = await this.readOperation(gitDir, options);
     if (operation) { plan.refusal = `A ${operation.kind} is in progress. Continue or abort it first.`; return plan; }
@@ -1636,6 +1771,25 @@ export class GitService {
       }
     }
     return plan;
+  }
+
+  /**
+   * Branches `git rebase --update-refs` moved along with `branch`: their newest reflog entry is Git's "rewritten during rebase",
+   * written no earlier than the rebase started, and the tip before it was on the old branch (`to`).
+   */
+  private async rebasedAlong(branch: string, to: string, options: GitReadOptions): Promise<GitUndoStacked[]> {
+    const started = (await this.git(["log", "-g", "--format=%gt%x00%gs", "HEAD", "--"], options, 10_000, undefined, [0, 128])).split("\n").map(line => line.split("\0")).find(([, subject]) => /^rebase(?: -[im])? \(start\)/.test(subject ?? ""));
+    if (!started) return [];
+    const since = Number(started[0]);
+    const names = (await this.git(["for-each-ref", "--format=%(refname:lstrip=2)", "refs/heads"], options, 10_000)).split("\n").filter(name => name && name !== branch);
+    const stacked: GitUndoStacked[] = [];
+    for (const name of names) {
+      const lines = (await this.git(["log", "-g", "-2", "--format=%H%x00%gt%x00%gs", `refs/heads/${name}`, "--"], options, 10_000, undefined, [0, 128])).split("\n").filter(Boolean).map(line => line.split("\0"));
+      if (lines.length < 2 || lines[0]![2] !== "rewritten during rebase" || Number(lines[0]![1]) < since) continue;
+      const [from, previous] = [lines[0]![0]!, lines[1]![0]!];
+      if (await this.git(["merge-base", "--is-ancestor", previous, to], options, 10_000).then(() => true, () => false)) stacked.push({ name, from, to: previous });
+    }
+    return stacked;
   }
 
   /**
@@ -1679,6 +1833,7 @@ export class GitService {
           if (added.length) await this.process("sh", ["-c", 'for p do rm -f -- "./$p" || exit 1; done', "legend-git-remove", ...added], {});
         }
         await this.git(["reset", "-q", current.keepsChanges ? "--soft" : "--keep", "--end-of-options", current.to.oid], env, 120_000);
+        for (const entry of current.stacked ?? []) await this.git(["update-ref", "-m", `${undoReflogAction}: rebase`, `refs/heads/${entry.name}`, entry.to, entry.from], {});
       }
     });
   }
