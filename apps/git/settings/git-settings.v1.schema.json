@@ -1,0 +1,2080 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://legend.so/git/git-settings.v1.schema.json",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "The schema URL; editors use it for completion."
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "File format version; this app writes 1.",
+      "const": 1
+    },
+    "name": {
+      "type": "string",
+      "description": "Shown in Import and the preset list."
+    },
+    "description": {
+      "type": "string",
+      "description": "Human notes."
+    },
+    "author": {
+      "type": "string"
+    },
+    "root": {
+      "type": "string",
+      "description": "The repository root a repository layer applies to (written by the app)."
+    },
+    "extends": {
+      "type": "string",
+      "enum": [
+        "sourcetree",
+        "fork",
+        "gitkraken"
+      ],
+      "description": "The base preset.",
+      "x-enumDescriptions": {
+        "sourcetree": "SourceTree (default).",
+        "fork": "Fork.",
+        "gitkraken": "GitKraken."
+      }
+    },
+    "appearance": {
+      "type": "string",
+      "enum": [
+        "system",
+        "light",
+        "dark"
+      ],
+      "description": "Window appearance.",
+      "x-enumDescriptions": {
+        "system": "Follow macOS.",
+        "light": "Always light.",
+        "dark": "Always dark."
+      },
+      "default": "system"
+    },
+    "density": {
+      "type": "string",
+      "enum": [
+        "compact",
+        "regular",
+        "comfortable"
+      ],
+      "description": "Row height. Panels without their own density use the global one.",
+      "x-enumDescriptions": {
+        "compact": "File/commit rows 20 pt, sidebar rows 24 pt.",
+        "regular": "File/commit rows 24 pt, sidebar rows 28 pt.",
+        "comfortable": "File/commit rows 28 pt, sidebar rows 32 pt."
+      },
+      "default": "regular"
+    },
+    "theme": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "default": "Default"
+        },
+        "fonts": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Code font family; \"system-mono\" is the system monospaced font.",
+              "default": "system-mono"
+            },
+            "codeSize": {
+              "type": "number",
+              "minimum": 8,
+              "maximum": 32,
+              "description": "Code font size.",
+              "default": 12
+            }
+          },
+          "additionalProperties": {},
+          "description": "Code fonts; the UI font always follows macOS."
+        },
+        "light": {
+          "type": "object",
+          "properties": {
+            "accent": {
+              "type": "string",
+              "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|system:[A-Za-z]+)$",
+              "description": "\"#RRGGBB\", \"#RRGGBBAA\", or \"system:<NSColor name>\" such as \"system:systemGreen\".",
+              "default": "system:controlAccentColor"
+            },
+            "status": {
+              "type": "object",
+              "properties": {
+                "added": {
+                  "type": "string",
+                  "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|system:[A-Za-z]+)$",
+                  "description": "\"#RRGGBB\", \"#RRGGBBAA\", or \"system:<NSColor name>\" such as \"system:systemGreen\".",
+                  "default": "#28CD41"
+                },
+                "modified": {
+                  "type": "string",
+                  "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|system:[A-Za-z]+)$",
+                  "description": "\"#RRGGBB\", \"#RRGGBBAA\", or \"system:<NSColor name>\" such as \"system:systemGreen\".",
+                  "default": "#FF9500"
+                },
+                "deleted": {
+                  "type": "string",
+                  "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|system:[A-Za-z]+)$",
+                  "description": "\"#RRGGBB\", \"#RRGGBBAA\", or \"system:<NSColor name>\" such as \"system:systemGreen\".",
+                  "default": "#FF3B30"
+                },
+                "renamed": {
+                  "type": "string",
+                  "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|system:[A-Za-z]+)$",
+                  "description": "\"#RRGGBB\", \"#RRGGBBAA\", or \"system:<NSColor name>\" such as \"system:systemGreen\".",
+                  "default": "#007AFF"
+                },
+                "typeChanged": {
+                  "type": "string",
+                  "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|system:[A-Za-z]+)$",
+                  "description": "\"#RRGGBB\", \"#RRGGBBAA\", or \"system:<NSColor name>\" such as \"system:systemGreen\".",
+                  "default": "#AF52DE"
+                },
+                "untracked": {
+                  "type": "string",
+                  "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|system:[A-Za-z]+)$",
+                  "description": "\"#RRGGBB\", \"#RRGGBBAA\", or \"system:<NSColor name>\" such as \"system:systemGreen\".",
+                  "default": "#8E8E93"
+                },
+                "conflicted": {
+                  "type": "string",
+                  "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|system:[A-Za-z]+)$",
+                  "description": "\"#RRGGBB\", \"#RRGGBBAA\", or \"system:<NSColor name>\" such as \"system:systemGreen\".",
+                  "default": "#FF3B30"
+                }
+              },
+              "additionalProperties": {},
+              "description": "File status colors."
+            },
+            "diff": {
+              "type": "object",
+              "properties": {
+                "addedLine": {
+                  "type": "string",
+                  "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|system:[A-Za-z]+)$",
+                  "description": "\"#RRGGBB\", \"#RRGGBBAA\", or \"system:<NSColor name>\" such as \"system:systemGreen\".",
+                  "default": "#dafbe1"
+                },
+                "removedLine": {
+                  "type": "string",
+                  "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|system:[A-Za-z]+)$",
+                  "description": "\"#RRGGBB\", \"#RRGGBBAA\", or \"system:<NSColor name>\" such as \"system:systemGreen\".",
+                  "default": "#ffebe9"
+                },
+                "addedWord": {
+                  "type": "string",
+                  "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|system:[A-Za-z]+)$",
+                  "description": "\"#RRGGBB\", \"#RRGGBBAA\", or \"system:<NSColor name>\" such as \"system:systemGreen\".",
+                  "default": "#1a7f37"
+                },
+                "removedWord": {
+                  "type": "string",
+                  "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|system:[A-Za-z]+)$",
+                  "description": "\"#RRGGBB\", \"#RRGGBBAA\", or \"system:<NSColor name>\" such as \"system:systemGreen\".",
+                  "default": "#cf222e"
+                },
+                "hunkHeader": {
+                  "type": "string",
+                  "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|system:[A-Za-z]+)$",
+                  "description": "\"#RRGGBB\", \"#RRGGBBAA\", or \"system:<NSColor name>\" such as \"system:systemGreen\".",
+                  "default": "system:secondaryLabelColor"
+                },
+                "gutter": {
+                  "type": "string",
+                  "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|system:[A-Za-z]+)$",
+                  "description": "\"#RRGGBB\", \"#RRGGBBAA\", or \"system:<NSColor name>\" such as \"system:systemGreen\".",
+                  "default": "system:tertiaryLabelColor"
+                },
+                "selection": {
+                  "type": "string",
+                  "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|system:[A-Za-z]+)$",
+                  "description": "\"#RRGGBB\", \"#RRGGBBAA\", or \"system:<NSColor name>\" such as \"system:systemGreen\".",
+                  "default": "system:selectedContentBackgroundColor"
+                }
+              },
+              "additionalProperties": {},
+              "description": "Diff colors."
+            },
+            "lanes": {
+              "minItems": 3,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|system:[A-Za-z]+)$",
+                "description": "\"#RRGGBB\", \"#RRGGBBAA\", or \"system:<NSColor name>\" such as \"system:systemGreen\"."
+              },
+              "description": "Graph lane colors; the last one is the overflow color.",
+              "default": [
+                "#007AFF",
+                "#AF52DE",
+                "#FF2D55",
+                "#FF9500",
+                "#28CD41",
+                "#30B0C7",
+                "#5856D6",
+                "#A2845E",
+                "#FF3B30",
+                "#FFCC00",
+                "#00000042"
+              ]
+            },
+            "refs": {
+              "type": "object",
+              "properties": {
+                "localBranch": {
+                  "type": "string",
+                  "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|system:[A-Za-z]+)$",
+                  "description": "\"#RRGGBB\", \"#RRGGBBAA\", or \"system:<NSColor name>\" such as \"system:systemGreen\".",
+                  "default": "#007AFF"
+                },
+                "remoteBranch": {
+                  "type": "string",
+                  "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|system:[A-Za-z]+)$",
+                  "description": "\"#RRGGBB\", \"#RRGGBBAA\", or \"system:<NSColor name>\" such as \"system:systemGreen\".",
+                  "default": "#8E8E93"
+                },
+                "tag": {
+                  "type": "string",
+                  "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|system:[A-Za-z]+)$",
+                  "description": "\"#RRGGBB\", \"#RRGGBBAA\", or \"system:<NSColor name>\" such as \"system:systemGreen\".",
+                  "default": "#FF9500"
+                },
+                "head": {
+                  "type": "string",
+                  "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|system:[A-Za-z]+)$",
+                  "description": "\"#RRGGBB\", \"#RRGGBBAA\", or \"system:<NSColor name>\" such as \"system:systemGreen\".",
+                  "default": "#28CD41"
+                }
+              },
+              "additionalProperties": {},
+              "description": "Ref label colors (refStyle \"tinted\")."
+            }
+          },
+          "additionalProperties": {},
+          "description": "Colors for one appearance."
+        },
+        "dark": {
+          "type": "object",
+          "properties": {
+            "accent": {
+              "type": "string",
+              "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|system:[A-Za-z]+)$",
+              "description": "\"#RRGGBB\", \"#RRGGBBAA\", or \"system:<NSColor name>\" such as \"system:systemGreen\".",
+              "default": "system:controlAccentColor"
+            },
+            "status": {
+              "type": "object",
+              "properties": {
+                "added": {
+                  "type": "string",
+                  "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|system:[A-Za-z]+)$",
+                  "description": "\"#RRGGBB\", \"#RRGGBBAA\", or \"system:<NSColor name>\" such as \"system:systemGreen\".",
+                  "default": "#32D74B"
+                },
+                "modified": {
+                  "type": "string",
+                  "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|system:[A-Za-z]+)$",
+                  "description": "\"#RRGGBB\", \"#RRGGBBAA\", or \"system:<NSColor name>\" such as \"system:systemGreen\".",
+                  "default": "#FF9F0A"
+                },
+                "deleted": {
+                  "type": "string",
+                  "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|system:[A-Za-z]+)$",
+                  "description": "\"#RRGGBB\", \"#RRGGBBAA\", or \"system:<NSColor name>\" such as \"system:systemGreen\".",
+                  "default": "#FF453A"
+                },
+                "renamed": {
+                  "type": "string",
+                  "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|system:[A-Za-z]+)$",
+                  "description": "\"#RRGGBB\", \"#RRGGBBAA\", or \"system:<NSColor name>\" such as \"system:systemGreen\".",
+                  "default": "#0A84FF"
+                },
+                "typeChanged": {
+                  "type": "string",
+                  "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|system:[A-Za-z]+)$",
+                  "description": "\"#RRGGBB\", \"#RRGGBBAA\", or \"system:<NSColor name>\" such as \"system:systemGreen\".",
+                  "default": "#BF5AF2"
+                },
+                "untracked": {
+                  "type": "string",
+                  "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|system:[A-Za-z]+)$",
+                  "description": "\"#RRGGBB\", \"#RRGGBBAA\", or \"system:<NSColor name>\" such as \"system:systemGreen\".",
+                  "default": "#98989D"
+                },
+                "conflicted": {
+                  "type": "string",
+                  "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|system:[A-Za-z]+)$",
+                  "description": "\"#RRGGBB\", \"#RRGGBBAA\", or \"system:<NSColor name>\" such as \"system:systemGreen\".",
+                  "default": "#FF453A"
+                }
+              },
+              "additionalProperties": {},
+              "description": "File status colors."
+            },
+            "diff": {
+              "type": "object",
+              "properties": {
+                "addedLine": {
+                  "type": "string",
+                  "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|system:[A-Za-z]+)$",
+                  "description": "\"#RRGGBB\", \"#RRGGBBAA\", or \"system:<NSColor name>\" such as \"system:systemGreen\".",
+                  "default": "#17351f"
+                },
+                "removedLine": {
+                  "type": "string",
+                  "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|system:[A-Za-z]+)$",
+                  "description": "\"#RRGGBB\", \"#RRGGBBAA\", or \"system:<NSColor name>\" such as \"system:systemGreen\".",
+                  "default": "#3a1d24"
+                },
+                "addedWord": {
+                  "type": "string",
+                  "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|system:[A-Za-z]+)$",
+                  "description": "\"#RRGGBB\", \"#RRGGBBAA\", or \"system:<NSColor name>\" such as \"system:systemGreen\".",
+                  "default": "#7ee787"
+                },
+                "removedWord": {
+                  "type": "string",
+                  "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|system:[A-Za-z]+)$",
+                  "description": "\"#RRGGBB\", \"#RRGGBBAA\", or \"system:<NSColor name>\" such as \"system:systemGreen\".",
+                  "default": "#ff7b72"
+                },
+                "hunkHeader": {
+                  "type": "string",
+                  "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|system:[A-Za-z]+)$",
+                  "description": "\"#RRGGBB\", \"#RRGGBBAA\", or \"system:<NSColor name>\" such as \"system:systemGreen\".",
+                  "default": "system:secondaryLabelColor"
+                },
+                "gutter": {
+                  "type": "string",
+                  "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|system:[A-Za-z]+)$",
+                  "description": "\"#RRGGBB\", \"#RRGGBBAA\", or \"system:<NSColor name>\" such as \"system:systemGreen\".",
+                  "default": "system:tertiaryLabelColor"
+                },
+                "selection": {
+                  "type": "string",
+                  "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|system:[A-Za-z]+)$",
+                  "description": "\"#RRGGBB\", \"#RRGGBBAA\", or \"system:<NSColor name>\" such as \"system:systemGreen\".",
+                  "default": "system:selectedContentBackgroundColor"
+                }
+              },
+              "additionalProperties": {},
+              "description": "Diff colors."
+            },
+            "lanes": {
+              "minItems": 3,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|system:[A-Za-z]+)$",
+                "description": "\"#RRGGBB\", \"#RRGGBBAA\", or \"system:<NSColor name>\" such as \"system:systemGreen\"."
+              },
+              "description": "Graph lane colors; the last one is the overflow color.",
+              "default": [
+                "#0A84FF",
+                "#BF5AF2",
+                "#FF375F",
+                "#FF9F0A",
+                "#32D74B",
+                "#40C8E0",
+                "#5E5CE6",
+                "#AC8E68",
+                "#FF453A",
+                "#FFD60A",
+                "#FFFFFF40"
+              ]
+            },
+            "refs": {
+              "type": "object",
+              "properties": {
+                "localBranch": {
+                  "type": "string",
+                  "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|system:[A-Za-z]+)$",
+                  "description": "\"#RRGGBB\", \"#RRGGBBAA\", or \"system:<NSColor name>\" such as \"system:systemGreen\".",
+                  "default": "#0A84FF"
+                },
+                "remoteBranch": {
+                  "type": "string",
+                  "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|system:[A-Za-z]+)$",
+                  "description": "\"#RRGGBB\", \"#RRGGBBAA\", or \"system:<NSColor name>\" such as \"system:systemGreen\".",
+                  "default": "#98989D"
+                },
+                "tag": {
+                  "type": "string",
+                  "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|system:[A-Za-z]+)$",
+                  "description": "\"#RRGGBB\", \"#RRGGBBAA\", or \"system:<NSColor name>\" such as \"system:systemGreen\".",
+                  "default": "#FF9F0A"
+                },
+                "head": {
+                  "type": "string",
+                  "pattern": "^(#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?|system:[A-Za-z]+)$",
+                  "description": "\"#RRGGBB\", \"#RRGGBBAA\", or \"system:<NSColor name>\" such as \"system:systemGreen\".",
+                  "default": "#32D74B"
+                }
+              },
+              "additionalProperties": {},
+              "description": "Ref label colors (refStyle \"tinted\")."
+            }
+          },
+          "additionalProperties": {},
+          "description": "Colors for one appearance."
+        }
+      },
+      "additionalProperties": {},
+      "description": "Colors and code fonts."
+    },
+    "layout": {
+      "type": "object",
+      "properties": {
+        "active": {
+          "type": "string",
+          "minLength": 1,
+          "description": "A name in `layouts` or a preset id.",
+          "default": "sourcetree"
+        },
+        "layouts": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "description": {
+                "type": "string"
+              },
+              "sidebar": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "width": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 10000,
+                        "description": "Initial sidebar width."
+                      },
+                      "minWidth": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 10000,
+                        "description": "Smallest sidebar width."
+                      },
+                      "collapsed": {
+                        "type": "boolean",
+                        "description": "Starts collapsed."
+                      }
+                    },
+                    "additionalProperties": {}
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The left source list (the window's native sidebar slot); null = no sidebar."
+              },
+              "views": {
+                "type": "object",
+                "properties": {
+                  "default": {
+                    "$ref": "#/$defs/layoutNode"
+                  },
+                  "changes": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/layoutNode"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "history": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/layoutNode"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "ref": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/layoutNode"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "stash": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/layoutNode"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "worktree": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/layoutNode"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "review": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/layoutNode"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "pullRequest": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/layoutNode"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "default"
+                ],
+                "additionalProperties": {},
+                "description": "One tree per kind of sidebar selection; a missing or null kind uses `default`."
+              }
+            },
+            "required": [
+              "views"
+            ],
+            "additionalProperties": {},
+            "description": "A named window layout."
+          },
+          "description": "Named layouts; the presets' layouts are named after them."
+        }
+      },
+      "additionalProperties": {},
+      "description": "Window layout."
+    },
+    "panels": {
+      "type": "object",
+      "properties": {
+        "commitList": {
+          "type": "object",
+          "properties": {
+            "density": {
+              "type": "string",
+              "enum": [
+                "compact",
+                "regular",
+                "comfortable"
+              ],
+              "description": "Row height. Panels without their own density use the global one.",
+              "x-enumDescriptions": {
+                "compact": "File/commit rows 20 pt, sidebar rows 24 pt.",
+                "regular": "File/commit rows 24 pt, sidebar rows 28 pt.",
+                "comfortable": "File/commit rows 28 pt, sidebar rows 32 pt."
+              },
+              "x-preset-values": {}
+            },
+            "columns": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "enum": [
+                      "graph",
+                      "refs",
+                      "subject",
+                      "author",
+                      "date",
+                      "sha",
+                      "committer"
+                    ],
+                    "description": "Column.",
+                    "x-enumDescriptions": {
+                      "graph": "Branch graph.",
+                      "refs": "Branch and tag labels.",
+                      "subject": "Commit subject.",
+                      "author": "Author name.",
+                      "date": "Author date.",
+                      "sha": "Short SHA.",
+                      "committer": "Committer name."
+                    }
+                  },
+                  "width": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 10000,
+                    "description": "Width in points; the subject flexes when omitted."
+                  },
+                  "visible": {
+                    "type": "boolean",
+                    "description": "Shown (default true)."
+                  }
+                },
+                "required": [
+                  "id"
+                ],
+                "additionalProperties": {}
+              },
+              "description": "Columns in display order.",
+              "default": [
+                {
+                  "id": "graph"
+                },
+                {
+                  "id": "subject"
+                },
+                {
+                  "id": "author",
+                  "width": 160
+                },
+                {
+                  "id": "date",
+                  "width": 140
+                },
+                {
+                  "id": "sha",
+                  "width": 72
+                }
+              ],
+              "x-preset-values": {
+                "sourcetree": [
+                  {
+                    "id": "graph",
+                    "width": 120
+                  },
+                  {
+                    "id": "subject"
+                  },
+                  {
+                    "id": "date",
+                    "width": 140
+                  },
+                  {
+                    "id": "author",
+                    "width": 160
+                  },
+                  {
+                    "id": "sha",
+                    "width": 72
+                  }
+                ],
+                "fork": [
+                  {
+                    "id": "graph",
+                    "width": 90
+                  },
+                  {
+                    "id": "subject"
+                  },
+                  {
+                    "id": "author",
+                    "width": 140
+                  },
+                  {
+                    "id": "date",
+                    "width": 120
+                  },
+                  {
+                    "id": "sha",
+                    "width": 64
+                  }
+                ],
+                "gitkraken": [
+                  {
+                    "id": "refs",
+                    "width": 180
+                  },
+                  {
+                    "id": "graph",
+                    "width": 220
+                  },
+                  {
+                    "id": "subject"
+                  }
+                ]
+              }
+            },
+            "graph": {
+              "type": "object",
+              "properties": {
+                "style": {
+                  "type": "string",
+                  "enum": [
+                    "compact",
+                    "wide"
+                  ],
+                  "description": "Graph style.",
+                  "x-enumDescriptions": {
+                    "compact": "Narrow lanes.",
+                    "wide": "Wide lanes."
+                  },
+                  "default": "wide",
+                  "x-preset-values": {
+                    "sourcetree": "wide",
+                    "fork": "compact",
+                    "gitkraken": "wide"
+                  }
+                },
+                "laneWidth": {
+                  "type": "number",
+                  "minimum": 8,
+                  "maximum": 24,
+                  "description": "Lane width in points (8–24).",
+                  "default": 12,
+                  "x-preset-values": {
+                    "sourcetree": 14,
+                    "fork": 10,
+                    "gitkraken": 20
+                  }
+                },
+                "nodeStyle": {
+                  "type": "string",
+                  "enum": [
+                    "dot",
+                    "ring"
+                  ],
+                  "description": "Commit node shape.",
+                  "x-enumDescriptions": {
+                    "dot": "Filled dot.",
+                    "ring": "Hollow ring."
+                  },
+                  "default": "dot",
+                  "x-preset-values": {
+                    "sourcetree": "dot",
+                    "fork": "ring",
+                    "gitkraken": "dot"
+                  }
+                },
+                "lineWidth": {
+                  "type": "number",
+                  "minimum": 1,
+                  "maximum": 3,
+                  "description": "Line width in points (1–3).",
+                  "default": 2,
+                  "x-preset-values": {
+                    "sourcetree": 2,
+                    "fork": 1.5,
+                    "gitkraken": 3
+                  }
+                },
+                "maxLanes": {
+                  "type": "integer",
+                  "minimum": 4,
+                  "maximum": 24,
+                  "description": "Lanes past this fold into the overflow color (4–24).",
+                  "default": 12,
+                  "x-preset-values": {
+                    "sourcetree": 12,
+                    "fork": 12,
+                    "gitkraken": 16
+                  }
+                },
+                "colorBy": {
+                  "type": "string",
+                  "enum": [
+                    "lane",
+                    "branch"
+                  ],
+                  "description": "Lane coloring.",
+                  "x-enumDescriptions": {
+                    "lane": "Color by lane position.",
+                    "branch": "A ref keeps its color across rows."
+                  },
+                  "default": "lane",
+                  "x-preset-values": {
+                    "sourcetree": "lane",
+                    "fork": "branch",
+                    "gitkraken": "branch"
+                  }
+                }
+              },
+              "additionalProperties": {},
+              "description": "Graph drawing."
+            },
+            "refs": {
+              "type": "string",
+              "enum": [
+                "inline",
+                "column",
+                "hidden"
+              ],
+              "description": "Where branch and tag labels go.",
+              "x-enumDescriptions": {
+                "inline": "Before the subject.",
+                "column": "In the refs column.",
+                "hidden": "Not shown."
+              },
+              "default": "inline",
+              "x-preset-values": {
+                "sourcetree": "inline",
+                "fork": "inline",
+                "gitkraken": "column"
+              }
+            },
+            "refStyle": {
+              "type": "string",
+              "enum": [
+                "text",
+                "tinted"
+              ],
+              "description": "Ref label style.",
+              "x-enumDescriptions": {
+                "text": "Plain text.",
+                "tinted": "Theme ref color with a small SF Symbol."
+              },
+              "default": "text",
+              "x-preset-values": {
+                "sourcetree": "text",
+                "fork": "text",
+                "gitkraken": "tinted"
+              }
+            },
+            "showRemoteRefs": {
+              "type": "boolean",
+              "description": "Show remote branches.",
+              "default": true,
+              "x-preset-values": {
+                "sourcetree": true,
+                "fork": true,
+                "gitkraken": true
+              }
+            },
+            "showTags": {
+              "type": "boolean",
+              "description": "Show tags.",
+              "default": true,
+              "x-preset-values": {
+                "sourcetree": true,
+                "fork": true,
+                "gitkraken": true
+              }
+            },
+            "dateFormat": {
+              "type": "string",
+              "enum": [
+                "relative",
+                "short",
+                "medium",
+                "iso"
+              ],
+              "description": "Date format.",
+              "x-enumDescriptions": {
+                "relative": "\"3 days ago\".",
+                "short": "System short date.",
+                "medium": "System medium date and time.",
+                "iso": "ISO 8601."
+              },
+              "default": "relative",
+              "x-preset-values": {
+                "sourcetree": "medium",
+                "fork": "relative",
+                "gitkraken": "relative"
+              }
+            },
+            "highlightPulled": {
+              "type": "boolean",
+              "description": "Mark the commits the last pull brought in.",
+              "default": false,
+              "x-preset-values": {
+                "sourcetree": false,
+                "fork": false,
+                "gitkraken": false
+              }
+            }
+          },
+          "additionalProperties": {},
+          "description": "The commit list (History, refs, review branches)."
+        },
+        "commitDetails": {
+          "type": "object",
+          "properties": {
+            "showBody": {
+              "type": "boolean",
+              "description": "Show the message body.",
+              "default": true,
+              "x-preset-values": {
+                "sourcetree": true,
+                "fork": true,
+                "gitkraken": true
+              }
+            },
+            "showCommitter": {
+              "type": "boolean",
+              "description": "Show the committer when it differs from the author.",
+              "default": true,
+              "x-preset-values": {
+                "sourcetree": true,
+                "fork": true,
+                "gitkraken": true
+              }
+            },
+            "fileListPlacement": {
+              "type": "string",
+              "enum": [
+                "below",
+                "beside",
+                "none"
+              ],
+              "description": "Where the details panel puts its own file list.",
+              "x-enumDescriptions": {
+                "below": "Below the details.",
+                "beside": "Beside the details.",
+                "none": "Not inside the details."
+              },
+              "default": "none",
+              "x-preset-values": {
+                "sourcetree": "none",
+                "fork": "none",
+                "gitkraken": "none"
+              }
+            }
+          },
+          "additionalProperties": {},
+          "description": "Commit details."
+        },
+        "fileList": {
+          "type": "object",
+          "properties": {
+            "density": {
+              "type": "string",
+              "enum": [
+                "compact",
+                "regular",
+                "comfortable"
+              ],
+              "description": "Row height. Panels without their own density use the global one.",
+              "x-enumDescriptions": {
+                "compact": "File/commit rows 20 pt, sidebar rows 24 pt.",
+                "regular": "File/commit rows 24 pt, sidebar rows 28 pt.",
+                "comfortable": "File/commit rows 28 pt, sidebar rows 32 pt."
+              },
+              "x-preset-values": {}
+            },
+            "style": {
+              "type": "string",
+              "enum": [
+                "flat",
+                "tree"
+              ],
+              "description": "List shape.",
+              "x-enumDescriptions": {
+                "flat": "One row per file.",
+                "tree": "Files grouped in folders."
+              },
+              "default": "flat",
+              "x-preset-values": {
+                "sourcetree": "flat",
+                "fork": "flat",
+                "gitkraken": "flat"
+              }
+            },
+            "sort": {
+              "type": "string",
+              "enum": [
+                "path",
+                "name",
+                "status"
+              ],
+              "description": "Sort order.",
+              "x-enumDescriptions": {
+                "path": "By full path.",
+                "name": "By file name.",
+                "status": "By status, then path."
+              },
+              "default": "path",
+              "x-preset-values": {
+                "sourcetree": "path",
+                "fork": "path",
+                "gitkraken": "path"
+              }
+            },
+            "showFolder": {
+              "type": "boolean",
+              "description": "Show the folder after the name (flat style).",
+              "default": true,
+              "x-preset-values": {
+                "sourcetree": true,
+                "fork": true,
+                "gitkraken": true
+              }
+            },
+            "stagingControl": {
+              "type": "string",
+              "enum": [
+                "buttons",
+                "checkboxes"
+              ],
+              "description": "How files are staged.",
+              "x-enumDescriptions": {
+                "buttons": "Stage/Unstage buttons.",
+                "checkboxes": "A checkbox per file (falls back to buttons until Spark has native checkboxes)."
+              },
+              "default": "buttons",
+              "x-preset-values": {
+                "sourcetree": "buttons",
+                "fork": "buttons",
+                "gitkraken": "buttons"
+              }
+            }
+          },
+          "additionalProperties": {},
+          "description": "File list options."
+        },
+        "unstaged": {
+          "type": "object",
+          "properties": {
+            "density": {
+              "type": "string",
+              "enum": [
+                "compact",
+                "regular",
+                "comfortable"
+              ],
+              "description": "Row height. Panels without their own density use the global one.",
+              "x-enumDescriptions": {
+                "compact": "File/commit rows 20 pt, sidebar rows 24 pt.",
+                "regular": "File/commit rows 24 pt, sidebar rows 28 pt.",
+                "comfortable": "File/commit rows 28 pt, sidebar rows 32 pt."
+              },
+              "x-preset-values": {}
+            },
+            "style": {
+              "type": "string",
+              "enum": [
+                "flat",
+                "tree"
+              ],
+              "description": "List shape.",
+              "x-enumDescriptions": {
+                "flat": "One row per file.",
+                "tree": "Files grouped in folders."
+              },
+              "default": "flat",
+              "x-preset-values": {
+                "sourcetree": "flat",
+                "fork": "flat",
+                "gitkraken": "tree"
+              }
+            },
+            "sort": {
+              "type": "string",
+              "enum": [
+                "path",
+                "name",
+                "status"
+              ],
+              "description": "Sort order.",
+              "x-enumDescriptions": {
+                "path": "By full path.",
+                "name": "By file name.",
+                "status": "By status, then path."
+              },
+              "default": "path",
+              "x-preset-values": {
+                "sourcetree": "path",
+                "fork": "path",
+                "gitkraken": "path"
+              }
+            },
+            "showFolder": {
+              "type": "boolean",
+              "description": "Show the folder after the name (flat style).",
+              "default": true,
+              "x-preset-values": {
+                "sourcetree": true,
+                "fork": true,
+                "gitkraken": true
+              }
+            },
+            "stagingControl": {
+              "type": "string",
+              "enum": [
+                "buttons",
+                "checkboxes"
+              ],
+              "description": "How files are staged.",
+              "x-enumDescriptions": {
+                "buttons": "Stage/Unstage buttons.",
+                "checkboxes": "A checkbox per file (falls back to buttons until Spark has native checkboxes)."
+              },
+              "default": "buttons",
+              "x-preset-values": {
+                "sourcetree": "checkboxes",
+                "fork": "buttons",
+                "gitkraken": "buttons"
+              }
+            }
+          },
+          "additionalProperties": {},
+          "description": "File list options."
+        },
+        "staged": {
+          "type": "object",
+          "properties": {
+            "density": {
+              "type": "string",
+              "enum": [
+                "compact",
+                "regular",
+                "comfortable"
+              ],
+              "description": "Row height. Panels without their own density use the global one.",
+              "x-enumDescriptions": {
+                "compact": "File/commit rows 20 pt, sidebar rows 24 pt.",
+                "regular": "File/commit rows 24 pt, sidebar rows 28 pt.",
+                "comfortable": "File/commit rows 28 pt, sidebar rows 32 pt."
+              },
+              "x-preset-values": {}
+            },
+            "style": {
+              "type": "string",
+              "enum": [
+                "flat",
+                "tree"
+              ],
+              "description": "List shape.",
+              "x-enumDescriptions": {
+                "flat": "One row per file.",
+                "tree": "Files grouped in folders."
+              },
+              "default": "flat",
+              "x-preset-values": {
+                "sourcetree": "flat",
+                "fork": "flat",
+                "gitkraken": "tree"
+              }
+            },
+            "sort": {
+              "type": "string",
+              "enum": [
+                "path",
+                "name",
+                "status"
+              ],
+              "description": "Sort order.",
+              "x-enumDescriptions": {
+                "path": "By full path.",
+                "name": "By file name.",
+                "status": "By status, then path."
+              },
+              "default": "path",
+              "x-preset-values": {
+                "sourcetree": "path",
+                "fork": "path",
+                "gitkraken": "path"
+              }
+            },
+            "showFolder": {
+              "type": "boolean",
+              "description": "Show the folder after the name (flat style).",
+              "default": true,
+              "x-preset-values": {
+                "sourcetree": true,
+                "fork": true,
+                "gitkraken": true
+              }
+            },
+            "stagingControl": {
+              "type": "string",
+              "enum": [
+                "buttons",
+                "checkboxes"
+              ],
+              "description": "How files are staged.",
+              "x-enumDescriptions": {
+                "buttons": "Stage/Unstage buttons.",
+                "checkboxes": "A checkbox per file (falls back to buttons until Spark has native checkboxes)."
+              },
+              "default": "buttons",
+              "x-preset-values": {
+                "sourcetree": "checkboxes",
+                "fork": "buttons",
+                "gitkraken": "buttons"
+              }
+            }
+          },
+          "additionalProperties": {},
+          "description": "File list options."
+        },
+        "changes": {
+          "type": "object",
+          "properties": {
+            "density": {
+              "type": "string",
+              "enum": [
+                "compact",
+                "regular",
+                "comfortable"
+              ],
+              "description": "Row height. Panels without their own density use the global one.",
+              "x-enumDescriptions": {
+                "compact": "File/commit rows 20 pt, sidebar rows 24 pt.",
+                "regular": "File/commit rows 24 pt, sidebar rows 28 pt.",
+                "comfortable": "File/commit rows 28 pt, sidebar rows 32 pt."
+              },
+              "x-preset-values": {}
+            },
+            "style": {
+              "type": "string",
+              "enum": [
+                "flat",
+                "tree"
+              ],
+              "description": "List shape.",
+              "x-enumDescriptions": {
+                "flat": "One row per file.",
+                "tree": "Files grouped in folders."
+              },
+              "default": "flat",
+              "x-preset-values": {
+                "sourcetree": "flat",
+                "fork": "flat",
+                "gitkraken": "flat"
+              }
+            },
+            "sort": {
+              "type": "string",
+              "enum": [
+                "path",
+                "name",
+                "status"
+              ],
+              "description": "Sort order.",
+              "x-enumDescriptions": {
+                "path": "By full path.",
+                "name": "By file name.",
+                "status": "By status, then path."
+              },
+              "default": "path",
+              "x-preset-values": {
+                "sourcetree": "path",
+                "fork": "path",
+                "gitkraken": "path"
+              }
+            },
+            "showFolder": {
+              "type": "boolean",
+              "description": "Show the folder after the name (flat style).",
+              "default": true,
+              "x-preset-values": {
+                "sourcetree": true,
+                "fork": true,
+                "gitkraken": true
+              }
+            },
+            "stagingControl": {
+              "type": "string",
+              "enum": [
+                "buttons",
+                "checkboxes"
+              ],
+              "description": "How files are staged.",
+              "x-enumDescriptions": {
+                "buttons": "Stage/Unstage buttons.",
+                "checkboxes": "A checkbox per file (falls back to buttons until Spark has native checkboxes)."
+              },
+              "default": "buttons",
+              "x-preset-values": {
+                "sourcetree": "buttons",
+                "fork": "buttons",
+                "gitkraken": "buttons"
+              }
+            }
+          },
+          "additionalProperties": {},
+          "description": "File list options."
+        },
+        "composer": {
+          "type": "object",
+          "properties": {
+            "bodyLines": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 40,
+              "description": "Visible message lines.",
+              "default": 4,
+              "x-preset-values": {
+                "sourcetree": 4,
+                "fork": 4,
+                "gitkraken": 4
+              }
+            },
+            "showAmend": {
+              "type": "boolean",
+              "description": "Show Amend.",
+              "default": true,
+              "x-preset-values": {
+                "sourcetree": true,
+                "fork": true,
+                "gitkraken": true
+              }
+            },
+            "showSignOff": {
+              "type": "boolean",
+              "description": "Show Sign Off.",
+              "default": false,
+              "x-preset-values": {
+                "sourcetree": false,
+                "fork": false,
+                "gitkraken": false
+              }
+            },
+            "showGenerate": {
+              "type": "boolean",
+              "description": "Show Generate Commit Message.",
+              "default": true,
+              "x-preset-values": {
+                "sourcetree": true,
+                "fork": true,
+                "gitkraken": true
+              }
+            }
+          },
+          "additionalProperties": {},
+          "description": "The commit composer."
+        },
+        "diff": {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "unified",
+                "sideBySide"
+              ],
+              "description": "Diff mode.",
+              "x-enumDescriptions": {
+                "unified": "One column.",
+                "sideBySide": "Old and new side by side."
+              },
+              "default": "unified",
+              "x-preset-values": {
+                "sourcetree": "unified",
+                "fork": "unified",
+                "gitkraken": "sideBySide"
+              }
+            },
+            "sideBySideSplit": {
+              "type": "string",
+              "enum": [
+                "vertical",
+                "horizontal"
+              ],
+              "description": "Side-by-side orientation.",
+              "x-enumDescriptions": {
+                "vertical": "Old | new columns.",
+                "horizontal": "Old above new."
+              },
+              "default": "vertical",
+              "x-preset-values": {
+                "sourcetree": "vertical",
+                "fork": "vertical",
+                "gitkraken": "vertical"
+              }
+            },
+            "wrap": {
+              "type": "boolean",
+              "description": "Wrap long lines.",
+              "default": false,
+              "x-preset-values": {
+                "sourcetree": false,
+                "fork": false,
+                "gitkraken": false
+              }
+            },
+            "contextLines": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 20,
+              "description": "Unchanged lines around each change (0–20).",
+              "default": 3,
+              "x-preset-values": {
+                "sourcetree": 3,
+                "fork": 3,
+                "gitkraken": 3
+              }
+            },
+            "showWhitespace": {
+              "type": "boolean",
+              "description": "Draw whitespace characters.",
+              "default": false,
+              "x-preset-values": {
+                "sourcetree": false,
+                "fork": false,
+                "gitkraken": false
+              }
+            },
+            "ignoreWhitespace": {
+              "type": "string",
+              "enum": [
+                "none",
+                "trailing",
+                "all"
+              ],
+              "description": "Whitespace changes to ignore.",
+              "x-enumDescriptions": {
+                "none": "Show every change.",
+                "trailing": "Ignore trailing whitespace.",
+                "all": "Ignore all whitespace changes."
+              },
+              "default": "none",
+              "x-preset-values": {
+                "sourcetree": "none",
+                "fork": "none",
+                "gitkraken": "none"
+              }
+            },
+            "lineNumbers": {
+              "type": "string",
+              "enum": [
+                "both",
+                "new",
+                "none"
+              ],
+              "description": "Line number gutters.",
+              "x-enumDescriptions": {
+                "both": "Old and new.",
+                "new": "New only.",
+                "none": "None."
+              },
+              "default": "both",
+              "x-preset-values": {
+                "sourcetree": "both",
+                "fork": "both",
+                "gitkraken": "both"
+              }
+            },
+            "hunkActions": {
+              "type": "string",
+              "enum": [
+                "header",
+                "none"
+              ],
+              "description": "Hunk actions.",
+              "x-enumDescriptions": {
+                "header": "Stage/Discard Hunk in hunk headers.",
+                "none": "No hunk buttons."
+              },
+              "default": "none",
+              "x-preset-values": {
+                "sourcetree": "header",
+                "fork": "header",
+                "gitkraken": "header"
+              }
+            },
+            "density": {
+              "type": "string",
+              "enum": [
+                "compact",
+                "regular",
+                "comfortable"
+              ],
+              "description": "Row height. Panels without their own density use the global one.",
+              "x-enumDescriptions": {
+                "compact": "File/commit rows 20 pt, sidebar rows 24 pt.",
+                "regular": "File/commit rows 24 pt, sidebar rows 28 pt.",
+                "comfortable": "File/commit rows 28 pt, sidebar rows 32 pt."
+              },
+              "x-preset-values": {}
+            }
+          },
+          "additionalProperties": {},
+          "description": "The diff."
+        },
+        "prDetails": {
+          "type": "object",
+          "properties": {
+            "showChecks": {
+              "type": "boolean",
+              "description": "Show CI checks.",
+              "default": true,
+              "x-preset-values": {
+                "sourcetree": true,
+                "fork": true,
+                "gitkraken": true
+              }
+            }
+          },
+          "additionalProperties": {},
+          "description": "Pull request details."
+        },
+        "empty": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": {},
+          "description": "A blank pane; no options."
+        }
+      },
+      "additionalProperties": {},
+      "description": "Options per panel."
+    },
+    "sidebar": {
+      "type": "object",
+      "properties": {
+        "sections": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "enum": [
+                  "workspace",
+                  "reviewQueue",
+                  "branches",
+                  "remotes",
+                  "tags",
+                  "stashes",
+                  "worktrees",
+                  "pullRequests"
+                ]
+              },
+              "visible": {
+                "type": "boolean",
+                "description": "Shown (default true)."
+              },
+              "expanded": {
+                "type": "boolean",
+                "description": "Starts expanded (default true)."
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": {}
+          },
+          "description": "Sections in display order; a section left out is hidden.",
+          "default": [
+            {
+              "id": "workspace"
+            },
+            {
+              "id": "reviewQueue"
+            },
+            {
+              "id": "branches"
+            },
+            {
+              "id": "remotes"
+            },
+            {
+              "id": "tags"
+            },
+            {
+              "id": "stashes"
+            },
+            {
+              "id": "worktrees"
+            },
+            {
+              "id": "pullRequests"
+            }
+          ]
+        },
+        "showCounts": {
+          "type": "boolean",
+          "description": "Show item counts.",
+          "default": true
+        }
+      },
+      "additionalProperties": {},
+      "description": "The sidebar."
+    },
+    "toolbar": {
+      "type": "object",
+      "properties": {
+        "displayMode": {
+          "type": "string",
+          "enum": [
+            "iconAndLabel",
+            "iconOnly",
+            "labelOnly"
+          ],
+          "description": "Toolbar display mode.",
+          "x-enumDescriptions": {
+            "iconAndLabel": "Icon and label.",
+            "iconOnly": "Icon only.",
+            "labelOnly": "Label only."
+          },
+          "default": "iconAndLabel"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "branchPicker",
+                  "viewSwitcher",
+                  "search",
+                  "networkProgress",
+                  "space",
+                  "flexibleSpace"
+                ]
+              },
+              {
+                "$ref": "#/$defs/commandId"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "command": {
+                    "$ref": "#/$defs/commandId"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "symbol": {
+                    "type": "string",
+                    "description": "SF Symbol name."
+                  }
+                },
+                "required": [
+                  "command"
+                ],
+                "additionalProperties": {}
+              }
+            ],
+            "description": "A command id, a command with its own label or SF Symbol, or a built-in widget."
+          },
+          "description": "Items in order.",
+          "default": [
+            "toggle-sidebar",
+            "branchPicker",
+            "viewSwitcher",
+            "networkProgress",
+            "refresh",
+            "search"
+          ]
+        }
+      },
+      "additionalProperties": {},
+      "description": "The window toolbar."
+    },
+    "contextMenus": {
+      "type": "object",
+      "properties": {
+        "commit": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/menuEntry"
+          },
+          "description": "The commit context menu."
+        },
+        "file": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/menuEntry"
+          },
+          "description": "The file context menu."
+        },
+        "branch": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/menuEntry"
+          },
+          "description": "The branch context menu."
+        },
+        "remoteBranch": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/menuEntry"
+          },
+          "description": "The remoteBranch context menu."
+        },
+        "tag": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/menuEntry"
+          },
+          "description": "The tag context menu."
+        },
+        "stash": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/menuEntry"
+          },
+          "description": "The stash context menu."
+        },
+        "worktree": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/menuEntry"
+          },
+          "description": "The worktree context menu."
+        },
+        "diffLine": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/menuEntry"
+          },
+          "description": "The diffLine context menu."
+        },
+        "pullRequest": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/menuEntry"
+          },
+          "description": "The pullRequest context menu."
+        },
+        "reviewEntry": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/menuEntry"
+          },
+          "description": "The reviewEntry context menu."
+        }
+      },
+      "additionalProperties": {},
+      "description": "Context menus by target; each list replaces the default whole."
+    },
+    "keybindings": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "pattern": "^((Cmd|Ctrl|Alt|Shift|Fn)\\+)*[^+]+$",
+          "description": "A key equivalent in Spark's format, such as \"Cmd+Shift+l\" or \"Cmd+Enter\"."
+        }
+      },
+      "description": "Key equivalents by command id; [] unbinds."
+    }
+  },
+  "required": [
+    "version"
+  ],
+  "additionalProperties": {},
+  "title": "Legend Git settings",
+  "description": "A Legend Git settings file: user, repository, preset or shared. Every key is optional except version.",
+  "$defs": {
+    "layoutNode": {
+      "description": "A split, a panel or a switch. A node replaces whole when layers merge.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "split"
+            },
+            "direction": {
+              "type": "string",
+              "enum": [
+                "row",
+                "column"
+              ],
+              "description": "Split axis.",
+              "x-enumDescriptions": {
+                "row": "Children side by side.",
+                "column": "Children stacked."
+              }
+            },
+            "children": {
+              "minItems": 2,
+              "maxItems": 4,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "node": {
+                    "$ref": "#/$defs/layoutNode"
+                  },
+                  "size": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 10000,
+                    "description": "Initial points along the split axis; omitted = share the rest."
+                  },
+                  "minSize": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 10000,
+                    "description": "Smallest size in points (default 120)."
+                  },
+                  "maxSize": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 10000,
+                    "description": "Largest size in points."
+                  },
+                  "collapsible": {
+                    "type": "boolean",
+                    "description": "The pane can collapse (default false)."
+                  },
+                  "holdingPriority": {
+                    "type": "string",
+                    "enum": [
+                      "low",
+                      "normal",
+                      "high"
+                    ],
+                    "description": "Which pane keeps its size when the window resizes (NSSplitView holding priority).",
+                    "x-enumDescriptions": {
+                      "low": "Gives up size first.",
+                      "normal": "Default.",
+                      "high": "Keeps its size on window resize."
+                    }
+                  }
+                },
+                "required": [
+                  "node"
+                ],
+                "additionalProperties": {}
+              }
+            }
+          },
+          "required": [
+            "type",
+            "direction",
+            "children"
+          ],
+          "additionalProperties": {},
+          "description": "Two to four panes divided along one axis."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "panel"
+            },
+            "panel": {
+              "type": "string",
+              "enum": [
+                "commitList",
+                "commitDetails",
+                "fileList",
+                "unstaged",
+                "staged",
+                "changes",
+                "composer",
+                "diff",
+                "prDetails",
+                "empty"
+              ],
+              "description": "The panel this pane shows.",
+              "x-enumDescriptions": {
+                "commitList": "Graph and columns (History, refs, review branches).",
+                "commitDetails": "Subject, body, author, parents, SHA.",
+                "fileList": "Files of the selected commit, stash, worktree or pull request.",
+                "unstaged": "Changes: unstaged files.",
+                "staged": "Changes: staged files.",
+                "changes": "Changes: one list with a checkbox per file.",
+                "composer": "Commit message, amend, sign-off, generate, commit.",
+                "diff": "The diff.",
+                "prDetails": "Pull request header, checks and review actions.",
+                "empty": "A deliberately blank pane."
+              }
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Instance id when one panel appears twice in a layout; default = the panel id."
+            },
+            "options": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {},
+              "description": "Per-instance overrides of panels.<panel>, validated against that panel's options."
+            }
+          },
+          "required": [
+            "type",
+            "panel"
+          ],
+          "additionalProperties": {},
+          "description": "One panel."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "switch"
+            },
+            "cases": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "when": {
+                    "type": "string",
+                    "enum": [
+                      "fileSelected",
+                      "commitSelected",
+                      "operationInProgress"
+                    ],
+                    "description": "Condition.",
+                    "x-enumDescriptions": {
+                      "fileSelected": "A file is selected.",
+                      "commitSelected": "A commit is selected.",
+                      "operationInProgress": "A merge, rebase, cherry-pick or revert is paused."
+                    }
+                  },
+                  "node": {
+                    "$ref": "#/$defs/layoutNode"
+                  }
+                },
+                "required": [
+                  "when",
+                  "node"
+                ],
+                "additionalProperties": {}
+              }
+            },
+            "otherwise": {
+              "$ref": "#/$defs/layoutNode"
+            }
+          },
+          "required": [
+            "type",
+            "cases",
+            "otherwise"
+          ],
+          "additionalProperties": {},
+          "description": "Shows the first case whose condition holds, else `otherwise` (GitKraken's diff replacing the graph while a file is open)."
+        }
+      ]
+    },
+    "commandId": {
+      "anyOf": [
+        {
+          "type": "string",
+          "enum": [
+            "open-repository",
+            "undo-operation",
+            "open-recent",
+            "abort-operation",
+            "continue-operation",
+            "toggle-sidebar",
+            "show-changes",
+            "show-history",
+            "show-review",
+            "push-review",
+            "fetch",
+            "pull",
+            "push",
+            "cancel-network",
+            "refresh",
+            "sign-in-github",
+            "sign-out-github",
+            "review-pull-request",
+            "checkout-pull-request",
+            "pull-request-worktree",
+            "copy-sha",
+            "open-github",
+            "create-pull-request",
+            "show-file-history",
+            "show-all-history",
+            "blame-line",
+            "compare-with-selected",
+            "search-message",
+            "search-author",
+            "search-path",
+            "search-content",
+            "apply-lines",
+            "discard-file",
+            "discard-lines",
+            "restore-discard",
+            "generate-message",
+            "commit",
+            "checkout-ref",
+            "switch-branch",
+            "new-branch",
+            "rename-branch",
+            "delete-branch",
+            "merge-ref",
+            "rebase-ref",
+            "interactive-rebase-ref",
+            "interactive-rebase-commit",
+            "cherry-pick-commit",
+            "revert-commit",
+            "mark-resolved",
+            "use-ours",
+            "use-theirs",
+            "use-both",
+            "copy-ref-name",
+            "stash-changes",
+            "stash-all-changes",
+            "apply-stash",
+            "pop-stash",
+            "drop-stash",
+            "open-worktree",
+            "open-review-worktree",
+            "new-worktree",
+            "remove-worktree",
+            "reveal-worktree"
+          ]
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "description": "A command id from the command registry (see docs/settings/commands.md)."
+    },
+    "menuEntry": {
+      "description": "A command id, \"separator\", or a submenu.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/commandId"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "submenu": {
+              "type": "string"
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/menuEntry"
+              }
+            }
+          },
+          "required": [
+            "submenu",
+            "items"
+          ],
+          "additionalProperties": {}
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,183 @@
+{
+  "$schema": "https://legend.so/git/git-settings.v1.schema.json",
+  "version": 1,
+  "name": "Fork",
+  "description": "Fork's organization: commit list over details, files and diff; unstaged over staged with the composer below; compact rows, thin lanes, icon-only toolbar.",
+  "extends": "sourcetree",
+  "density": "compact",
+  "layout": {
+    "active": "fork",
+    "layouts": {
+      "fork": {
+        "sidebar": {
+          "width": 200
+        },
+        "views": {
+          "default": {
+            "type": "split",
+            "direction": "column",
+            "children": [
+              {
+                "node": {
+                  "type": "panel",
+                  "panel": "commitList"
+                },
+                "size": 300,
+                "minSize": 140
+              },
+              {
+                "node": {
+                  "type": "split",
+                  "direction": "row",
+                  "children": [
+                    {
+                      "node": {
+                        "type": "split",
+                        "direction": "column",
+                        "children": [
+                          {
+                            "node": {
+                              "type": "panel",
+                              "panel": "commitDetails"
+                            },
+                            "size": 120
+                          },
+                          {
+                            "node": {
+                              "type": "panel",
+                              "panel": "fileList"
+                            }
+                          }
+                        ]
+                      },
+                      "size": 300,
+                      "minSize": 220
+                    },
+                    {
+                      "node": {
+                        "type": "panel",
+                        "panel": "diff"
+                      },
+                      "minSize": 400
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "changes": {
+            "type": "split",
+            "direction": "row",
+            "children": [
+              {
+                "node": {
+                  "type": "split",
+                  "direction": "column",
+                  "children": [
+                    {
+                      "node": {
+                        "type": "panel",
+                        "panel": "unstaged"
+                      }
+                    },
+                    {
+                      "node": {
+                        "type": "panel",
+                        "panel": "staged"
+                      }
+                    },
+                    {
+                      "node": {
+                        "type": "panel",
+                        "panel": "composer"
+                      },
+                      "size": 132,
+                      "minSize": 104
+                    }
+                  ]
+                },
+                "size": 320,
+                "minSize": 260
+              },
+              {
+                "node": {
+                  "type": "panel",
+                  "panel": "diff"
+                },
+                "minSize": 400
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "panels": {
+    "commitList": {
+      "columns": [
+        {
+          "id": "graph",
+          "width": 90
+        },
+        {
+          "id": "subject"
+        },
+        {
+          "id": "author",
+          "width": 140
+        },
+        {
+          "id": "date",
+          "width": 120
+        },
+        {
+          "id": "sha",
+          "width": 64
+        }
+      ],
+      "graph": {
+        "style": "compact",
+        "laneWidth": 10,
+        "lineWidth": 1.5,
+        "nodeStyle": "ring",
+        "colorBy": "branch"
+      },
+      "refs": "inline",
+      "dateFormat": "relative"
+    },
+    "unstaged": {
+      "style": "flat",
+      "stagingControl": "buttons"
+    },
+    "staged": {
+      "style": "flat",
+      "stagingControl": "buttons"
+    },
+    "fileList": {
+      "style": "flat"
+    },
+    "diff": {
+      "mode": "unified",
+      "contextLines": 3
+    }
+  },
+  "toolbar": {
+    "displayMode": "iconOnly",
+    "items": [
+      "fetch",
+      "pull",
+      "push",
+      "space",
+      "stash-changes",
+      "pop-stash",
+      "space",
+      "new-branch",
+      "merge-ref",
+      "rebase-ref",
+      "flexibleSpace",
+      "networkProgress",
+      "branchPicker",
+      "search"
+    ]
+  }
+}

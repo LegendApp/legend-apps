@@ -12,6 +12,8 @@
     "@legend-apps/git-core": "workspace:*",
     "@legend-apps/source-editor": "workspace:*",
     "@legend-apps/file-system-watcher": "workspace:*",
-    "@legend-apps/syntax-parser": "workspace:*"
+    "@legend-apps/syntax-parser": "workspace:*",
+    "zod": "^4.6.7",
+    "@legendapp/state": "catalog:"
   }
 }

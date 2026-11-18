@@ -1,0 +1,213 @@
+{
+  "$schema": "https://legend.so/git/git-settings.v1.schema.json",
+  "version": 1,
+  "name": "GitKraken",
+  "description": "GitKraken's organization: the graph in the middle with a refs column, details or staging on the right, and the diff replacing the graph while a file is selected; comfortable rows.",
+  "extends": "sourcetree",
+  "density": "comfortable",
+  "layout": {
+    "active": "gitkraken",
+    "layouts": {
+      "gitkraken": {
+        "sidebar": {
+          "width": 240
+        },
+        "views": {
+          "default": {
+            "type": "split",
+            "direction": "row",
+            "children": [
+              {
+                "node": {
+                  "type": "switch",
+                  "cases": [
+                    {
+                      "when": "fileSelected",
+                      "node": {
+                        "type": "panel",
+                        "panel": "diff"
+                      }
+                    }
+                  ],
+                  "otherwise": {
+                    "type": "panel",
+                    "panel": "commitList"
+                  }
+                },
+                "minSize": 480
+              },
+              {
+                "node": {
+                  "type": "split",
+                  "direction": "column",
+                  "children": [
+                    {
+                      "node": {
+                        "type": "panel",
+                        "panel": "commitDetails"
+                      },
+                      "size": 160
+                    },
+                    {
+                      "node": {
+                        "type": "panel",
+                        "panel": "fileList",
+                        "options": {
+                          "style": "tree"
+                        }
+                      }
+                    }
+                  ]
+                },
+                "size": 340,
+                "minSize": 280,
+                "collapsible": true,
+                "holdingPriority": "high"
+              }
+            ]
+          },
+          "changes": {
+            "type": "split",
+            "direction": "row",
+            "children": [
+              {
+                "node": {
+                  "type": "switch",
+                  "cases": [
+                    {
+                      "when": "fileSelected",
+                      "node": {
+                        "type": "panel",
+                        "panel": "diff"
+                      }
+                    }
+                  ],
+                  "otherwise": {
+                    "type": "panel",
+                    "panel": "commitList"
+                  }
+                },
+                "minSize": 480
+              },
+              {
+                "node": {
+                  "type": "split",
+                  "direction": "column",
+                  "children": [
+                    {
+                      "node": {
+                        "type": "panel",
+                        "panel": "unstaged"
+                      }
+                    },
+                    {
+                      "node": {
+                        "type": "panel",
+                        "panel": "staged"
+                      }
+                    },
+                    {
+                      "node": {
+                        "type": "panel",
+                        "panel": "composer"
+                      },
+                      "size": 150
+                    }
+                  ]
+                },
+                "size": 340,
+                "minSize": 280,
+                "holdingPriority": "high"
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "panels": {
+    "commitList": {
+      "columns": [
+        {
+          "id": "refs",
+          "width": 180
+        },
+        {
+          "id": "graph",
+          "width": 220
+        },
+        {
+          "id": "subject"
+        }
+      ],
+      "graph": {
+        "style": "wide",
+        "laneWidth": 20,
+        "lineWidth": 3,
+        "nodeStyle": "dot",
+        "colorBy": "branch",
+        "maxLanes": 16
+      },
+      "refs": "column",
+      "refStyle": "tinted",
+      "dateFormat": "relative"
+    },
+    "unstaged": {
+      "style": "tree",
+      "stagingControl": "buttons"
+    },
+    "staged": {
+      "style": "tree",
+      "stagingControl": "buttons"
+    },
+    "diff": {
+      "mode": "sideBySide",
+      "sideBySideSplit": "vertical"
+    }
+  },
+  "sidebar": {
+    "sections": [
+      {
+        "id": "branches"
+      },
+      {
+        "id": "remotes"
+      },
+      {
+        "id": "pullRequests"
+      },
+      {
+        "id": "tags",
+        "expanded": false
+      },
+      {
+        "id": "stashes"
+      },
+      {
+        "id": "worktrees"
+      },
+      {
+        "id": "workspace"
+      },
+      {
+        "id": "reviewQueue"
+      }
+    ]
+  },
+  "toolbar": {
+    "displayMode": "iconAndLabel",
+    "items": [
+      "undo-operation",
+      "space",
+      "pull",
+      "push",
+      "new-branch",
+      "stash-changes",
+      "pop-stash",
+      "flexibleSpace",
+      "networkProgress",
+      "branchPicker",
+      "search"
+    ]
+  }
+}

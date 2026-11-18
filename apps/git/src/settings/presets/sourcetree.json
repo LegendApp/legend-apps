@@ -1,0 +1,215 @@
+{
+  "$schema": "https://legend.so/git/git-settings.v1.schema.json",
+  "version": 1,
+  "name": "SourceTree",
+  "description": "SourceTree's organization: a wide commit table over files and diff; staged over unstaged beside the diff with the composer below; big labeled toolbar buttons.",
+  "density": "regular",
+  "layout": {
+    "active": "sourcetree",
+    "layouts": {
+      "sourcetree": {
+        "sidebar": {
+          "width": 220
+        },
+        "views": {
+          "default": {
+            "type": "split",
+            "direction": "column",
+            "children": [
+              {
+                "node": {
+                  "type": "panel",
+                  "panel": "commitList"
+                },
+                "size": 340,
+                "minSize": 160
+              },
+              {
+                "node": {
+                  "type": "split",
+                  "direction": "row",
+                  "children": [
+                    {
+                      "node": {
+                        "type": "panel",
+                        "panel": "fileList"
+                      },
+                      "size": 300,
+                      "minSize": 200
+                    },
+                    {
+                      "node": {
+                        "type": "split",
+                        "direction": "column",
+                        "children": [
+                          {
+                            "node": {
+                              "type": "panel",
+                              "panel": "commitDetails"
+                            },
+                            "size": 110,
+                            "collapsible": true
+                          },
+                          {
+                            "node": {
+                              "type": "panel",
+                              "panel": "diff"
+                            },
+                            "minSize": 240
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "changes": {
+            "type": "split",
+            "direction": "column",
+            "children": [
+              {
+                "node": {
+                  "type": "split",
+                  "direction": "row",
+                  "children": [
+                    {
+                      "node": {
+                        "type": "split",
+                        "direction": "column",
+                        "children": [
+                          {
+                            "node": {
+                              "type": "panel",
+                              "panel": "staged"
+                            }
+                          },
+                          {
+                            "node": {
+                              "type": "panel",
+                              "panel": "unstaged"
+                            }
+                          }
+                        ]
+                      },
+                      "size": 320,
+                      "minSize": 240
+                    },
+                    {
+                      "node": {
+                        "type": "panel",
+                        "panel": "diff"
+                      },
+                      "minSize": 400
+                    }
+                  ]
+                }
+              },
+              {
+                "node": {
+                  "type": "panel",
+                  "panel": "composer"
+                },
+                "size": 120,
+                "minSize": 96,
+                "collapsible": true
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "panels": {
+    "commitList": {
+      "columns": [
+        {
+          "id": "graph",
+          "width": 120
+        },
+        {
+          "id": "subject"
+        },
+        {
+          "id": "date",
+          "width": 140
+        },
+        {
+          "id": "author",
+          "width": 160
+        },
+        {
+          "id": "sha",
+          "width": 72
+        }
+      ],
+      "graph": {
+        "style": "wide",
+        "laneWidth": 14,
+        "nodeStyle": "dot",
+        "colorBy": "lane"
+      },
+      "refs": "inline",
+      "dateFormat": "medium"
+    },
+    "staged": {
+      "style": "flat",
+      "stagingControl": "checkboxes"
+    },
+    "unstaged": {
+      "style": "flat",
+      "stagingControl": "checkboxes"
+    },
+    "diff": {
+      "mode": "unified",
+      "hunkActions": "header"
+    }
+  },
+  "sidebar": {
+    "sections": [
+      {
+        "id": "workspace"
+      },
+      {
+        "id": "branches"
+      },
+      {
+        "id": "tags",
+        "expanded": false
+      },
+      {
+        "id": "remotes",
+        "expanded": false
+      },
+      {
+        "id": "stashes"
+      },
+      {
+        "id": "worktrees"
+      },
+      {
+        "id": "pullRequests"
+      },
+      {
+        "id": "reviewQueue"
+      }
+    ]
+  },
+  "toolbar": {
+    "displayMode": "iconAndLabel",
+    "items": [
+      "commit",
+      "pull",
+      "push",
+      "fetch",
+      "space",
+      "new-branch",
+      "merge-ref",
+      "stash-changes",
+      "flexibleSpace",
+      "networkProgress",
+      "search"
+    ]
+  }
+}

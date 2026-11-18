@@ -156,8 +156,10 @@
         "@legend-apps/syntax-parser": "workspace:*",
         "@legendapp/list": "catalog:",
         "@legendapp/spark": "catalog:",
+        "@legendapp/state": "catalog:",
         "react": "catalog:",
         "react-native": "catalog:",
+        "zod": "^4.6.7",
       },
     },
     "apps/hello-world": {

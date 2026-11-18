@@ -33,6 +33,7 @@
     "git": "bun scripts/run-app.ts git",
     "git:run": "bun scripts/run-app.ts git run macos",
     "git:verify": "bun scripts/run-app.ts git verify macos",
+    "git:settings": "bun apps/git/scripts/settings.ts",
     "diff:package:arm": "bun scripts/package-macos-app.ts diff arm",
     "diff:package:x86": "bun scripts/package-macos-app.ts diff x86",
     "diff:package:all": "bun scripts/package-macos-app.ts diff all",

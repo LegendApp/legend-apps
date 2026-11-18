@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "extends": "fork",
+  "density": "compact",
+  "panels": { "diff": { "mode": "sideBySide" } },
+  "futureKey": "kept"
+}
