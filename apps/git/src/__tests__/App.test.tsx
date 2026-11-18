@@ -10,6 +10,7 @@ import { addMacOSWindowListener, setToolbarItemText } from "@legendapp/spark/win
 import { GitPullDivergedError, GitPushedCommitsError, GitPushRejectedError, GitServiceError, type GitNetworkOptions } from "@legend-apps/git-core";
 import { Switch, Text, TextInput } from "react-native";
 import { useMenu } from "@legendapp/spark/menus";
+import { useRoutedHotkeys } from "@legendapp/spark/shortcuts/commands";
 import { runCommand } from "@legendapp/spark/processes";
 import { App } from "../App";
 import { StateBar } from "../StateBar";
@@ -43,6 +44,7 @@ jest.mock("@legendapp/spark/ui", () => ({ Button: "Button", SegmentedControl: "S
 jest.mock("@legendapp/spark/ui/symbol", () => ({ SFSymbol: "SFSymbol" }));
 jest.mock("@legendapp/spark/dialogs", () => ({ openFileDialog: jest.fn(async () => ({ canceled: true })), showMessage: jest.fn(async () => ({ buttonId: "confirm" })), showPrompt: jest.fn(async () => ({ canceled: true })) }));
 jest.mock("@legendapp/spark/menus", () => ({ useMenu: jest.fn() }));
+jest.mock("@legendapp/spark/shortcuts/commands", () => ({ createHotkeyRouter: jest.fn(() => ({})), useRoutedHotkeys: jest.fn() }));
 jest.mock("@legendapp/spark/secure-storage", () => ({ getItemAsync: jest.fn(async () => null), setItemAsync: jest.fn(async () => {}), deleteItemAsync: jest.fn(async () => {}) }));
 jest.mock("@legendapp/spark/app/documents", () => ({
   getRecentDocuments: jest.fn(async () => []), noteRecentDocument: jest.fn(async () => {}), clearRecentDocuments: jest.fn(async () => {}),
@@ -77,6 +79,10 @@ jest.mock("@legendapp/spark/files", () => {
   };
 });
 jest.mock("@legendapp/spark/windows", () => ({ setWindowOptions: jest.fn(async () => {}), addWindowListener: jest.fn(async () => ({ remove: jest.fn(async () => {}) })) }));
+// These tests drive the window's widgets and buttons: the built-in toolbar (sidebar toggle, branch menu, sections,
+// Refresh, search) stands in for SourceTree's. actions.test.ts covers each preset's toolbar.
+jest.mock("../settings/presets/sourcetree.json", () => ({ ...jest.requireActual("../settings/presets/sourcetree.json"),
+  toolbar: { displayMode: "iconOnly", items: ["toggle-sidebar", "branchPicker", "flexibleSpace", "viewSwitcher", "networkProgress", "refresh", "search"] } }));
 jest.mock("../gitWindows", () => ({ ...jest.requireActual("../gitWindows"), openWorktreeWindow: jest.fn(async () => ({})) }));
 jest.mock("@legendapp/spark/windows/macos", () => ({
   addMacOSWindowListener: jest.fn(async () => ({ remove: jest.fn(async () => {}) })),
@@ -127,6 +133,38 @@ it("gives the window the settings' appearance and switches the diff mode from Vi
   // Vertical is the preset's split already, so the sparse write keeps only the mode.
   expect(JSON.parse(await files.readText("/data/settings.json"))).toMatchObject({ appearance: "dark", panels: { diff: { mode: "sideBySide" } } });
   expect(diffMenu().items.filter((entry: { checked?: boolean }) => entry.checked).map((entry: { id: string }) => entry.id)).toEqual(["diff:mode:sideBySide", "diff:split:vertical"]);
+  } finally {
+    await act(async () => { renderer?.unmount(); });
+    await files.writeText("/data/settings.json", JSON.stringify({ version: 1 }));
+  }
+});
+
+it("takes key bindings from settings into the menu bar and the hotkey router, and sends no toolbar update when the toolbar is unchanged", async () => {
+  jest.clearAllMocks();
+  const files = jest.requireMock("@legendapp/spark/files") as { writeText(path: string, text: string): Promise<void> };
+  await files.writeText("/data/settings.json", JSON.stringify({ version: 1, keybindings: { "open-repository": ["Cmd+Shift+o", "Cmd+Alt+o"], "refresh": [], "stage-all": ["Cmd+Shift+a"], "nope": ["Cmd+k"] } }));
+  let renderer!: ReactTestRenderer;
+  try {
+  await act(async () => { renderer = create(<App />); });
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+  const menuItem = (id: string) => lastMenu().items.flatMap(entry => entry.items ?? []).find(entry => entry.id === id);
+  expect(menuItem("open-repository")).toMatchObject({ shortcut: "Cmd+Shift+o" });
+  // Open Worktree's default ⇧⌘O went to Open Repository; [] unbinds Refresh; the rest keep their defaults.
+  expect(menuItem("open-worktree").shortcut).toBeUndefined();
+  expect(menuItem("refresh").shortcut).toBeUndefined();
+  expect(menuItem("stage-all")).toMatchObject({ label: "Stage All", shortcut: "Cmd+Shift+a" });
+  expect(menuItem("fetch")).toMatchObject({ shortcut: "Cmd+Alt+f" });
+  // The second binding has no menu item to carry it: the window's hotkey router runs it.
+  const options = jest.mocked(useRoutedHotkeys).mock.calls.at(-1)![0];
+  expect(options).toMatchObject({ scope: { kind: "window", windowId: "main" }, definitions: [{ id: "open-repository", title: "Open Repository…", defaultBindings: ["Cmd+Alt+o"] }] });
+  await act(async () => { (options.handlers as Record<string, () => void>)["open-repository"]!(); });
+  expect(openFileDialog).toHaveBeenCalledTimes(1);
+  // A settings change that leaves the toolbar alone sends no toolbar.
+  const toolbarUpdates = () => jest.mocked(setWindowOptions).mock.calls.filter(call => call[1].macos?.toolbar).length;
+  const sent = toolbarUpdates();
+  await act(async () => { lastMenu().onAction({ itemId: "diff:split:vertical" }); await new Promise(resolve => setTimeout(resolve, 0)); });
+  expect(lastMenu().items.find(entry => entry.id === "view").items.find((entry: { id: string }) => entry.id === "diff").items.find((entry: { id: string }) => entry.id === "diff:mode:sideBySide").checked).toBe(true);
+  expect(toolbarUpdates()).toBe(sent);
   } finally {
     await act(async () => { renderer?.unmount(); });
     await files.writeText("/data/settings.json", JSON.stringify({ version: 1 }));
@@ -1180,7 +1218,7 @@ describe("worktrees", () => {
     const ids = lastMenu().items.flatMap(entry => [entry.id, ...(entry.items ?? []).map((child: any) => child.id)]).filter(Boolean);
     expect(new Set(ids).size).toBe(ids.length);
     expect(menuItem("open-worktree")).toMatchObject({ label: "Open Worktree in New Window", shortcut: "Cmd+Shift+o", disabled: true });
-    expect(lastMenu().items.find(entry => entry.id === "file").items.map((entry: any) => entry.id)).toEqual(["open-repository", "open-worktree"]);
+    expect(lastMenu().items.find(entry => entry.id === "file").items.map((entry: any) => entry.id ?? "-")).toEqual(["open-repository", "open-worktree", "-", "reveal-repository"]);
 
     worktrees = [main, detached, linked];
     await act(async () => { lastMenu().onAction({ itemId: "refresh" }); });

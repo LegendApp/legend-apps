@@ -91,6 +91,11 @@ export type CommandContext = {
   pullRequestUrl: string | null;
   /** Signed in, on a GitHub repository, with a branch checked out: Create Pull Request… can start. */
   canCreatePullRequest: boolean;
+  /** Changes' unstaged files (conflicted ones first) and staged files, by path. */
+  unstagedPaths: readonly string[];
+  stagedPaths: readonly string[];
+  /** The file selected in Changes and its list. */
+  selectedChange: { section: "unstaged" | "staged"; path: string } | null;
   run: {
     openRepository(): void;
     openRecent(path: string): void;
@@ -162,6 +167,10 @@ export type CommandContext = {
     reviewPullRequest(): void;
     /** Fetches the pull request into a local branch, then checks it out or adds a worktree for it next to the repository. */
     checkOutPullRequest(number: number, worktree: boolean): void;
+    /** Stages an unstaged file (a conflicted one is marked resolved), or unstages a staged one. */
+    changeFile(path: string, stage: boolean): void;
+    /** Stages every unstaged file but the conflicted ones, or unstages every staged file. */
+    changeAll(stage: boolean): void;
   };
 };
 
@@ -223,6 +232,14 @@ const conflictPick = (side: GitConflictSide) => ({
   enabled: (context: CommandContext, target?: string) => { const entry = conflictTarget(context, target); return context.hasRepository && !context.busy && !!entry && conflictPickable(entry, side); },
   run: (context: CommandContext, target?: string) => context.run.pickConflict(conflictTarget(context, target)!.path, side),
 });
+/** The file Stage or Unstage acts on: the context menu's, else the one selected in that Changes list. */
+const changeTarget = (context: CommandContext, stage: boolean, target?: string) => {
+  const path = target ?? (context.selectedChange?.section === (stage ? "unstaged" : "staged") ? context.selectedChange.path : null);
+  return path !== null && (stage ? context.unstagedPaths : context.stagedPaths).includes(path) ? path : null;
+};
+const canChange = (context: CommandContext) => context.hasRepository && !context.busy;
+/** The stash a stash command acts on: the context menu's, else the selected one, else (Pop from a toolbar or menu) the newest. */
+const stashOrNewest = (context: CommandContext, target?: string) => stash(context, target) ?? (target ? null : context.stashes?.[0] ?? null);
 const canStash = (context: CommandContext) => canWriteBranch(context) && context.hasChanges && !context.busy;
 
 export const commands = [
@@ -322,6 +339,13 @@ export const commands = [
   { id: "discard-file", label: "Discard Changes to File…", shortcut: "Cmd+Shift+Backspace", enabled: context => context.canDiscardFile, run: context => context.run.discardFile() },
   { id: "discard-lines", label: "Discard Selected Lines…", enabled: context => context.canDiscardLines, run: context => context.run.discardLines() },
   { id: "restore-discard", label: "Restore Last Discard…", enabled: context => context.canRestoreDiscard, run: context => context.run.restoreDiscard() },
+  { id: "stage-file", label: "Stage File", enabled: (context, target) => canChange(context) && !!changeTarget(context, true, target), run: (context, target) => context.run.changeFile(changeTarget(context, true, target)!, true) },
+  { id: "unstage-file", label: "Unstage File", enabled: (context, target) => canChange(context) && !!changeTarget(context, false, target), run: (context, target) => context.run.changeFile(changeTarget(context, false, target)!, false) },
+  {
+    id: "stage-all", label: "Stage All",
+    enabled: context => canChange(context) && context.unstagedPaths.some(path => !context.conflicts.some(entry => entry.path === path)), run: context => context.run.changeAll(true),
+  },
+  { id: "unstage-all", label: "Unstage All", enabled: context => canChange(context) && context.stagedPaths.length > 0, run: context => context.run.changeAll(false) },
   {
     id: "generate-message", label: context => context.generating ? "Cancel Generating Commit Message" : "Generate Commit Message", shortcut: "Cmd+Alt+g",
     enabled: context => context.generating || context.canGenerate, run: context => context.run.toggleGenerate(),
@@ -394,7 +418,7 @@ export const commands = [
   { id: "stash-changes", label: "Stash Changes…", shortcut: "Cmd+Alt+s", enabled: canStash, run: context => context.run.stashChanges(false) },
   { id: "stash-all-changes", label: "Stash Changes Including Untracked…", shortcut: "Cmd+Alt+Shift+s", enabled: canStash, run: context => context.run.stashChanges(true) },
   { id: "apply-stash", label: "Apply Stash", enabled: (context, target) => canWriteBranch(context) && !!stash(context, target), run: (context, target) => context.run.applyStash(stash(context, target)!.oid) },
-  { id: "pop-stash", label: "Pop Stash", enabled: (context, target) => canWriteBranch(context) && !!stash(context, target), run: (context, target) => context.run.popStash(stash(context, target)!.oid) },
+  { id: "pop-stash", label: "Pop Stash", enabled: (context, target) => canWriteBranch(context) && !!stashOrNewest(context, target), run: (context, target) => context.run.popStash(stashOrNewest(context, target)!.oid) },
   { id: "drop-stash", label: "Drop Stash…", enabled: (context, target) => context.hasRepository && !context.branchBusy && !!stash(context, target), run: (context, target) => context.run.dropStash(stash(context, target)!.oid) },
   { id: "open-worktree", label: "Open Worktree in New Window", shortcut: "Cmd+Shift+o", enabled: (context, target) => !!openable(context, target), run: (context, target) => context.run.openWorktree(openable(context, target)!.path) },
   {
@@ -411,6 +435,7 @@ export const commands = [
     enabled: (context, target) => { const entry = worktree(context, target); return context.hasRepository && !context.branchBusy && !!entry && !entry.main && entry.path !== context.root; },
     run: (context, target) => context.run.removeWorktree(worktree(context, target)!.path),
   },
+  { id: "reveal-repository", label: "Show in Finder", enabled: context => !!context.root, run: context => context.run.revealInFinder(context.root!) },
   {
     id: "reveal-worktree", label: "Reveal in Finder",
     enabled: (context, target) => { const entry = worktree(context, target); return !!entry && entry.prunable === null; },
@@ -436,12 +461,19 @@ export function runCommand(id: string, context: CommandContext, target?: string)
   return true;
 }
 
-/** A menu bar or context menu entry for a command; the shortcut is left out of context menus. */
-export function commandMenuItem(id: CommandId, context: CommandContext, { target, shortcut = true }: { target?: string; shortcut?: boolean } = {}) {
+/** The key equivalent a command has before settings rebind it. */
+export const defaultShortcut = (id: CommandId) => byId.get(id)?.shortcut;
+
+/**
+ * A menu bar or context menu entry for a command; the shortcut is left out of context menus. `keys` is the window's
+ * resolved key bindings (settings `keybindings` over the defaults): its first binding is the key equivalent.
+ */
+export function commandMenuItem(id: CommandId, context: CommandContext, { target, shortcut = true, keys }: { target?: string; shortcut?: boolean; keys?: ReadonlyMap<string, readonly string[]> } = {}) {
   const command = byId.get(id)!;
+  const key = !shortcut ? undefined : keys ? keys.get(id)?.[0] : command.shortcut;
   return {
     type: "action" as const, id, label: commandLabel(id, context, target),
-    ...(shortcut && command.shortcut ? { shortcut: command.shortcut } : {}),
+    ...(key ? { shortcut: key } : {}),
     disabled: !command.enabled(context, target),
   };
 }

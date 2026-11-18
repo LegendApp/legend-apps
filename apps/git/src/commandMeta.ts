@@ -15,6 +15,8 @@ export type CommandMeta = {
   title: string;
   /** SF Symbol for toolbar use. */
   symbol?: string;
+  /** A toolbar button's label when it is shorter than the title ("Merge" for Merge into Current Branch…). */
+  toolbarLabel?: string;
   category: CommandCategory;
   /** Context menus it may appear in; omitted = menu bar and toolbar only. */
   targets?: readonly MenuTarget[];
@@ -24,8 +26,8 @@ export type CommandMeta = {
 };
 
 export const commandMeta = {
-  "open-repository": { title: "Open Repository…", symbol: "folder", category: "file", description: "Choose a repository folder to open in a new window." },
-  "undo-operation": { title: "Undo Last Operation", symbol: "arrow.uturn.backward", category: "edit", description: "Takes back the newest commit, merge, rebase, reset, checkout or branch delete after showing what moves where." },
+  "open-repository": { title: "Open Repository…", symbol: "folder", toolbarLabel: "Open", category: "file", description: "Choose a repository folder to open in a new window." },
+  "undo-operation": { title: "Undo Last Operation", symbol: "arrow.uturn.backward", toolbarLabel: "Undo", category: "edit", description: "Takes back the newest commit, merge, rebase, reset, checkout or branch delete after showing what moves where." },
   "open-recent": { title: "Open Recent", category: "file", description: "Opens a recently opened repository (File ▸ Open Recent)." },
   "abort-operation": { title: "Abort Operation…", symbol: "xmark.octagon", category: "operation", description: "Aborts the merge, rebase, cherry-pick or revert Git has paused, after asking." },
   "continue-operation": { title: "Continue Operation", symbol: "play", category: "operation", description: "Continues the paused merge, rebase, cherry-pick or revert once conflicts are resolved." },
@@ -59,15 +61,19 @@ export const commandMeta = {
   "discard-file": { title: "Discard Changes to File…", symbol: "trash", category: "changes", targets: ["file"], description: "Discards the selected file's working tree changes after asking." },
   "discard-lines": { title: "Discard Selected Lines…", category: "changes", targets: ["diffLine"], description: "Discards the selected unstaged lines after asking." },
   "restore-discard": { title: "Restore Last Discard…", category: "changes", description: "Puts back the most recently discarded changes." },
+  "stage-file": { title: "Stage File", symbol: "plus.circle", category: "changes", targets: ["file"], description: "Stages the file (a conflicted file is marked resolved)." },
+  "unstage-file": { title: "Unstage File", symbol: "minus.circle", category: "changes", targets: ["file"], description: "Unstages the file." },
+  "stage-all": { title: "Stage All", symbol: "plus.circle.fill", category: "changes", description: "Stages every unstaged file except conflicted ones." },
+  "unstage-all": { title: "Unstage All", symbol: "minus.circle.fill", category: "changes", description: "Unstages every staged file." },
   "generate-message": { title: "Generate Commit Message", symbol: "sparkles", category: "changes", description: "Writes a commit message for the staged changes with the user's own AI CLI, or cancels a running one." },
   "commit": { title: "Commit", symbol: "checkmark.circle", category: "changes", description: "Commits the staged changes with the composer's message." },
   "checkout-ref": { title: "Check Out", symbol: "arrow.right.circle", category: "branch", targets: ["branch", "remoteBranch"], description: "Checks out the branch (a remote branch gets a tracking local branch)." },
   "switch-branch": { title: "Switch Branch…", symbol: "arrow.triangle.swap", category: "branch", description: "Asks for a branch name and checks it out." },
-  "new-branch": { title: "New Branch…", symbol: "plus.square.on.square", category: "branch", targets: ["commit", "branch", "remoteBranch", "tag"], description: "Creates a branch at HEAD, or at the commit or ref the menu was opened on." },
+  "new-branch": { title: "New Branch…", symbol: "plus.square.on.square", toolbarLabel: "Branch", category: "branch", targets: ["commit", "branch", "remoteBranch", "tag"], description: "Creates a branch at HEAD, or at the commit or ref the menu was opened on." },
   "rename-branch": { title: "Rename Branch…", category: "branch", targets: ["branch"], description: "Renames a local branch." },
   "delete-branch": { title: "Delete Branch…", symbol: "trash", category: "branch", targets: ["branch"], description: "Deletes a local branch other than the current one, after asking." },
-  "merge-ref": { title: "Merge into Current Branch…", symbol: "arrow.triangle.merge", category: "branch", targets: ["branch", "remoteBranch"], description: "Merges a branch into the current branch after a confirm sheet." },
-  "rebase-ref": { title: "Rebase Current Branch onto…", symbol: "arrow.up.and.down.and.sparkles", category: "branch", targets: ["branch", "remoteBranch"], description: "Rebases the current branch onto a branch after a confirm sheet." },
+  "merge-ref": { title: "Merge into Current Branch…", symbol: "arrow.triangle.merge", toolbarLabel: "Merge", category: "branch", targets: ["branch", "remoteBranch"], description: "Merges a branch into the current branch after a confirm sheet." },
+  "rebase-ref": { title: "Rebase Current Branch onto…", symbol: "arrow.up.and.down.and.sparkles", toolbarLabel: "Rebase", category: "branch", targets: ["branch", "remoteBranch"], description: "Rebases the current branch onto a branch after a confirm sheet." },
   "interactive-rebase-ref": { title: "Rebase Current Branch Interactively onto…", category: "branch", targets: ["branch", "remoteBranch"], description: "Opens the interactive rebase sheet for the current branch onto a branch." },
   "interactive-rebase-commit": { title: "Rebase Interactively onto This Commit…", category: "branch", targets: ["commit"], description: "Opens the interactive rebase sheet for the current branch onto the commit." },
   "cherry-pick-commit": { title: "Cherry-Pick Commit", category: "branch", targets: ["commit"], description: "Applies the commit onto the current branch." },
@@ -77,25 +83,25 @@ export const commandMeta = {
   "use-theirs": { title: "Use Theirs", category: "operation", targets: ["file"], description: "Resolves a conflicted file with the incoming side and stages it." },
   "use-both": { title: "Use Both", category: "operation", targets: ["file"], description: "Resolves a conflicted file with both sides and stages it." },
   "copy-ref-name": { title: "Copy Name", category: "edit", targets: ["branch", "remoteBranch", "tag"], description: "Copies the branch or tag name." },
-  "stash-changes": { title: "Stash Changes…", symbol: "tray.and.arrow.down", category: "stash", description: "Stashes the working tree and staged changes." },
+  "stash-changes": { title: "Stash Changes…", symbol: "tray.and.arrow.down", toolbarLabel: "Stash", category: "stash", description: "Stashes the working tree and staged changes." },
   "stash-all-changes": { title: "Stash Changes Including Untracked…", category: "stash", description: "Stashes all changes, untracked files included." },
   "apply-stash": { title: "Apply Stash", category: "stash", targets: ["stash"], description: "Applies the stash and keeps it." },
-  "pop-stash": { title: "Pop Stash", symbol: "tray.and.arrow.up", category: "stash", targets: ["stash"], description: "Applies the stash and drops it." },
+  "pop-stash": { title: "Pop Stash", symbol: "tray.and.arrow.up", toolbarLabel: "Pop", category: "stash", targets: ["stash"], description: "Applies the stash and drops it: the selected one, or the newest from a toolbar or the menu bar." },
   "drop-stash": { title: "Drop Stash…", symbol: "trash", category: "stash", targets: ["stash"], description: "Deletes the stash after asking." },
   "open-worktree": { title: "Open Worktree in New Window", symbol: "macwindow.badge.plus", category: "worktree", targets: ["worktree", "reviewEntry"], description: "Opens another worktree of this repository in its own window." },
   "open-review-worktree": { title: "Open Queued Worktree", category: "worktree", description: "Opens the Review Queue's selected worktree in its own window." },
   "new-worktree": { title: "New Worktree…", symbol: "plus.rectangle.on.folder", category: "worktree", description: "Adds a worktree for a branch next to the repository." },
   "remove-worktree": { title: "Remove Worktree…", category: "worktree", targets: ["worktree"], description: "Removes a linked worktree after asking." },
+  "reveal-repository": { title: "Show in Finder", symbol: "folder", toolbarLabel: "Finder", category: "file", description: "Shows the repository's folder in Finder." },
   "reveal-worktree": { title: "Reveal in Finder", symbol: "folder", category: "worktree", targets: ["worktree", "reviewEntry"], description: "Shows the worktree's folder in Finder." },
 } as const satisfies Record<CommandId, CommandMeta>;
 
 export const commandIds = Object.keys(commandMeta) as CommandId[];
 
-const aliasTable = new Map<string, CommandId>(
-  commandIds.flatMap(id => ((commandMeta[id] as CommandMeta).aliases ?? []).map(alias => [alias, id] as const)),
-);
+let aliasTable: Map<string, CommandId> | undefined;
+const aliases = () => aliasTable ??= new Map(commandIds.flatMap(id => ((commandMeta[id] as CommandMeta).aliases ?? []).map(alias => [alias, id] as const)));
 
 /** The current id for a settings file's command id (an alias of a renamed command resolves to its new id), or null. */
 export function resolveCommandId(id: string): CommandId | null {
-  return Object.hasOwn(commandMeta, id) ? id as CommandId : aliasTable.get(id) ?? null;
+  return Object.hasOwn(commandMeta, id) ? id as CommandId : aliases().get(id) ?? null;
 }

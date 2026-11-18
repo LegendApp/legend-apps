@@ -82,3 +82,31 @@ option or a diff color renders no list row (Jest guards this with React Profiler
 - **Density and theme**: row heights from `densityHeights` (`src/settings/theme.ts`);
   `system:<name>` colors resolve to hex per appearance once (native rows and SF Symbols
   can't take a PlatformColor); the last lane color is the overflow color.
+
+## Toolbar, context menus and key bindings
+
+All three name commands by registry id (`src/commandMeta.ts`: title, symbol, category,
+context-menu targets, aliases for renamed ids; the runtime label, enabled state and default
+shortcut live in `src/commands.ts`). Unknown ids stay in the file, are skipped and reported.
+The builders are in `src/actions.ts`.
+
+- **Toolbar**: `toolbar.items` in order: command ids (default symbol and short label),
+  `{ command, label, symbol }`, and the widgets `branchPicker`, `viewSwitcher`, `search` (with
+  its scope menu in History) and `networkProgress`. Spark's toolbar has one flexible space
+  between leading and trailing items, so items before the first `flexibleSpace` lead; fixed
+  `space`s are skipped. Spark shows icons only (no `displayMode` yet, ask S2): every button
+  carries its symbol and label, and other modes are info-level capability issues. Without a
+  repository only the commands that work without one show. The window sends the toolbar only
+  when its items change, so a settings edit elsewhere sends nothing.
+- **Context menus**: `contextMenus.<target>` (commit, file, branch, remoteBranch, tag, stash,
+  worktree, diffLine, pullRequest, reviewEntry) replaces that menu's default list whole; the
+  defaults reproduce the built-in menus. Menus are built when they open; entries that don't
+  apply to what was clicked (Merge on the current branch, conflict picks on a clean file) are
+  left out, separators never lead, trail or repeat, and a command whose targets don't include
+  the menu's is skipped. Spark context menus have no submenus: a `{ submenu, items }` shows
+  its items under a disabled title row.
+- **Key bindings**: `keybindings.<id>` (Spark accelerator strings) replaces a command's
+  default; `[]` unbinds. A combination bound twice keeps its first owner (settings bindings
+  in file order, then defaults) and the loser is reported. The first binding is the menu
+  item's key equivalent; extra bindings, and bindings of commands the menu bar doesn't list
+  (Toggle Sidebar, say), go to a window-scoped Spark hotkey router.

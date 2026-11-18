@@ -193,7 +193,7 @@ const toolbar = obj({
   items: describe(z.array(toolbarEntry), "Items in order."),
 }, "The window toolbar.");
 
-type MenuEntry = string | { submenu: string; items: MenuEntry[] };
+export type MenuEntry = string | { submenu: string; items: MenuEntry[] };
 const menuEntry: z.ZodType<MenuEntry> = z.lazy(() => z.union([commandId, z.looseObject({ submenu: z.string(), items: z.array(menuEntry) })])).meta({
   id: "menuEntry", description: "A command id, \"separator\", or a submenu.",
 });

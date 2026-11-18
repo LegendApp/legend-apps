@@ -209,6 +209,7 @@
       "stash-changes",
       "flexibleSpace",
       "networkProgress",
+      "reveal-repository",
       "search"
     ]
   }

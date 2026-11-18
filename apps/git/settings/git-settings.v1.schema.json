@@ -1671,6 +1671,7 @@
           "default": [
             "toggle-sidebar",
             "branchPicker",
+            "flexibleSpace",
             "viewSwitcher",
             "networkProgress",
             "refresh",
@@ -2013,6 +2014,10 @@
             "discard-file",
             "discard-lines",
             "restore-discard",
+            "stage-file",
+            "unstage-file",
+            "stage-all",
+            "unstage-all",
             "generate-message",
             "commit",
             "checkout-ref",
@@ -2040,6 +2045,7 @@
             "open-review-worktree",
             "new-worktree",
             "remove-worktree",
+            "reveal-repository",
             "reveal-worktree"
           ]
         },

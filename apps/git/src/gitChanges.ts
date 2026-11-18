@@ -135,6 +135,13 @@ export function createGitChanges(onChange: (state: ChangesState) => void, watch:
     changeFile(path: string, stage: boolean) {
       return write((git, signal) => stage ? git.stageFile(path, { signal }) : git.unstageFile(path, { signal }));
     },
+    /** Stages or unstages several files as one write, one file at a time; stops at Git's first refusal. */
+    changeFiles(paths: readonly string[], stage: boolean) {
+      if (!paths.length) return Promise.resolve(false);
+      return write(async (git, signal) => {
+        for (const path of paths) await (stage ? git.stageFile(path, { signal }) : git.unstageFile(path, { signal }));
+      });
+    },
     /** Stages lines from the unstaged diff, or unstages lines from the staged diff, of the selected file. */
     changeLines(keys: ReadonlySet<string>, expectedText: string) {
       const patch = currentPatch(expectedText);

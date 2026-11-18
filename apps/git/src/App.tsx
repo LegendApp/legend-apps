@@ -14,6 +14,7 @@ import { planPanels, viewKindFor, windowPlan, type LayoutConditions } from "./la
 import { useWindowLayout } from "./layout/useWindowLayout";
 import type { PanelId } from "./settings/schema";
 import { activeLayout } from "./settings/presets";
+import { contextMenuItems, menuCommandIds, menuCommandTarget, resolveKeyBindings, routedBindings, toolbarItems, toolbarSlots, type MenuSubject } from "./actions";
 import { commandEnabled, commandLabel, commandMenuItem, queueEntry, runCommand, sectionPullRequest, sectionRef, sectionReview, sectionShowsHistory, sectionStash, sectionWorktree, type CommandContext, type CommandId, type Section } from "./commands";
 import { queueDetail, queuePushTarget, reviewQueue, type QueueEntry } from "./gitQueue";
 import { createGitRefs, emptyRefs, findRef, recentBranches, resolveBranchName, type WorktreeEntry } from "./gitRefs";
@@ -50,6 +51,7 @@ import { addWindowListener, setWindowOptions } from "@legendapp/spark/windows";
 import { addMacOSWindowListener, setToolbarItemText, type MacOSToolbarItem } from "@legendapp/spark/windows/macos";
 import { createResultDraftStore, draftDirty, type ResultDraft } from "./resultDraft";
 import { SettingsContext } from "./settings/panelOptions";
+import { KeyBindingRouter } from "./KeyBindingRouter";
 import { undoSheet } from "./gitUndo";
 
 const contentInset = 52;
@@ -899,6 +901,9 @@ Rebase anyway?`,
     pullWriting: pulls.writing,
     pullRequestUrl: selectedPull?.url || null,
     canCreatePullRequest: !!root && gitHub.status === "signed-in" && !!pulls.repo && !!pulls.remote && !!currentBranch && !createSheet,
+    unstagedPaths: root ? unstaged.map(entry => entry.path) : [],
+    stagedPaths: root ? staged.map(entry => entry.path) : [],
+    selectedChange: root ? selected : null,
     run: {
       openRepository: () => void chooseRepository(),
       openRecent,
@@ -965,12 +970,16 @@ Rebase anyway?`,
       signInToGitHub: () => void signInToGitHub(),
       reviewPullRequest,
       checkOutPullRequest: (number, worktree) => void checkOutPullRequest(number, worktree),
+      changeFile: (path, stage) => { if (stage && conflictList.some(entry => entry.path === path)) void markResolved(path); else void controller.current?.changeFile(path, stage); },
+      changeAll: stage => void controller.current?.changeFiles(stage ? unstaged.filter(entry => entry.kind !== "unmerged").map(entry => entry.path) : staged.map(entry => entry.path), stage),
       signOutOfGitHub: () => { gitHubAccount.signOut().catch((error: unknown) => reportBranchError("Couldn’t Sign Out of GitHub", error)); },
     },
   };
   const contextRef = useRef(context);
   contextRef.current = context;
-  const item = (id: CommandId) => commandMenuItem(id, context);
+  // Settings key bindings over the defaults; the menu bar carries each command's first one.
+  const keyBindings = useMemo(() => resolveKeyBindings(layout.settings.keybindings), [layout.settings.keybindings]);
+  const item = (id: CommandId) => commandMenuItem(id, context, { keys: keyBindings.keys });
 
   const menu: UseMenuOptions = {
     id: "legend-git",
@@ -978,7 +987,7 @@ Rebase anyway?`,
       { type: "submenu", id: "app", label: "Legend Git", target: { menu: "app" }, items: [] },
       { type: "submenu", id: "file", label: "File", target: { menu: "file" }, items: [
         // AppKit's own Open Recent (filled from the system's recent documents) sits between these two.
-        item("open-repository"), item("open-worktree"),
+        item("open-repository"), item("open-worktree"), { type: "separator" }, item("reveal-repository"),
       ] },
       { type: "submenu", id: "edit", label: "Edit", target: { menu: "edit" }, items: [item("undo-operation"), { type: "separator" }, item("copy-sha"), { type: "separator" }, item("blame-line")] },
       // AppKit's own View ▸ Show/Hide Sidebar drives the split view, so the menu has no second one.
@@ -991,6 +1000,7 @@ Rebase anyway?`,
       {
         type: "submenu", id: "changes", label: "Changes", placement: { before: { menu: "window" } },
         items: [
+          item("stage-file"), item("unstage-file"), item("stage-all"), item("unstage-all"), { type: "separator" },
           item("apply-lines"), { type: "separator" },
           item("use-ours"), item("use-theirs"), item("use-both"), item("mark-resolved"), { type: "separator" },
           item("discard-file"), item("discard-lines"), item("restore-discard"), { type: "separator" },
@@ -1001,6 +1011,8 @@ Rebase anyway?`,
     ],
     onAction: action => runMenuAction(action.itemId),
   };
+  // The menu bar's commands are fixed; bindings it can't carry go to the window's hotkey router.
+  const routedKeys = useMemo(() => routedBindings(keyBindings, menuCommandIds(menu.items)), [keyBindings]); // eslint-disable-line react-hooks/exhaustive-deps -- see above
   useEffect(() => { if (windowId !== mainWindowId) publishMenu(windowId, menu); });
 
   // A search ended by something other than the field (a file's history, a blame) clears the field too.
@@ -1085,16 +1097,8 @@ Rebase anyway?`,
     copySha: oid => { runCommand("copy-sha", contextRef.current, oid); },
     openOnGitHub: oid => { runCommand("open-github", contextRef.current, oid); },
     contextMenu: (oid, position) => {
-      const menuContext = contextRef.current;
       // The row keeps the selection, so Compare with Selected can compare the two.
-      const items = [
-        commandMenuItem("compare-with-selected", menuContext, { target: oid, shortcut: false }), { type: "separator" as const },
-        { ...commandMenuItem("new-branch", menuContext, { target: oid, shortcut: false }), label: "New Branch from Commit…" }, { type: "separator" as const },
-        ...(["cherry-pick-commit", "revert-commit", "interactive-rebase-commit"] as const).map(id => commandMenuItem(id, menuContext, { target: oid, shortcut: false })), { type: "separator" as const },
-        ...(["copy-sha", "open-github"] as const).map(id => commandMenuItem(id, menuContext, { target: oid, shortcut: false })),
-      ];
-      showContextMenu({ windowId, position, items })
-        .then(result => { if (!result.canceled) runCommand(result.itemId, contextRef.current, oid); }, console.error);
+      showMenu({ target: "commit", oid }, position);
     },
     fileContextMenu: (path, position) => { historyController.current?.selectFile(path); showFileMenu(path, position); },
     columnMenu: (columns, position) => {
@@ -1113,8 +1117,18 @@ Rebase anyway?`,
 
   function showLineMenu(target: BlameTarget, position: { x: number; y: number }) {
     setBlameTarget(target);
-    showContextMenu({ windowId, position, items: [commandMenuItem("blame-line", { ...contextRef.current, canBlame: true }, { shortcut: false })] })
-      .then(result => { if (!result.canceled) runCommand(result.itemId, { ...contextRef.current, canBlame: !!blameTargetRef.current }); }, console.error);
+    showMenu({ target: "diffLine" }, position, { ...contextRef.current, canBlame: true }, () => ({ ...contextRef.current, canBlame: !!blameTargetRef.current }));
+  }
+
+  /**
+   * Shows the settings' context menu for what was clicked (built now, from `contextMenus` or the default list) and runs
+   * the picked command on it, with the context it reads when it runs (`runContext`, the current one by default).
+   */
+  function showMenu(subject: MenuSubject, position: { x: number; y: number }, menuContext = contextRef.current, runContext = () => contextRef.current) {
+    const items = contextMenuItems(subject, layoutRef.current.settings.contextMenus, menuContext);
+    if (!items.length) return;
+    showContextMenu({ windowId, position, items })
+      .then(result => { if (!result.canceled) runCommand(result.itemId, runContext(), menuCommandTarget(subject, result.itemId)); }, console.error);
   }
 
   /** Changes blames added and context lines as on disk (unstaged) or staged, and removed lines one step older. */
@@ -1131,62 +1145,19 @@ Rebase anyway?`,
       const file = await controller.current?.conflictFile(path).catch(() => null);
       if (file) menuContext = { ...menuContext, conflicts: menuContext.conflicts.map(conflict => conflict.path === path ? { ...conflict, ...file } : conflict) };
     }
-    const picks = (["use-ours", "use-theirs", "use-both"] as const).filter(id => commandEnabled(id, menuContext, path));
-    const resolve = entry ? [...picks, "mark-resolved" as const].map(id => commandMenuItem(id, menuContext, { target: path, shortcut: false })) : [];
-    const items = [...resolve, ...resolve.length ? [{ type: "separator" as const }] : [], commandMenuItem("show-file-history", menuContext, { target: path, shortcut: false })];
-    showContextMenu({ windowId, position, items })
-      .then(result => { if (!result.canceled) runCommand(result.itemId, menuContext, path); }, console.error);
+    showMenu({ target: "file", path }, position, menuContext, () => menuContext);
   }
 
-  function showStashMenu({ oid, position }: { oid: string; position: { x: number; y: number } }) {
-    const menuContext = contextRef.current;
-    const items = [...(["apply-stash", "pop-stash"] as const).map(id => commandMenuItem(id, menuContext, { target: oid, shortcut: false })), { type: "separator" as const }, commandMenuItem("drop-stash", menuContext, { target: oid, shortcut: false })];
-    showContextMenu({ windowId, position, items })
-      .then(result => { if (!result.canceled) runCommand(result.itemId, contextRef.current, oid); }, console.error);
-  }
-
-  function showWorktreeMenu({ path, position }: { path: string; position: { x: number; y: number } }) {
-    const menuContext = contextRef.current;
-    const items = [
-      { ...commandMenuItem("open-worktree", menuContext, { target: path, shortcut: false }), label: "Open in New Window" },
-      commandMenuItem("reveal-worktree", menuContext, { target: path, shortcut: false }), { type: "separator" as const },
-      { ...commandMenuItem("remove-worktree", menuContext, { target: path, shortcut: false }), label: "Remove…" },
-    ];
-    showContextMenu({ windowId, position, items })
-      .then(result => { if (!result.canceled) runCommand(result.itemId, contextRef.current, path); }, console.error);
-  }
-
-  function showQueueMenu({ entry, position }: { entry: QueueEntry; position: { x: number; y: number } }) {
-    const menuContext = contextRef.current;
-    const push = { ...commandMenuItem("push-review", menuContext, { target: entry.id, shortcut: false }), label: queuePushTarget(entry)?.publish ? "Publish Branch…" : "Push" };
-    const items = entry.kind === "worktree" ? [
-      { ...commandMenuItem("open-worktree", menuContext, { target: entry.path, shortcut: false }), label: "Open in New Window" }, push,
-      { type: "separator" as const }, commandMenuItem("reveal-worktree", menuContext, { target: entry.path, shortcut: false }),
-    ] : [push];
-    showContextMenu({ windowId, position, items })
-      .then(result => { if (!result.canceled) runCommand(result.itemId, contextRef.current, result.itemId === "push-review" ? entry.id : entry.kind === "worktree" ? entry.path : undefined); }, console.error);
-  }
-
-  function showPullRequestMenu({ number, position }: { number: number; position: { x: number; y: number } }) {
-    const menuContext = contextRef.current, target = String(number);
-    const items = (["checkout-pull-request", "pull-request-worktree"] as const).map(id => commandMenuItem(id, menuContext, { target, shortcut: false }));
-    showContextMenu({ windowId, position, items })
-      .then(result => { if (!result.canceled) runCommand(result.itemId, contextRef.current, target); }, console.error);
-  }
+  const showStashMenu = ({ oid, position }: { oid: string; position: { x: number; y: number } }) => showMenu({ target: "stash", oid }, position);
+  const showWorktreeMenu = ({ path, position }: { path: string; position: { x: number; y: number } }) => showMenu({ target: "worktree", path }, position);
+  const showQueueMenu = ({ entry, position }: { entry: QueueEntry; position: { x: number; y: number } }) => showMenu({ target: "reviewEntry", entry }, position);
+  const showPullRequestMenu = ({ number, position }: { number: number; position: { x: number; y: number } }) => showMenu({ target: "pullRequest", number }, position);
 
   function showRefMenu({ ref, position }: { ref: string; position: { x: number; y: number } }) {
-    const menuContext = contextRef.current;
-    const entry = findRef(menuContext.refs, ref);
+    const entry = findRef(contextRef.current.refs, ref);
     if (!entry) return;
-    const merge = entry.kind === "remote" || (entry.kind === "branch" && !entry.ref.current) ? ["merge-ref", "rebase-ref", "interactive-rebase-ref", null] as const : [];
-    const ids: (CommandId | null)[] = entry.kind === "branch" ? ["checkout-ref", "new-branch", null, ...merge, "rename-branch", "delete-branch", null, ...entry.ref.current ? ["create-pull-request", null] as const : [], "copy-ref-name"]
-      : entry.kind === "remote" ? ["checkout-ref", "new-branch", null, ...merge, "copy-ref-name"] : ["new-branch", null, "copy-ref-name"];
-    const labels: Partial<Record<CommandId, string>> = { "new-branch": `New Branch from “${entry.ref.name}”…`, "merge-ref": `Merge “${entry.ref.name}” into “${menuContext.currentBranch ?? "the current branch"}”…`,
-      "rebase-ref": `Rebase “${menuContext.currentBranch ?? "the current branch"}” onto “${entry.ref.name}”…`,
-      "interactive-rebase-ref": `Rebase “${menuContext.currentBranch ?? "the current branch"}” Interactively onto “${entry.ref.name}”…` };
-    const items = ids.map(id => id ? { ...commandMenuItem(id, menuContext, { target: ref, shortcut: false }), ...labels[id] ? { label: labels[id] } : {} } : { type: "separator" as const });
-    showContextMenu({ windowId, position, items })
-      .then(result => { if (!result.canceled) runCommand(result.itemId, contextRef.current, ref); }, console.error);
+    const target = entry.kind === "remote" ? "remoteBranch" : entry.kind;
+    showMenu({ target, ref, name: entry.ref.name, current: entry.kind === "branch" && entry.ref.current }, position);
   }
 
   // A ref deleted or renamed since it was selected has no row; History is shown until the effect above moves there.
@@ -1199,42 +1170,37 @@ Rebase anyway?`,
   // A rebase detaches HEAD while it runs; the branch it rebases keeps the label.
   const branchLabel = !branch?.head ? null : branch.head !== "(detached)" ? branch.head
     : operation?.kind === "rebase" && operation.branch ? operation.branch : `${branch.oid?.slice(0, 7) ?? "HEAD"} (detached)`;
-  const button = (id: CommandId, symbol: string) => {
-    const label = commandLabel(id, context);
-    return { type: "button" as const, id, label, symbol, tooltip: label, disabled: !commandEnabled(id, context) };
-  };
   const networkText = networkStatusText(network, root ? branch : null);
   const aheadBehindTooltip = `${branch?.behind ?? 0} incoming and ${branch?.ahead ?? 0} outgoing commits on “${branch?.upstream}”`;
-  const toolbarItems: MacOSToolbarItem[] = [
-    { ...button("toggle-sidebar", "sidebar.left"), placement: "leading" },
-    ...root ? [
-      { type: "menu", id: "branch", label: branchLabel ?? "Branch", symbol: "arrow.triangle.branch", placement: "leading", tooltip: "Current branch", items: [
-        ...recentBranches(context.refs).map(branch => ({ type: "checkbox" as const, id: `checkout:${branch.ref}`, label: branch.name, checked: branch.current, disabled: branch.current || !commandEnabled("checkout-ref", context, branch.ref) && !branch.current })),
-        ...context.refs?.branches.length ? [{ type: "separator" as const }] : [],
-        commandMenuItem("switch-branch", context, { shortcut: false }),
-        commandMenuItem("new-branch", context, { shortcut: false }),
-      ] },
-      { type: "segmented", id: "section", label: "View", value: section === "changes" || section === "history" ? section : null, segments: [
-        { value: "changes", label: "Changes", symbol: "square.and.pencil" },
-        { value: "history", label: "History", symbol: "clock" },
-      ] },
-      // Fetch, Pull and Push stay in the Repository menu: the pinned Spark's `disabled` toolbar button still acts enabled
-      // (fixed in Spark main, not released). Its status label shows the running operation's progress, or ↓behind ↑ahead.
-      ...network.operation ? [{ type: "label" as const, id: "network-progress", label: `${networkVerb(network.operation)}…`, text: `${networkVerb(network.operation)}…`, width: 180 }]
-        : networkText ? [{ type: "label" as const, id: "ahead-behind", label: `${aheadBehindTooltip}`, text: networkText }] : [],
-      button("refresh", "arrow.clockwise"),
-      // AppKit's NSSearchToolbarItem (it collapses itself when the toolbar is narrow); Spark's `collapses` button ignores real clicks (Spark ask).
+  // The settings' items (a preset's or the user's); the slots keep their identity while `toolbar` does.
+  const slots = useMemo(() => toolbarSlots(layout.settings.toolbar), [layout.settings.toolbar]);
+  const toolbarItemList: MacOSToolbarItem[] = toolbarItems(slots, context, {
+    branchPicker: () => [{ type: "menu", id: "branch", label: branchLabel ?? "Branch", symbol: "arrow.triangle.branch", tooltip: "Current branch", items: [
+      ...recentBranches(context.refs).map(branch => ({ type: "checkbox" as const, id: `checkout:${branch.ref}`, label: branch.name, checked: branch.current, disabled: branch.current || !commandEnabled("checkout-ref", context, branch.ref) && !branch.current })),
+      ...context.refs?.branches.length ? [{ type: "separator" as const }] : [],
+      commandMenuItem("switch-branch", context, { shortcut: false }),
+      commandMenuItem("new-branch", context, { shortcut: false }),
+    ] }],
+    viewSwitcher: () => [{ type: "segmented", id: "section", label: "View", value: section === "changes" || section === "history" ? section : null, segments: [
+      { value: "changes", label: "Changes", symbol: "square.and.pencil" },
+      { value: "history", label: "History", symbol: "clock" },
+    ] }],
+    // Its status label shows the running operation's progress, or ↓behind ↑ahead.
+    networkProgress: () => network.operation ? [{ type: "label", id: "network-progress", label: `${networkVerb(network.operation)}…`, text: `${networkVerb(network.operation)}…`, width: 180 }]
+      : networkText ? [{ type: "label", id: "ahead-behind", label: `${aheadBehindTooltip}`, text: networkText }] : [],
+    // AppKit's NSSearchToolbarItem (it collapses itself when the toolbar is narrow); Spark's `collapses` button ignores real clicks (Spark ask).
+    search: () => [
       { type: "search", id: "search", label: "Search", placeholder: showsHistory ? "Search Commits" : "Filter Files", width: 200 },
       ...showsHistory ? [{
         type: "menu" as const, id: "search-scope", label: searchScopes.find(entry => entry.scope === searchScope)!.label, tooltip: "Search in",
         items: searchScopes.map(({ scope, label }) => ({ type: "checkbox" as const, id: `search-${scope}`, label, checked: scope === searchScope })),
       }] : [],
-    ] satisfies MacOSToolbarItem[] : [],
-  ];
+    ],
+  });
   // The search field keeps its own text; it is passed only when the toolbar is rebuilt (a section switch or Show All).
   const searchText = showsHistory ? historyQuery : filter;
   // Progress text changes go to the label alone (below); a rebuilt toolbar carries the current text.
-  const toolbar = { visible: true, style: "unified" as const, items: toolbarItems.map(entry => entry.type === "search" ? { ...entry, value: searchText } : entry.id === "network-progress" ? { ...entry, text: networkText } : entry) };
+  const toolbar = { visible: true, style: "unified" as const, items: toolbarItemList.map(entry => entry.type === "search" ? { ...entry, value: searchText } : entry.id === "network-progress" ? { ...entry, text: networkText } : entry) };
   const toolbarRef = useRef(toolbar);
   toolbarRef.current = toolbar;
   // Title bar options go once: re-sending them grows the window by 20 pt each time (Spark ask).
@@ -1261,8 +1227,8 @@ Rebase anyway?`,
       },
     }).catch(console.error);
   }, [root, repoName ? branchLabel : null]); // eslint-disable-line react-hooks/exhaustive-deps -- the branch only titles worktree windows
-  // Item changes (section, labels, availability) update only the toolbar.
-  const toolbarKey = JSON.stringify([toolbarItems, searchEpoch]);
+  // Item changes (settings, section, labels, availability) update only the toolbar; an unchanged toolbar sends nothing.
+  const toolbarKey = JSON.stringify([toolbarItemList, searchEpoch]);
   const toolbarShown = useRef(toolbarKey);
   useEffect(() => {
     if (toolbarShown.current === toolbarKey) return;
@@ -1505,6 +1471,7 @@ Rebase anyway?`,
 
   return (<SettingsContext.Provider value={settingsContext}>
     {windowId === mainWindowId ? <GitMenu menu={menu} /> : null}
+    {Object.keys(routedKeys).length ? <KeyBindingRouter windowId={windowId} bindings={routedKeys} run={id => runCommand(id, contextRef.current)} /> : null}
     {/* Starts at the remembered sidebar width, so the split view waits for the window state (one small file). */}
     {layoutReady ? <SidebarSplitView
       appearance={layout.settings.appearance}

@@ -48,7 +48,7 @@ export const defaultSettings: GitSettings = {
     sections: [{ id: "workspace" }, { id: "reviewQueue" }, { id: "branches" }, { id: "remotes" }, { id: "tags" }, { id: "stashes" }, { id: "worktrees" }, { id: "pullRequests" }],
     showCounts: true,
   },
-  toolbar: { displayMode: "iconAndLabel", items: ["toggle-sidebar", "branchPicker", "viewSwitcher", "networkProgress", "refresh", "search"] },
+  toolbar: { displayMode: "iconAndLabel", items: ["toggle-sidebar", "branchPicker", "flexibleSpace", "viewSwitcher", "networkProgress", "refresh", "search"] },
   contextMenus: {},
   keybindings: {},
 };
