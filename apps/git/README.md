@@ -53,3 +53,32 @@ View ▸ Layout picks a preset's or a saved layout, saves the current one under 
 (Save Layout As…, written to `layout.layouts` in the user file), resets it, and moves the
 pane clicked last left/right/up/down (Move Pane). Panels keep no expensive state: a diff
 the layout moves reuses its document from the window's cache.
+
+## Panel options and theme
+
+A pane's options are `panels.<panel>` with its layout node's `options` on top. Components
+read the narrowest slice of the window's settings observable (`usePanelOptions("diff")`,
+`useThemeTokens("lanes")`, `src/settings/panelOptions.tsx`), never a settings prop, so a diff
+option or a diff color renders no list row (Jest guards this with React Profiler counts).
+
+- **Diff**: one `DiffNativeRowConfig` per pane from `diffConfigProps` (`src/diffOptions.ts`):
+  unified, or side by side through diff-parser's projection (`sideBySideSplit: "horizontal"`,
+  old above new, is the unified order); line height from density and code size; colors,
+  gutter, whitespace. Fewer than 3 context lines are trimmed from Git's patch (staging still
+  applies Git's patch); `ignoreWhitespace` uses the parser's whitespace mode; `hunkActions:
+  "none"` hides the hunk buttons. View ▸ Diff writes `panels.diff.mode`/`sideBySideSplit`.
+- **Commit list**: one line per commit in the configured columns; right-click the column
+  titles to show or hide a column or Reset Columns (written to the user file). Graph lane
+  width, line width, node style, lane cap and coloring (by lane, or by the branch color the
+  graph layout assigns) come from `graph`; refs inline, in the refs column or hidden, as text
+  or `tinted` (theme ref color and a small SF Symbol, no capsules).
+- **File lists**: Git's order (`sort: "path"`), name or status; `tree` groups files under a
+  row per folder. `stagingControl: "checkboxes"` shows buttons until Spark has a checkbox
+  (A9); `capabilityIssues` reports it at info level, as it does `wrap`, `lineNumbers: "new"`,
+  more than 3 context lines and `ignoreWhitespace: "trailing"`, which draw the nearest
+  supported way.
+- **Appearance**: `appearance` (system, light or dark) is set on the window, so its title
+  bar, toolbar and system colors follow it, and theme tokens resolve for it.
+- **Density and theme**: row heights from `densityHeights` (`src/settings/theme.ts`);
+  `system:<name>` colors resolve to hex per appearance once (native rows and SF Symbols
+  can't take a PlatformColor); the last lane color is the overflow color.

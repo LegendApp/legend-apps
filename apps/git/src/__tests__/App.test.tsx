@@ -111,6 +111,28 @@ it("renders the empty window, toggles its sidebar, opens the folder panel and cl
   expect(registration.remove).toHaveBeenCalledTimes(1);
 });
 
+it("gives the window the settings' appearance and switches the diff mode from View ▸ Diff", async () => {
+  jest.clearAllMocks();
+  const files = jest.requireMock("@legendapp/spark/files") as { writeText(path: string, text: string): Promise<void>; readText(path: string): Promise<string> };
+  await files.writeText("/data/settings.json", JSON.stringify({ version: 1, appearance: "dark" }));
+  let renderer!: ReactTestRenderer;
+  // The file is shared by the tests below: put it back even when an expectation fails.
+  try {
+  await act(async () => { renderer = create(<App />); });
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+  expect(jest.mocked(setWindowOptions).mock.calls.map(call => call[1])).toContainEqual({ appearance: "dark" });
+  const diffMenu = () => lastMenu().items.find(entry => entry.id === "view").items.find((entry: { id: string }) => entry.id === "diff");
+  expect(diffMenu().items.filter((entry: { checked?: boolean }) => entry.checked).map((entry: { id: string }) => entry.id)).toEqual(["diff:mode:unified"]);
+  await act(async () => { lastMenu().onAction({ itemId: "diff:split:vertical" }); await new Promise(resolve => setTimeout(resolve, 0)); });
+  // Vertical is the preset's split already, so the sparse write keeps only the mode.
+  expect(JSON.parse(await files.readText("/data/settings.json"))).toMatchObject({ appearance: "dark", panels: { diff: { mode: "sideBySide" } } });
+  expect(diffMenu().items.filter((entry: { checked?: boolean }) => entry.checked).map((entry: { id: string }) => entry.id)).toEqual(["diff:mode:sideBySide", "diff:split:vertical"]);
+  } finally {
+    await act(async () => { renderer?.unmount(); });
+    await files.writeText("/data/settings.json", JSON.stringify({ version: 1 }));
+  }
+});
+
 it("resolves the shared git workspace package without loading native capabilities", () => {
   expect(require.resolve("@legend-apps/git-core")).toMatch(/packages\/git-core\/src\/index\.ts$/);
 });
@@ -271,21 +293,22 @@ it("shows History from the sidebar and View menu, selects commits, and copies or
   expect(renderer.root.findAllByType(Sidebar)[0]!.props.selectedId).toBe("history");
   const list = renderer.root.findByType("LegendList" as any);
   expect(list.props.data.map((commit: { summary: string }) => commit.summary)).toEqual(["Second", "First"]);
-  expect(list.props.getFixedItemSize()).toBe(44);
+  expect(list.props.getFixedItemSize()).toBe(24);
 
   let row!: ReactTestRenderer;
   await act(async () => { row = create(list.props.renderItem({ item: commits[0] })); });
   const text = (node: ReactTestRenderer) => node.root.findAllByType(Text).map(entry => [entry.props.children].flat().join("")).join("\n");
-  // Ref names follow the subject as plain text, not pills; the current branch is in label color, semibold.
-  expect(text(row)).toContain("Second\n");
-  expect(text(row)).toContain("main\n, v1.0\naaaaaaa\nAda");
+  // SourceTree's columns: graph, subject with the refs inline before it (plain text, not pills; the current branch in
+  // label color, semibold), date, author, SHA.
+  expect(text(row)).toContain("main\n, v1.0\nSecond\n");
+  expect(text(row)).toMatch(/Second\n.+\nAda\naaaaaaa$/);
   const refText = (name: string) => row.root.findAllByType(Text).find(entry => [entry.props.children].flat().join("") === name)!;
   expect([refText("main").props.style].flat()).toContainEqual({ fontWeight: "600", color: "labelColor" });
   expect(refText(", v1.0").props.style).toBeUndefined();
-  const [graph, textColumn] = (row.toJSON() as { children: unknown[] }).children;
-  expect(JSON.stringify(textColumn)).not.toMatch(/borderWidth/);
-  // The graph cell draws the tip's line from its node down to the parent's row in the same lane.
-  expect(JSON.stringify(graph)).toContain('"top":22,"height":22');
+  const [graph, ...cells] = (row.toJSON() as { children: unknown[] }).children;
+  expect(JSON.stringify(cells)).not.toMatch(/borderWidth/);
+  // The graph cell draws the tip's line from its node down to the parent's row in the same lane (24 pt regular rows).
+  expect(JSON.stringify(graph)).toContain('"top":12,"width":2,"height":12');
   await act(async () => { row.root.findByProps({ accessibilityRole: "button" }).props.onPress({ nativeEvent: {} }); });
   expect(git.commitDetails).toHaveBeenCalledWith(head, expect.anything());
   expect(text(renderer)).toContain("Body");

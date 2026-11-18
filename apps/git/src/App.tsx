@@ -5,10 +5,11 @@ import { GitBranchNotMergedError, GitLocalChangesError, GitPullDivergedError, Gi
 import { Button } from "@legendapp/spark/ui";
 import { conflictSides, conflictedEntries, createGitChanges, emptyChanges, stagedEntries, unstagedEntries } from "./gitChanges";
 import { DiffPane, PickButton, type DiffLineTarget } from "./DiffPane";
-import { CommitFileDiff, CommitFiles, CommitInfo, HistoryList, type BlameTarget, type HistoryActions } from "./HistoryView";
+import { applyColumnMenu, columnMenuItems, CommitFileDiff, CommitFiles, CommitInfo, HistoryList, type BlameTarget, type HistoryActions } from "./HistoryView";
 import { LayoutHost, type PanelRenderers } from "./layout/LayoutHost";
 import { DiffDocumentCacheContext } from "./layout/diffDocuments";
 import { layoutMenu, runLayoutAction } from "./layout/layoutMenu";
+import { diffMenu, runDiffAction } from "./layout/diffMenu";
 import { planPanels, viewKindFor, windowPlan, type LayoutConditions } from "./layout/plan";
 import { useWindowLayout } from "./layout/useWindowLayout";
 import type { PanelId } from "./settings/schema";
@@ -37,7 +38,8 @@ import { CommentSheet, ReviewThreadView } from "./ReviewThreadView";
 import { StateBar } from "./StateBar";
 import { abortLabel, abortWarning, canContinue, conflictPickable, conflictSideName, operationText } from "./gitOperation";
 import { recentLabels, recentRepositories, useRecentRepositories } from "./gitRecents";
-import { FileRow, pathParts, useSymbolColor } from "./FileRow";
+import { FileRow, fileStatus, pathParts, useSymbolColor } from "./FileRow";
+import { folderItem, useFileList } from "./fileList";
 import { CommitComposer, type CommitMessageGenerator } from "./CommitComposer";
 import { openFileDialog, showMessage, showPrompt } from "@legendapp/spark/dialogs";
 import { useMenu, type UseMenuOptions } from "@legendapp/spark/menus";
@@ -47,6 +49,7 @@ import { SidebarSplitView } from "@legendapp/spark/ui/split-view";
 import { addWindowListener, setWindowOptions } from "@legendapp/spark/windows";
 import { addMacOSWindowListener, setToolbarItemText, type MacOSToolbarItem } from "@legendapp/spark/windows/macos";
 import { createResultDraftStore, draftDirty, type ResultDraft } from "./resultDraft";
+import { SettingsContext } from "./settings/panelOptions";
 import { undoSheet } from "./gitUndo";
 
 const contentInset = 52;
@@ -980,7 +983,7 @@ Rebase anyway?`,
       { type: "submenu", id: "edit", label: "Edit", target: { menu: "edit" }, items: [item("undo-operation"), { type: "separator" }, item("copy-sha"), { type: "separator" }, item("blame-line")] },
       // AppKit's own View ▸ Show/Hide Sidebar drives the split view, so the menu has no second one.
       { type: "submenu", id: "view", label: "View", target: { menu: "view" }, items: [item("show-changes"), item("show-history"), item("show-review"), { type: "separator" }, item("show-file-history"), item("show-all-history"), { type: "separator" },
-        layoutMenu(layout, viewKindFor(section), focusedPanelId)] },
+        layoutMenu(layout, viewKindFor(section), focusedPanelId), diffMenu(layout.settings.panels.diff, !!layout.store && !layout.store.isReadOnly("user"))] },
       { type: "submenu", id: "repository", label: "Repository", placement: { before: { menu: "window" } }, items: [item("fetch"), item("pull"), item("push"), item("cancel-network"), { type: "separator" }, item("refresh"), { type: "separator" }, item("create-pull-request"), item("open-github"), { type: "separator" }, item("sign-in-github"), item("sign-out-github")] },
       { type: "submenu", id: "pull-request", label: "Pull Request", placement: { before: { menu: "window" } }, items: [item("review-pull-request"), { type: "separator" }, item("checkout-pull-request"), item("pull-request-worktree")] },
       { type: "submenu", id: "branch", label: "Branch", placement: { before: { menu: "window" } }, items: [item("switch-branch"), item("new-branch"), { type: "separator" }, item("rename-branch"), item("delete-branch"), { type: "separator" }, item("merge-ref"), item("rebase-ref"), item("interactive-rebase-ref"), item("cherry-pick-commit"), item("revert-commit"), { type: "separator" }, item("abort-operation"), item("continue-operation")] },
@@ -1094,6 +1097,12 @@ Rebase anyway?`,
         .then(result => { if (!result.canceled) runCommand(result.itemId, contextRef.current, oid); }, console.error);
     },
     fileContextMenu: (path, position) => { historyController.current?.selectFile(path); showFileMenu(path, position); },
+    columnMenu: (columns, position) => {
+      showContextMenu({ windowId, position, items: columnMenuItems(columns) }).then(result => {
+        const store = layoutRef.current.store;
+        if (!result.canceled && store) return store.edit("user", ["panels", "commitList", "columns"], applyColumnMenu(columns, result.itemId));
+      }).catch(console.error);
+    },
     closeFileHistory: () => { runCommand("show-all-history", contextRef.current); },
     compare: oid => void historyController.current?.compare(oid),
     swapCompare: () => void historyController.current?.swapCompare(),
@@ -1229,9 +1238,17 @@ Rebase anyway?`,
   const toolbarRef = useRef(toolbar);
   toolbarRef.current = toolbar;
   // Title bar options go once: re-sending them grows the window by 20 pt each time (Spark ask).
+  // The settings' appearance (system, light or dark) is the window's, so title bar, toolbar and system colors follow it.
+  const appearance = layout.settings.appearance;
+  const sentAppearance = useRef(appearance);
   useEffect(() => {
-    void setWindowOptions(windowId, { appearance: "system", macos: { titleBar: { contentLayout: "fullSize", transparent: true, titleVisibility: "visible" } } }).catch(console.error);
+    void setWindowOptions(windowId, { appearance, macos: { titleBar: { contentLayout: "fullSize", transparent: true, titleVisibility: "visible" } } }).catch(console.error);
   }, []);
+  useEffect(() => {
+    if (sentAppearance.current === appearance) return;
+    sentAppearance.current = appearance;
+    void setWindowOptions(windowId, { appearance }).catch(console.error);
+  }, [appearance]); // eslint-disable-line react-hooks/exhaustive-deps -- windowId is fixed
   useEffect(() => {
     void setWindowOptions(windowId, {
       // A worktree window is titled after the repository and its branch, so the Window menu tells worktrees apart.
@@ -1313,6 +1330,7 @@ Rebase anyway?`,
     registerMenuRunner(windowId, itemId => {
       if (disposed) return;
       if (itemId.startsWith("layout:")) void runLayoutAction(itemId, { windowId, layout: layoutRef.current, kind: viewKindFor(contextRef.current.section), focused: focusedPanel.current });
+      else if (itemId.startsWith("diff:")) { const store = layoutRef.current.store; if (store) runDiffAction(itemId, store).catch(console.error); }
       else runCommand(itemId, contextRef.current);
     });
     const closeRegistration = addWindowListener(windowId, "closed", close);
@@ -1475,6 +1493,7 @@ Rebase anyway?`,
   // Spark throws when the width is below the minimum; a remembered width or a settings file can be.
   const sidebarMinWidth = activeSidebar?.minWidth ?? 180;
   const sidebarWidth = Math.max(layout.initialState?.sidebarWidth ?? activeSidebar?.width ?? 220, sidebarMinWidth);
+  const settingsContext = useMemo(() => ({ settings$: layout.settings$, store: layout.store }), [layout.settings$, layout.store]);
   const changesPlan = windowPlan(layout.settings, layout.base, "changes", changesConditions, has(changesPanels));
   // A layout that shows the graph in Changes (GitKraken) needs HEAD's log loaded, as History does.
   const changesGraph = !!root && kind === "changes" && planPanels(changesPlan).includes("commitList");
@@ -1484,11 +1503,11 @@ Rebase anyway?`,
     void historyController.current?.activate();
   }, [changesGraph, root]);
 
-  return (<>
+  return (<SettingsContext.Provider value={settingsContext}>
     {windowId === mainWindowId ? <GitMenu menu={menu} /> : null}
     {/* Starts at the remembered sidebar width, so the split view waits for the window state (one small file). */}
     {layoutReady ? <SidebarSplitView
-      appearance="system"
+      appearance={layout.settings.appearance}
       style={styles.root}
       sidebarWidth={sidebarWidth}
       sidebarMinWidth={sidebarMinWidth}
@@ -1560,7 +1579,7 @@ Rebase anyway?`,
         </View>
       }
     /> : null}
-  </>);
+  </SettingsContext.Provider>);
 }
 
 /** The app's menu bar, installed once by the main window for the Git window focused last (see useMenuBar). */
@@ -1668,7 +1687,8 @@ const pullState = (pull: GitHubPullRequest) => pull.merged ? "Merged" : pull.sta
 function PullRequestFiles({ pull, state, filter, onSelect, review }: { pull: GitHubPullRequest; state: PullRequestsState; filter: string; onSelect: (path: string) => void; review: ReactNode }) {
   const reviewers = state.number === pull.number && state.reviews ? reviewSummary(state.reviews).map(entry => entry.text).join(" · ") : "";
   const comments = commentCounts(state.number === pull.number ? state.threads : null);
-  const files = state.number === pull.number ? state.files?.filter(file => !filter || file.path === state.selectedPath || pathParts(file.path).name.toLowerCase().includes(filter.toLowerCase())) ?? [] : [];
+  const files = useMemo(() => state.number === pull.number ? state.files?.filter(file => !filter || file.path === state.selectedPath || pathParts(file.path).name.toLowerCase().includes(filter.toLowerCase())) ?? [] : [], [state.number, state.files, state.selectedPath, pull.number, filter]);
+  const list = useFileList(files, "fileList");
   return <View style={styles.listSection}>
     <View style={styles.pullHeader}>
       <Text style={styles.pullTitle} accessibilityRole="header" selectable numberOfLines={3}>{pull.title}</Text>
@@ -1678,15 +1698,17 @@ function PullRequestFiles({ pull, state, filter, onSelect, review }: { pull: Git
         {review}
       </View>
     </View>
-    {files.length ? <Sidebar style={[styles.root, styles.separated]} selectedId={files.some(file => file.path === state.selectedPath) ? state.selectedPath : null} onSelectionChange={event => { if (event.id) onSelect(event.id); }} defaultRowHeight={24}>
-      {files.map(file => {
+    {files.length ? <Sidebar key={list.rowHeight} style={[styles.root, styles.separated]} selectedId={files.some(file => file.path === state.selectedPath) ? state.selectedPath : null} onSelectionChange={event => { if (event.id && !event.id.startsWith("folder:")) onSelect(event.id); }} defaultRowHeight={list.rowHeight}>
+      {list.rows.map(row => {
+        if (row.type === "folder") return folderItem(row, list.rowHeight);
+        const file = row.entry;
         const { name, folder } = pathParts(file.path);
         const count = comments.get(file.path) ?? 0;
         const commentsLabel = count === 1 ? "1 comment" : `${count} comments`;
         return <SidebarItem key={file.path} id={file.path}>
-          <View style={styles.fileRow} accessible accessibilityLabel={`${name}${folder ? `, ${folder}` : ""}, ${file.additions} added, ${file.deletions} removed${count ? `, ${commentsLabel}` : ""}`}>
+          <View style={[styles.fileRow, row.indent && styles.fileIndent]} accessible accessibilityLabel={`${name}${folder ? `, ${folder}` : ""}, ${file.additions} added, ${file.deletions} removed${count ? `, ${commentsLabel}` : ""}`}>
             <Text style={styles.fileName} numberOfLines={1}>{name}</Text>
-            <Text style={styles.fileFolder} numberOfLines={1} ellipsizeMode="head">{folder}</Text>
+            <Text style={styles.fileFolder} numberOfLines={1} ellipsizeMode="head">{list.showFolder ? folder : ""}</Text>
             {count ? <Text style={styles.count}>{commentsLabel}</Text> : null}
             <Text style={styles.count}>{`+${file.additions} −${file.deletions}`}</Text>
           </View>
@@ -1699,13 +1721,15 @@ function PullRequestFiles({ pull, state, filter, onSelect, review }: { pull: Git
 /** The selected worktree's changed files, read-only, with Open in New Window; selecting a file shows its diff. */
 function WorktreeFiles({ worktree, title = worktree.path, preview, filter, accessory, onSelect }: { worktree: { path: string }; title?: string; preview: WorktreePreviewState; filter: string; accessory: ReactNode; onSelect: (path: string) => void }) {
   const files = preview.path === worktree.path ? preview.files.filter(file => !filter || file.path === preview.selectedPath || pathParts(file.path).name.toLowerCase().includes(filter.toLowerCase())) : [];
+  const list = useFileList(files, "fileList", entry => fileStatus(entry, entry.worktreeStatus === ".").label);
   return <View style={styles.listSection}>
     <View style={styles.heading}>
       <Text style={styles.headingLabel} accessibilityRole="header" numberOfLines={1} ellipsizeMode="head">{title}</Text>
       {accessory}
     </View>
-    {files.length ? <Sidebar style={styles.root} selectedId={files.some(file => file.path === preview.selectedPath) ? preview.selectedPath : null} onSelectionChange={event => { if (event.id) onSelect(event.id); }} defaultRowHeight={24}>
-      {files.map(entry => <SidebarItem key={entry.path} id={entry.path}><FileRow entry={entry} staged={entry.worktreeStatus === "."} /></SidebarItem>)}
+    {files.length ? <Sidebar key={list.rowHeight} style={styles.root} selectedId={files.some(file => file.path === preview.selectedPath) ? preview.selectedPath : null} onSelectionChange={event => { if (event.id && !event.id.startsWith("folder:")) onSelect(event.id); }} defaultRowHeight={list.rowHeight}>
+      {list.rows.map(row => row.type === "folder" ? folderItem(row, list.rowHeight)
+        : <SidebarItem key={row.id} id={row.id}><FileRow entry={row.entry} staged={row.entry.worktreeStatus === "."} showFolder={list.showFolder} indent={row.indent} height={list.rowHeight} /></SidebarItem>)}
     </Sidebar> : <View style={styles.emptyList}><Text style={styles.emptyListText}>{preview.loading ? "Loading…" : preview.error ? "Couldn’t read the worktree" : filter ? "No matching files" : "No changes"}</Text></View>}
   </View>;
 }
@@ -1713,17 +1737,19 @@ function WorktreeFiles({ worktree, title = worktree.path, preview, filter, acces
 /** The selected stash's message and files; selecting a file shows its diff. */
 function StashFiles({ stash, preview, filter, onSelect }: { stash: GitStash; preview: StashPreviewState; filter: string; onSelect: (path: string) => void }) {
   const files = preview.oid === stash.oid ? preview.files.filter(file => !filter || file.path === preview.selectedPath || pathParts(file.path).name.toLowerCase().includes(filter.toLowerCase())) : [];
+  const list = useFileList(files, "fileList");
   return <View style={styles.listSection}>
     <View style={styles.heading}>
       <Text style={styles.headingLabel} accessibilityRole="header" numberOfLines={1}>{stash.message}</Text>
     </View>
-    {files.length ? <Sidebar style={styles.root} selectedId={preview.selectedPath} onSelectionChange={event => { if (event.id) onSelect(event.id); }} defaultRowHeight={24}>
-      {files.map(file => {
-        const { name, folder } = pathParts(file.path);
-        return <SidebarItem key={file.path} id={file.path}>
-          <View style={styles.fileRow} accessible accessibilityLabel={folder ? `${name}, ${folder}` : name}>
+    {files.length ? <Sidebar key={list.rowHeight} style={styles.root} selectedId={preview.selectedPath} onSelectionChange={event => { if (event.id && !event.id.startsWith("folder:")) onSelect(event.id); }} defaultRowHeight={list.rowHeight}>
+      {list.rows.map(row => {
+        if (row.type === "folder") return folderItem(row, list.rowHeight);
+        const { name, folder } = pathParts(row.id);
+        return <SidebarItem key={row.id} id={row.id}>
+          <View style={[styles.fileRow, row.indent && styles.fileIndent]} accessible accessibilityLabel={folder ? `${name}, ${folder}` : name}>
             <Text style={styles.fileName} numberOfLines={1}>{name}</Text>
-            {folder ? <Text style={styles.fileFolder} numberOfLines={1} ellipsizeMode="head">{folder}</Text> : null}
+            {folder && list.showFolder ? <Text style={styles.fileFolder} numberOfLines={1} ellipsizeMode="head">{folder}</Text> : null}
           </View>
         </SidebarItem>;
       })}
@@ -1807,14 +1833,17 @@ function ChangesList({ title, entries, filtered, selectedPath, onSelect, onConte
   action: string; disabled: boolean; onAction: (path: string) => void;
   secondaryAction?: string; secondaryDisabled?: boolean; onSecondaryAction?: () => void;
 }) {
+  const staged = title === "Staged";
+  const list = useFileList(entries, staged ? "staged" : "unstaged", entry => fileStatus(entry, staged).label);
   return <View style={styles.listSection}>
     <View style={styles.heading}>
       <Text style={styles.headingLabel} accessibilityRole="header">{title} ({entries.length})</Text>
       {secondaryAction ? <Button style={styles.discard} disabled={secondaryDisabled} onPress={() => onSecondaryAction?.()}>{secondaryAction}</Button> : null}
       <Button style={styles.action} disabled={disabled || selectedPath === null} onPress={() => { if (selectedPath !== null) onAction(selectedPath); }}>{action}</Button>
     </View>
-    {entries.length ? <Sidebar style={styles.root} accessibilityLabel={`${title} files`} selectedId={selectedPath} onSelectionChange={event => onSelect(event.id)} defaultRowHeight={24}>
-      {entries.map(entry => <SidebarItem key={entry.path} id={entry.path} onContextMenu={event => onContextMenu(entry.path, event.windowPosition)}><FileRow entry={entry} staged={title === "Staged"} /></SidebarItem>)}
+    {entries.length ? <Sidebar key={list.rowHeight} style={styles.root} accessibilityLabel={`${title} files`} selectedId={selectedPath} onSelectionChange={event => onSelect(event.id)} defaultRowHeight={list.rowHeight}>
+      {list.rows.map(row => row.type === "folder" ? folderItem(row, list.rowHeight)
+        : <SidebarItem key={row.id} id={row.id} onContextMenu={event => onContextMenu(row.id, event.windowPosition)}><FileRow entry={row.entry} staged={staged} showFolder={list.showFolder} indent={row.indent} height={list.rowHeight} /></SidebarItem>)}
     </Sidebar> : <View style={styles.emptyList}><Text style={styles.emptyListText}>{filtered ? "No matching files" : `No ${title.toLowerCase()} changes`}</Text></View>}
   </View>;
 }
@@ -1840,7 +1869,8 @@ const styles = StyleSheet.create({
   openPull: { width: 120, height: 24 },
   stashButtons: { flexDirection: "row", gap: 8 },
   openWindow: { width: 150, height: 24 },
-  fileRow: { height: 24, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 6 },
+  fileRow: { flex: 1, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 6 },
+  fileIndent: { paddingLeft: 22 },
   fileName: { flexShrink: 0, maxWidth: "70%", fontSize: 13, color: PlatformColor("labelColor") },
   fileFolder: { flex: 1, fontSize: 11, color: PlatformColor("secondaryLabelColor") },
   discard: { width: 80, height: 24 },

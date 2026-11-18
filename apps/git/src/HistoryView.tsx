@@ -1,5 +1,5 @@
-import { memo, useCallback, useMemo } from "react";
-import { PlatformColor, Pressable, ScrollView, StyleSheet, Text, View, useColorScheme, type GestureResponderEvent } from "react-native";
+import { memo, useCallback, useMemo, type ReactNode } from "react";
+import { PlatformColor, Pressable, ScrollView, StyleSheet, Text, View, type GestureResponderEvent } from "react-native";
 
 type MouseDetails = { button?: number; ctrlKey?: boolean; metaKey?: boolean; pageX?: number; pageY?: number };
 import { LegendList } from "@legendapp/list/react-native";
@@ -7,55 +7,69 @@ import type { GitHistoryCommit } from "@legend-apps/diff-parser";
 import type { GitRefDecoration } from "@legend-apps/git-core";
 import { Button } from "@legendapp/spark/ui";
 import { Sidebar, SidebarItem } from "@legendapp/spark/ui/sidebar";
+import { SFSymbol } from "@legendapp/spark/ui/symbol";
 import { DiffPane, type DiffLineTarget } from "./DiffPane";
 import { EmptyState } from "./EmptyState";
 import { commitGitHubUrl, relativeDate, searchScopes, shortOid, type CommitFile, type HistoryState } from "./gitHistory";
 import { pathParts } from "./FileRow";
+import { folderItem, useFileList } from "./fileList";
+import { useDensity, usePanelOptions, useThemeTokens } from "./settings/panelOptions";
+import type { PanelOptions } from "./settings/schema";
+import { defaultSettings } from "./settings/defaults";
+import { densityHeights, type ResolvedTheme } from "./settings/theme";
 
-export const historyRowHeight = 44;
-export const graphLaneWidth = 12;
-/** The native layout folds lanes past this column into it. */
-export const graphMaxLanes = 12;
-const lineWidth = 2;
+type CommitListOptions = PanelOptions["commitList"];
+type ColumnId = CommitListOptions["columns"][number]["id"];
+const defaultGraph = defaultSettings.panels.commitList.graph;
+/** The default graph lane cap (`panels.commitList.graph.maxLanes`); lanes past it fold into the overflow column. */
+export const graphMaxLanes = defaultGraph.maxLanes;
 const nodeSize = 9;
-const middle = historyRowHeight / 2;
-// Concrete macOS system colors per appearance: React Native resolves only some PlatformColor names on
-// macOS, and an unresolved one draws nothing (systemIndigoColor did). The last entry marks the overflow column.
-export const laneColors = {
-  light: ["#007AFF", "#AF52DE", "#FF2D55", "#FF9500", "#28CD41", "#30B0C7", "#5856D6", "#A2845E", "#FF3B30", "#FFCC00", "#00000042"],
-  dark: ["#0A84FF", "#BF5AF2", "#FF375F", "#FF9F0A", "#32D74B", "#40C8E0", "#5E5CE6", "#AC8E68", "#FF453A", "#FFD60A", "#FFFFFF40"],
-};
+// Concrete macOS system colors per appearance (the defaults' `theme.<appearance>.lanes`): React Native resolves only
+// some PlatformColor names on macOS, and an unresolved one draws nothing. The last entry marks the overflow column.
+export const laneColors = { light: defaultSettings.theme.light.lanes, dark: defaultSettings.theme.dark.lanes };
 type LanePalette = readonly string[];
-const laneX = (column: number) => column * graphLaneWidth + graphLaneWidth / 2;
-/** A lane's color: one of the palette's lane colors by index, or the overflow color past the cap. */
-export const laneColor = (palette: LanePalette, column: number, color: number) => palette[column >= graphMaxLanes ? palette.length - 1 : color % (palette.length - 1)]!;
+
+/** Everything the graph cells draw with. One object per list, new only when one of these changes (spec §7 item 4). */
+export type GraphStyle = Readonly<{ laneWidth: number; lineWidth: number; nodeStyle: "dot" | "ring"; maxLanes: number; colorBy: "lane" | "branch"; rowHeight: number; palette: LanePalette }>;
+export const graphStyle = (graph: CommitListOptions["graph"], rowHeight: number, palette: LanePalette): GraphStyle =>
+  ({ laneWidth: graph.laneWidth, lineWidth: graph.lineWidth, nodeStyle: graph.nodeStyle, maxLanes: graph.maxLanes, colorBy: graph.colorBy, rowHeight, palette });
+
+/**
+ * A lane's color: past the cap the overflow color (the palette's last), else a lane color by the lane's column
+ * (`colorBy: "lane"`) or by the branch color index the graph layout assigned (`"branch"`, kept along a branch).
+ */
+export const laneColor = (palette: LanePalette, column: number, color: number, maxLanes = graphMaxLanes, colorBy: "lane" | "branch" = "branch") =>
+  palette[column >= maxLanes ? palette.length - 1 : (colorBy === "lane" ? column : color) % (palette.length - 1)]!;
 
 /** Columns the graph needs for these rows (at most the cap plus its overflow column). */
-export function graphColumns(commits: readonly GitHistoryCommit[]) {
+export function graphColumns(commits: readonly GitHistoryCommit[], maxLanes = graphMaxLanes) {
   let columns = 0;
   for (const commit of commits) {
     columns = Math.max(columns, commit.lane + 1);
     for (let index = 0; index < commit.edges.length; index += 3) columns = Math.max(columns, commit.edges[index]! + 1, commit.edges[index + 1]! + 1);
   }
-  return Math.min(columns, graphMaxLanes + 1);
+  return Math.min(columns, maxLanes + 1);
 }
 
 /**
  * One row's slice of the commit graph: lines enter at the top edge and leave at the bottom edge at
  * their lane, and bend into the commit's node with a rounded corner.
  */
-export const GraphCell = memo(function GraphCell({ commit, columns, palette }: { commit: GitHistoryCommit; columns: number; palette: LanePalette }) {
+export const GraphCell = memo(function GraphCell({ commit, columns, graph }: { commit: GitHistoryCommit; columns: number; graph: GraphStyle }) {
+  const { laneWidth, lineWidth, rowHeight, palette, maxLanes, colorBy } = graph;
+  const laneX = (column: number) => column * laneWidth + laneWidth / 2;
+  const middle = rowHeight / 2;
   const node = laneX(commit.lane);
   const segments = [];
   for (let index = 0; index < commit.edges.length; index += 3) {
     const top = commit.edges[index]!, bottom = commit.edges[index + 1]!;
     const column = top >= 0 ? top : bottom;
-    const color = laneColor(palette, column, commit.edges[index + 2]!);
+    const color = laneColor(palette, column, commit.edges[index + 2]!, maxLanes, colorBy);
     const x = laneX(column);
     const key = `${top}:${bottom}`;
     if (top === bottom || column === commit.lane) {
       const y = top === bottom ? 0 : top >= 0 ? 0 : middle;
-      segments.push(<View key={key} style={[styles.line, { left: x - lineWidth / 2, top: y, height: top === bottom ? historyRowHeight : middle, backgroundColor: color }]} />);
+      segments.push(<View key={key} style={[styles.line, { left: x - lineWidth / 2, top: y, width: lineWidth, height: top === bottom ? rowHeight : middle, backgroundColor: color }]} />);
       continue;
     }
     const right = x > node;
@@ -68,12 +82,12 @@ export const GraphCell = memo(function GraphCell({ commit, columns, palette }: {
         : { top: middle - lineWidth / 2, height: middle + lineWidth, borderTopWidth: lineWidth, [right ? "borderRightWidth" : "borderLeftWidth"]: lineWidth, [right ? "borderTopRightRadius" : "borderTopLeftRadius"]: corner },
     }]} />);
   }
-  const color = laneColor(palette, commit.lane, commit.color);
-  const merge = commit.parents.length > 1;
-  return <View style={[styles.graph, { width: columns * graphLaneWidth }]} accessible={false} importantForAccessibility="no-hide-descendants">
+  const color = laneColor(palette, commit.lane, commit.color, maxLanes, colorBy);
+  const hollow = graph.nodeStyle === "ring" || commit.parents.length > 1;
+  return <View style={[styles.graph, { width: columns * laneWidth, height: rowHeight }]} accessible={false} importantForAccessibility="no-hide-descendants">
     {segments}
-    <View style={[styles.node, { left: node - nodeSize / 2, borderColor: color, backgroundColor: merge ? PlatformColor("controlBackgroundColor") : color }]} />
-    {commit.lane >= graphMaxLanes ? <Text style={[styles.overflow, { left: laneX(graphMaxLanes) + nodeSize / 2 }]}>…</Text> : null}
+    <View style={[styles.node, { left: node - nodeSize / 2, top: middle - nodeSize / 2, borderWidth: Math.max(1.5, lineWidth), borderColor: color, backgroundColor: hollow ? PlatformColor("controlBackgroundColor") : color }]} />
+    {commit.lane >= maxLanes ? <Text style={[styles.overflow, { top: middle - 8, left: laneX(maxLanes) + nodeSize / 2 }]}>…</Text> : null}
   </View>;
 });
 
@@ -88,6 +102,8 @@ export type HistoryActions = {
   /** Right-click on a changed file of the selected commit, in window coordinates. */
   fileContextMenu(path: string, position: { x: number; y: number }): void;
   closeFileHistory(): void;
+  /** Right-click on the column titles: the column menu for these (effective) columns, in window coordinates. */
+  columnMenu?(columns: PanelOptions["commitList"]["columns"], position: { x: number; y: number }): void;
   /** Command-click: compares the selected commit with this one. */
   compare(oid: string): void;
   swapCompare(): void;
@@ -103,23 +119,92 @@ export type BlameTarget = DiffLineTarget & { source: string };
 type RowCommit = Pick<GitHistoryCommit, "oid" | "summary" | "authorName" | "time"> & Partial<Pick<GitHistoryCommit, "lane" | "color" | "edges" | "parents">> & { path?: string };
 
 const refOrder = { branch: 0, remote: 1, tag: 2 } as const;
+const refSymbols = { branch: "arrow.triangle.branch", remote: "cloud", tag: "tag" } as const;
 
-/** Ref names as plain text after the subject ("main, origin/main, v1.0"); the current branch is in label color, semibold. */
-function RefNames({ refs, currentBranch, selected }: { refs: GitRefDecoration[]; currentBranch: string | null; selected: boolean }) {
+/** The refs a commit list shows: remote branches and tags only when its options say so. */
+export function visibleRefs(refs: ReadonlyMap<string, GitRefDecoration[]>, options: Pick<CommitListOptions, "showRemoteRefs" | "showTags" | "refs">): ReadonlyMap<string, GitRefDecoration[]> {
+  if (options.refs === "hidden") return new Map();
+  if (options.showRemoteRefs && options.showTags) return refs;
+  const out = new Map<string, GitRefDecoration[]>();
+  for (const [oid, list] of refs) {
+    const kept = list.filter(ref => (options.showRemoteRefs || ref.kind !== "remote") && (options.showTags || ref.kind !== "tag"));
+    if (kept.length) out.set(oid, kept);
+  }
+  return out;
+}
+
+/** A commit time (seconds) in the list's date format. */
+export function formatCommitDate(seconds: number, format: CommitListOptions["dateFormat"], now = Date.now()) {
+  const date = new Date(seconds * 1000);
+  if (format === "relative") return relativeDate(seconds, now);
+  if (format === "iso") return date.toISOString().replace(/\.\d{3}Z$/, "Z");
+  return date.toLocaleString(undefined, format === "short" ? { dateStyle: "short" } : { dateStyle: "medium", timeStyle: "short" });
+}
+
+/**
+ * Ref names: plain text ("main, origin/main, v1.0", the current branch in label color, semibold), or with
+ * `refStyle: "tinted"` each name in its theme ref color after a small SF Symbol (spec D4: no capsules).
+ */
+function RefNames({ refs, currentBranch, selected, tinted, colors, column }: { refs: GitRefDecoration[]; currentBranch: string | null; selected: boolean; tinted: boolean; colors: ResolvedTheme["refs"]; column: boolean }) {
   const sorted = [...refs].sort((a, b) => refOrder[a.kind] - refOrder[b.kind] || a.name.localeCompare(b.name));
-  return <Text style={[styles.refs, selected && styles.textSelected]} numberOfLines={1}>
-    {sorted.map((ref, index) => <Text key={`${ref.kind}:${ref.name}`} style={ref.kind === "branch" && ref.name === currentBranch ? [styles.currentRef, selected && styles.textSelected] : undefined}>
+  const current = (ref: GitRefDecoration) => ref.kind === "branch" && ref.name === currentBranch;
+  if (tinted) {
+    // Inline, refs give way to the subject (at most half the row); in the refs column they have the column.
+    return <View style={[styles.tintedRefs, column && styles.refsColumn]}>
+      {sorted.map(ref => {
+        const color = selected ? undefined : current(ref) ? colors.head : ref.kind === "branch" ? colors.localBranch : ref.kind === "remote" ? colors.remoteBranch : colors.tag;
+        return <View key={`${ref.kind}:${ref.name}`} style={styles.tintedRef}>
+          <SFSymbol name={refSymbols[ref.kind]} size={10} color={color ?? "#FFFFFF"} />
+          <Text style={[styles.refName, color ? { color } : styles.textSelected, current(ref) && styles.currentWeight]} numberOfLines={1}>{ref.name}</Text>
+        </View>;
+      })}
+    </View>;
+  }
+  return <Text style={[styles.refs, column && styles.refsColumn, selected && styles.textSelected]} numberOfLines={1}>
+    {sorted.map((ref, index) => <Text key={`${ref.kind}:${ref.name}`} style={current(ref) ? [styles.currentRef, selected && styles.textSelected] : undefined}>
       {index ? ", " : ""}{ref.name}
     </Text>)}
   </Text>;
 }
 
-const CommitRow = memo(function CommitRow({ commit, columns, palette, path, selected, refs, currentBranch, onSelect, onCompare, onContextMenu }: {
-  commit: RowCommit; columns: number; palette: LanePalette; path?: string; selected: boolean; refs: GitRefDecoration[] | undefined; currentBranch: string | null;
+/** What every row of one list shares: columns, graph, ref and date options. New only when one of them changes. */
+type RowLayout = Readonly<{
+  columns: readonly { id: ColumnId; width?: number }[]; graph: GraphStyle; graphColumns: number;
+  refs: CommitListOptions["refs"]; tinted: boolean; refColors: ResolvedTheme["refs"]; dateFormat: CommitListOptions["dateFormat"];
+}>;
+
+/** A column's width when the settings give none (the subject flexes; the graph fits its lanes). */
+const defaultWidths: Partial<Record<ColumnId, number>> = { refs: 160, author: 140, committer: 140, date: 120, sha: 64 };
+
+/** The visible columns in display order; the subject always shows (it is the row's flexible column). */
+export function visibleColumns(columns: CommitListOptions["columns"]) {
+  const shown = columns.filter(column => column.visible !== false);
+  return shown.some(column => column.id === "subject") ? shown : [...shown, { id: "subject" as const }];
+}
+
+const CommitRow = memo(function CommitRow({ commit, layout, path, selected, refs, currentBranch, onSelect, onCompare, onContextMenu }: {
+  commit: RowCommit; layout: RowLayout; path?: string; selected: boolean; refs: GitRefDecoration[] | undefined; currentBranch: string | null;
   onSelect: (oid: string) => void; onCompare: (oid: string) => void; onContextMenu: (oid: string, position: { x: number; y: number }) => void;
 }) {
+  const refNames = refs?.length ? <RefNames refs={refs} currentBranch={currentBranch} selected={selected} tinted={layout.tinted} colors={layout.refColors} column={layout.refs === "column"} /> : null;
+  const secondary = [styles.secondary, selected && styles.textSelected];
+  const cell = (id: ColumnId, width: number | undefined): ReactNode => {
+    switch (id) {
+      case "graph": return layout.graphColumns ? <View key={id} style={[styles.cell, { width: width ?? layout.graphColumns * layout.graph.laneWidth }]}>
+        <GraphCell commit={commit as GitHistoryCommit} columns={layout.graphColumns} graph={layout.graph} />
+      </View> : null;
+      case "refs": return <View key={id} style={[styles.cell, { width: width ?? defaultWidths.refs }]}>{layout.refs === "column" ? refNames : null}</View>;
+      case "subject": return <View key={id} style={[styles.subjectCell, width === undefined ? styles.flexible : { width }]}>
+        {layout.refs === "inline" ? refNames : null}
+        <Text style={[styles.summary, selected && styles.textSelected]} numberOfLines={1}>{commit.summary || "(no message)"}</Text>
+      </View>;
+      case "author": case "committer": return <Text key={id} style={[...secondary, { width: width ?? defaultWidths[id] }]} numberOfLines={1}>{commit.path && commit.path !== path ? `${commit.authorName} · ${commit.path}` : commit.authorName}</Text>;
+      case "date": return <Text key={id} style={[...secondary, { width: width ?? defaultWidths.date }]} numberOfLines={1}>{formatCommitDate(commit.time, layout.dateFormat)}</Text>;
+      case "sha": return <Text key={id} style={[styles.sha, selected && styles.textSelected, { width: width ?? defaultWidths.sha }]} numberOfLines={1}>{shortOid(commit.oid)}</Text>;
+    }
+  };
   return <Pressable accessibilityRole="button" accessibilityLabel={`${commit.summary}, ${shortOid(commit.oid)}${refs?.length ? `, ${refs.map(ref => ref.name).join(", ")}` : ""}`} accessibilityState={{ selected }}
-    style={[styles.row, selected && styles.rowSelected]}
+    style={[styles.row, { height: layout.graph.rowHeight }, selected && styles.rowSelected]}
     onPress={event => {
       const mouse = event.nativeEvent as MouseDetails;
       if (mouse.ctrlKey) return;
@@ -131,32 +216,72 @@ const CommitRow = memo(function CommitRow({ commit, columns, palette, path, sele
       const mouse = event.nativeEvent as MouseDetails;
       if (mouse.button === 2 || mouse.ctrlKey) onContextMenu(commit.oid, { x: mouse.pageX ?? 0, y: mouse.pageY ?? 0 });
     }}>
-    {columns ? <GraphCell commit={commit as GitHistoryCommit} columns={columns} palette={palette} /> : null}
-    <View style={styles.rowText}>
-      <View style={styles.rowLine}>
-        <Text style={[styles.summary, selected && styles.textSelected]} numberOfLines={1}>{commit.summary || "(no message)"}</Text>
-        {refs?.length ? <RefNames refs={refs} currentBranch={currentBranch} selected={selected} /> : null}
-      </View>
-      <View style={styles.rowLine}>
-        <Text style={[styles.sha, selected && styles.textSelected]}>{shortOid(commit.oid)}</Text>
-        <Text style={[styles.meta, selected && styles.textSelected]} numberOfLines={1}>{commit.path && commit.path !== path ? `${commit.authorName} · ${commit.path}` : commit.authorName}</Text>
-        <Text style={[styles.date, selected && styles.textSelected]} numberOfLines={1}>{relativeDate(commit.time)}</Text>
-      </View>
-    </View>
+    {layout.columns.map(column => cell(column.id, column.width))}
   </Pressable>;
 });
+
+export const columnTitles: Record<ColumnId, string> = { graph: "Graph", refs: "Branches and Tags", subject: "Description", author: "Author", committer: "Committer", date: "Date", sha: "Commit" };
+const allColumns = Object.keys(columnTitles) as ColumnId[];
+
+/** The commit list header's context menu: every column with a checkmark when shown (the subject always is), then Reset Columns. */
+export function columnMenuItems(columns: CommitListOptions["columns"]) {
+  const shown = new Set(visibleColumns(columns).map(column => column.id));
+  return [
+    ...allColumns.map(id => ({ type: "checkbox" as const, id: `column:${id}`, label: columnTitles[id], checked: shown.has(id), disabled: id === "subject" })),
+    { type: "separator" as const },
+    { type: "action" as const, id: "column:reset", label: "Reset Columns" },
+  ];
+}
+
+/** The columns after a header menu choice: a listed column toggles in place, an unlisted one is added at the end; Reset is undefined (back to the preset's). */
+export function applyColumnMenu(columns: CommitListOptions["columns"], itemId: string): CommitListOptions["columns"] | undefined {
+  if (itemId === "column:reset") return undefined;
+  const id = itemId.slice("column:".length) as ColumnId;
+  if (id === "subject" || !allColumns.includes(id)) return columns;
+  const at = columns.findIndex(column => column.id === id);
+  if (at < 0) return [...columns, { id }];
+  return columns.map((column, index) => {
+    if (index !== at) return column;
+    const { visible, ...rest } = column;
+    return visible === false ? rest : { ...rest, visible: false };
+  });
+}
+
+/** The column titles; right-click opens the column menu (`actions.columnMenu`), which edits the user settings. */
+function ColumnHeader({ layout, columns, onMenu }: { layout: RowLayout; columns: CommitListOptions["columns"]; onMenu?: HistoryActions["columnMenu"] }) {
+  const width = (id: ColumnId, own: number | undefined) => own ?? (id === "graph" ? layout.graphColumns * layout.graph.laneWidth : defaultWidths[id]);
+  return <Pressable style={styles.columnHeader} accessibilityRole="header" accessibilityLabel="Columns"
+    onTouchEnd={(event: GestureResponderEvent) => {
+      const mouse = event.nativeEvent as MouseDetails;
+      if (mouse.button === 2 || mouse.ctrlKey) onMenu?.(columns, { x: mouse.pageX ?? 0, y: mouse.pageY ?? 0 });
+    }}>
+    {layout.columns.map(({ id, width: own }) => id === "graph" && !layout.graphColumns ? null
+      : <Text key={id} style={[styles.columnTitle, id === "subject" && own === undefined ? styles.flexible : { width: width(id, own) }]} numberOfLines={1}>{columnTitles[id]}</Text>)}
+  </Pressable>;
+}
 
 /** History's list column: the commit list with its graph, one file's history, or the unborn/loading state. */
 /** `memory` keeps the scroll offset across a remount (the layout moving the pane), by panel instance id. */
 export function HistoryList({ history, actions, memory }: { history: HistoryState; actions: HistoryActions; memory?: { key?: string; scrollOffset: number } }) {
   const { commits, refs, selectedOid, currentBranch, file, search, compare, range } = history;
+  const options = usePanelOptions("commitList");
+  const density = useDensity(options.density);
+  const palette = useThemeTokens("lanes");
+  const refColors = useThemeTokens("refs");
   const onSelect = useCallback((oid: string) => actions.select(oid), [actions]);
   const onCompare = useCallback((oid: string) => actions.compare(oid), [actions]);
   const onContextMenu = useCallback((oid: string, position: { x: number; y: number }) => actions.contextMenu(oid, position), [actions]);
-  const columns = useMemo(() => graphColumns(commits), [commits]);
-  const palette = laneColors[useColorScheme() === "dark" ? "dark" : "light"];
-  // A new object whenever selection, refs, the graph width or the appearance change, so recycled rows redraw.
-  const extraData = useMemo(() => ({ selectedOid, refs, currentBranch, columns, palette, compare }), [selectedOid, refs, currentBranch, columns, palette, compare]);
+  const rowHeight = densityHeights[density].row;
+  const columns = useMemo(() => graphColumns(commits, options.graph.maxLanes), [commits, options.graph.maxLanes]);
+  const graph = useMemo(() => graphStyle(options.graph, rowHeight, palette), [options.graph, rowHeight, palette]);
+  const shownRefs = useMemo(() => visibleRefs(refs, options), [refs, options.refs, options.showRemoteRefs, options.showTags]); // eslint-disable-line react-hooks/exhaustive-deps -- only these options filter
+  const filtering = !!(search ?? file ?? range);
+  const layout = useMemo<RowLayout>(() => ({
+    columns: visibleColumns(options.columns), graph, graphColumns: filtering ? 0 : columns,
+    refs: options.refs, tinted: options.refStyle === "tinted", refColors, dateFormat: options.dateFormat,
+  }), [options.columns, graph, filtering, columns, options.refs, options.refStyle, refColors, options.dateFormat]);
+  // A new object whenever selection, refs or the row layout change, so recycled rows redraw.
+  const extraData = useMemo(() => ({ selectedOid, shownRefs, currentBranch, layout, compare }), [selectedOid, shownRefs, currentBranch, layout, compare]);
 
   if (history.head?.unborn) return <EmptyState title="No Commits Yet" message="Make the first commit from Changes." />;
   if (!history.head) return history.error ? <Text accessibilityRole="alert" style={styles.error}>{history.error}</Text> : <EmptyState title="Loading History…" />;
@@ -182,6 +307,7 @@ export function HistoryList({ history, actions, memory }: { history: HistoryStat
       <Button style={styles.showAll} onPress={() => actions.closeFileHistory()}>Show All</Button>
     </View> : null}
     {(filter ?? history).error ? <Text accessibilityRole="alert" style={styles.error}>{(filter ?? history).error}</Text> : null}
+    <ColumnHeader layout={layout} columns={options.columns} onMenu={actions.columnMenu} />
     {search?.loading && !search.commits.length ? <EmptyState title="Searching…" />
       : search && !search.commits.length ? search.error ? null : <EmptyState title="No Results" message={`No commit matches in ${scopeLabel!.toLowerCase()}.`} />
       : file?.loading ? <EmptyState title="Loading File History…" />
@@ -189,18 +315,19 @@ export function HistoryList({ history, actions, memory }: { history: HistoryStat
       : range?.loading && !range.commits.length ? <EmptyState title="Loading Commits…" />
       : range && !range.commits.length ? range.error ? null : <EmptyState symbol="checkmark.circle" title="Nothing to Push" message="Every commit is on the upstream already." />
       : <LegendList<RowCommit>
-        key={listId}
+        // Density re-keys the list once: rows have fixed heights, so the list never measures (spec §7 item 6).
+        key={`${listId ?? ""}:${rowHeight}`}
         data={filter ? filter.commits : commits}
         keyExtractor={item => item.oid}
-        estimatedItemSize={historyRowHeight}
-        getFixedItemSize={() => historyRowHeight}
+        estimatedItemSize={rowHeight}
+        getFixedItemSize={() => rowHeight}
         extraData={extraData}
         recycleItems
         onEndReached={() => actions.loadMore()}
         onEndReachedThreshold={2}
         initialScrollOffset={memory?.key === listKey ? memory.scrollOffset : undefined}
         onScroll={memory ? event => { memory.key = listKey; memory.scrollOffset = event.nativeEvent.contentOffset.y; } : undefined}
-        renderItem={({ item }) => <CommitRow commit={item} columns={filter ? 0 : columns} palette={palette} path={file?.path} selected={highlighted(item.oid)} refs={refs.get(item.oid)} currentBranch={currentBranch} onSelect={onSelect} onCompare={onCompare} onContextMenu={onContextMenu} />}
+        renderItem={({ item }) => <CommitRow commit={item} layout={layout} path={file?.path} selected={highlighted(item.oid)} refs={shownRefs.get(item.oid)} currentBranch={currentBranch} onSelect={onSelect} onCompare={onCompare} onContextMenu={onContextMenu} />}
         ListFooterComponent={(filter ?? history).done ? null : <Text style={styles.footer}>Loading more…</Text>}
       />}
   </View>;
@@ -262,12 +389,23 @@ export function CommitFiles({ history, actions }: { history: HistoryState; actio
   if (!source) return <View style={styles.details} />;
   const merge = !compare && (details?.commit?.parents.length ?? 0) > 1;
   if (compare && !source.files.length) return <EmptyState title="No Differences" message="The two commits have the same files." />;
+  return <FileListBody files={source.files} selectedPath={source.selectedPath} heading={`${source.files.length === 1 ? "1 changed file" : `${source.files.length} changed files`}${merge ? " (compared with the first parent)" : ""}`} actions={actions} />;
+}
+
+function FileListBody({ files, selectedPath, heading, actions }: { files: CommitFile[]; selectedPath: string | null; heading: string; actions: HistoryActions }) {
+  const list = useFileList(files, "fileList");
   return <View style={styles.details}>
-    <Text style={styles.filesHeading}>{source.files.length === 1 ? "1 changed file" : `${source.files.length} changed files`}{merge ? " (compared with the first parent)" : ""}</Text>
-    {source.files.length ? <Sidebar style={styles.fill} selectedId={source.selectedPath} onSelectionChange={event => { if (event.id) actions.selectFile(event.id); }} defaultRowHeight={24}>
-      {source.files.map(entry => <SidebarItem key={entry.path} id={entry.path} onContextMenu={event => actions.fileContextMenu(entry.path, event.windowPosition)}>
-        <Text style={styles.file} numberOfLines={1}>{entry.file.oldPath && entry.file.newPath && entry.file.oldPath !== entry.file.newPath ? `${entry.file.oldPath} → ${entry.file.newPath}` : entry.path}</Text>
-      </SidebarItem>)}
+    <Text style={styles.filesHeading}>{heading}</Text>
+    {files.length ? <Sidebar key={list.rowHeight} style={styles.fill} selectedId={selectedPath} onSelectionChange={event => { if (event.id && !event.id.startsWith("folder:")) actions.selectFile(event.id); }} defaultRowHeight={list.rowHeight}>
+      {list.rows.map(row => {
+        if (row.type === "folder") return folderItem(row, list.rowHeight);
+        const { file } = row.entry;
+        const renamed = file.oldPath && file.newPath && file.oldPath !== file.newPath;
+        const label = renamed ? `${file.oldPath} → ${file.newPath}` : list.showFolder ? row.id : pathParts(row.id).name;
+        return <SidebarItem key={row.id} id={row.id} onContextMenu={event => actions.fileContextMenu(row.id, event.windowPosition)}>
+          <Text style={[styles.file, row.indent && styles.fileIndent]} numberOfLines={1}>{label}</Text>
+        </SidebarItem>;
+      })}
     </Sidebar> : null}
   </View>;
 }
@@ -314,24 +452,31 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   error: { padding: 12, fontSize: 13, color: PlatformColor("systemRedColor") },
   footer: { padding: 12, fontSize: 12, textAlign: "center", color: PlatformColor("secondaryLabelColor") },
-  row: { height: historyRowHeight, flexDirection: "row", gap: 6, paddingHorizontal: 8, marginHorizontal: 6, borderRadius: 5 },
-  rowText: { flex: 1, justifyContent: "center", gap: 2 },
-  graph: { height: historyRowHeight },
-  line: { position: "absolute", width: lineWidth },
+  row: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 8, marginHorizontal: 6, borderRadius: 5 },
+  cell: { alignSelf: "stretch", justifyContent: "center", overflow: "hidden" },
+  subjectCell: { flexDirection: "row", alignItems: "center", gap: 6, minWidth: 0 },
+  flexible: { flex: 1 },
+  secondary: { fontSize: 12, color: PlatformColor("secondaryLabelColor") },
+  columnHeader: { flexDirection: "row", alignItems: "center", gap: 8, height: 22, paddingHorizontal: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: PlatformColor("separatorColor") },
+  columnTitle: { fontSize: 11, fontWeight: "500", color: PlatformColor("secondaryLabelColor") },
+  graph: {},
+  line: { position: "absolute" },
   bend: { position: "absolute" },
-  node: { position: "absolute", top: middle - nodeSize / 2, width: nodeSize, height: nodeSize, borderRadius: nodeSize / 2, borderWidth: lineWidth },
-  overflow: { position: "absolute", top: middle - 8, fontSize: 11, color: PlatformColor("tertiaryLabelColor") },
+  node: { position: "absolute", width: nodeSize, height: nodeSize, borderRadius: nodeSize / 2 },
+  overflow: { position: "absolute", fontSize: 11, color: PlatformColor("tertiaryLabelColor") },
+  tintedRefs: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 2, maxWidth: "50%", overflow: "hidden" },
+  tintedRef: { flexDirection: "row", alignItems: "center", gap: 3 },
+  currentWeight: { fontWeight: "600" },
+  refsColumn: { maxWidth: "100%", flexShrink: 1 },
+  refName: { flexShrink: 1, fontSize: 12 },
   heading: { flexDirection: "row", alignItems: "center", gap: 8, height: 44, paddingLeft: 16, paddingRight: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: PlatformColor("separatorColor") },
   headingText: { flex: 1 },
   headingLabel: { fontSize: 12, fontWeight: "600", color: PlatformColor("labelColor") },
   headingFolder: { fontSize: 11, color: PlatformColor("secondaryLabelColor") },
   showAll: { width: 80, height: 24 },
   rowSelected: { backgroundColor: PlatformColor("selectedContentBackgroundColor") },
-  rowLine: { flexDirection: "row", alignItems: "center", gap: 6 },
   summary: { flexShrink: 1, fontSize: 13, color: PlatformColor("labelColor") },
   sha: { fontSize: 11, fontFamily: "Menlo", color: PlatformColor("secondaryLabelColor") },
-  meta: { flex: 1, fontSize: 11, color: PlatformColor("secondaryLabelColor") },
-  date: { fontSize: 11, color: PlatformColor("secondaryLabelColor") },
   textSelected: { color: PlatformColor("alternateSelectedControlTextColor") },
   refs: { flexShrink: 2, maxWidth: "50%", fontSize: 12, color: PlatformColor("secondaryLabelColor") },
   currentRef: { fontWeight: "600", color: PlatformColor("labelColor") },
@@ -350,4 +495,5 @@ const styles = StyleSheet.create({
   body: { marginTop: 6, fontSize: 12, color: PlatformColor("labelColor") },
   filesHeading: { paddingHorizontal: 16, paddingVertical: 6, fontSize: 12, fontWeight: "600", color: PlatformColor("secondaryLabelColor") },
   file: { flex: 1, paddingHorizontal: 8, fontSize: 12, color: PlatformColor("labelColor") },
+  fileIndent: { paddingLeft: 24 },
 });

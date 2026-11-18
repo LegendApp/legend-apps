@@ -1,0 +1,23 @@
+import type { GitSettings } from "./schema";
+import type { SettingsIssue } from "./validate";
+
+const fileListPanels = ["fileList", "unstaged", "staged", "changes"] as const;
+
+/**
+ * Info-level issues for valid settings the app draws differently until a native piece lands: checkboxes (Spark ask
+ * A9) fall back to Stage/Unstage buttons, and the diff rows' fixed heights and single gutter can't wrap or show the
+ * new line numbers alone. Git writes three context lines, so more show three.
+ */
+export function capabilityIssues(settings: GitSettings, file: string): SettingsIssue[] {
+  const issues: SettingsIssue[] = [];
+  const info = (path: string, message: string) => issues.push({ file, path, level: "info", message });
+  for (const panel of fileListPanels) {
+    if (settings.panels[panel].stagingControl === "checkboxes") info(`panels.${panel}.stagingControl`, "Checkboxes need a native checkbox in Spark (ask A9); Stage and Unstage buttons are shown until then.");
+  }
+  const diff = settings.panels.diff;
+  if (diff.wrap) info("panels.diff.wrap", "Wrapped diff lines need variable row heights in the native diff rows; lines are not wrapped yet.");
+  if (diff.lineNumbers === "new") info("panels.diff.lineNumbers", "The diff gutter shows old and new line numbers together; \"new\" shows both until the rows can draw one.");
+  if (diff.contextLines > 3) info("panels.diff.contextLines", "Git's patches have 3 context lines; more than 3 shows 3.");
+  if (diff.ignoreWhitespace === "trailing") info("panels.diff.ignoreWhitespace", "The diff parser ignores all whitespace changes; \"trailing\" ignores all of them.");
+  return issues;
+}

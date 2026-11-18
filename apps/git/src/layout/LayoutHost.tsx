@@ -1,5 +1,6 @@
 import { Fragment, type ReactNode } from "react";
 import { PlatformColor, StyleSheet, View } from "react-native";
+import { PanelInstanceProvider } from "../settings/panelOptions";
 import type { PanelId } from "../settings/schema";
 import { planPanels, type RenderPlan } from "./plan";
 
@@ -21,7 +22,9 @@ function PlanNode({ plan, panels, onFocusPanel }: { plan: RenderPlan; panels: Pa
     return <View style={styles.fill} testID={`panel:${plan.id}`}
       // Capture without claiming the responder: the pane under the pointer becomes the focused pane for Move Pane.
       onStartShouldSetResponderCapture={() => { onFocusPanel?.(plan.id); return false; }}>
-      {panels[plan.panel]?.({ id: plan.id, options: plan.options }) ?? null}
+      <PanelInstanceProvider instance={{ id: plan.id, panel: plan.panel, options: plan.options }}>
+        {panels[plan.panel]?.({ id: plan.id, options: plan.options }) ?? null}
+      </PanelInstanceProvider>
     </View>;
   }
   const row = plan.direction === "row";

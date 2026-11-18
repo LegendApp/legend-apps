@@ -11,13 +11,13 @@ type Entry = { promise: Promise<Loaded>; refs: number; release: ReturnType<typeo
  */
 export function createDiffDocumentCache() {
   const entries = new Map<string, Entry>();
-  const key = (path: string, text: string) => `${path}\0${text}`;
+  const key = (path: string, text: string, ignoreWhitespace: boolean) => `${ignoreWhitespace ? "w" : ""}\0${path}\0${text}`;
   return {
-    acquire(path: string, text: string, maxRows: number): Promise<Loaded> {
-      const id = key(path, text);
+    acquire(path: string, text: string, maxRows: number, ignoreWhitespace = false): Promise<Loaded> {
+      const id = key(path, text, ignoreWhitespace);
       let entry = entries.get(id);
       if (!entry) {
-        const created: Entry = { promise: loadUnifiedDiff(text, path, maxRows), refs: 0, release: null, document: null };
+        const created: Entry = { promise: loadUnifiedDiff(text, path, maxRows, ignoreWhitespace), refs: 0, release: null, document: null };
         created.promise.then(result => { created.document = result.document; }, () => { if (entries.get(id) === created) entries.delete(id); });
         entries.set(id, created);
         entry = created;
@@ -26,8 +26,8 @@ export function createDiffDocumentCache() {
       entry.refs += 1;
       return entry.promise;
     },
-    release(path: string, text: string) {
-      const id = key(path, text), entry = entries.get(id);
+    release(path: string, text: string, ignoreWhitespace = false) {
+      const id = key(path, text, ignoreWhitespace), entry = entries.get(id);
       if (!entry || --entry.refs > 0) return;
       entry.release = setTimeout(() => {
         if (entries.get(id) !== entry || entry.refs > 0) return;

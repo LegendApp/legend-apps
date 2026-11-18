@@ -1,6 +1,7 @@
 import { PlatformColor, StyleSheet, Text, View, useColorScheme } from "react-native";
 import type { GitStatusEntry } from "@legend-apps/git-core";
 import { SFSymbol } from "@legendapp/spark/ui/symbol";
+import { useThemeTokens } from "./settings/panelOptions";
 
 // SFSymbol needs concrete colors: Spark's native view aborts on a PlatformColor. These are the macOS system colors.
 const symbolColors = {
@@ -10,19 +11,21 @@ const symbolColors = {
 export type SymbolColor = keyof typeof symbolColors.light;
 export function useSymbolColor(name: SymbolColor) { return symbolColors[useColorScheme() === "dark" ? "dark" : "light"][name]; }
 
-export type FileStatus = { symbol: string; color: SymbolColor; label: string };
+/** `token` is the theme's `status` color the symbol draws in. */
+export type FileStatus = { symbol: string; token: StatusToken; label: string };
+type StatusToken = "added" | "modified" | "deleted" | "renamed" | "typeChanged" | "untracked" | "conflicted";
 
 const statuses: Record<string, FileStatus> = {
-  M: { symbol: "pencil.circle.fill", color: "orange", label: "modified" },
-  A: { symbol: "plus.circle.fill", color: "green", label: "added" },
-  D: { symbol: "minus.circle.fill", color: "red", label: "deleted" },
-  R: { symbol: "arrow.right.circle.fill", color: "blue", label: "renamed" },
-  C: { symbol: "arrow.right.circle.fill", color: "teal", label: "copied" },
-  T: { symbol: "arrow.triangle.2.circlepath.circle.fill", color: "purple", label: "type changed" },
-  "?": { symbol: "questionmark.circle.fill", color: "gray", label: "untracked" },
+  M: { symbol: "pencil.circle.fill", token: "modified", label: "modified" },
+  A: { symbol: "plus.circle.fill", token: "added", label: "added" },
+  D: { symbol: "minus.circle.fill", token: "deleted", label: "deleted" },
+  R: { symbol: "arrow.right.circle.fill", token: "renamed", label: "renamed" },
+  C: { symbol: "arrow.right.circle.fill", token: "renamed", label: "copied" },
+  T: { symbol: "arrow.triangle.2.circlepath.circle.fill", token: "typeChanged", label: "type changed" },
+  "?": { symbol: "questionmark.circle.fill", token: "untracked", label: "untracked" },
 };
-const conflicted: FileStatus = { symbol: "exclamationmark.triangle.fill", color: "red", label: "conflicted" };
-const changed: FileStatus = { symbol: "circle.fill", color: "gray", label: "changed" };
+const conflicted: FileStatus = { symbol: "exclamationmark.triangle.fill", token: "conflicted", label: "conflicted" };
+const changed: FileStatus = { symbol: "circle.fill", token: "untracked", label: "changed" };
 
 /** The SF Symbol, system color and spoken label for one side of a status entry. */
 export function fileStatus(entry: GitStatusEntry, staged: boolean): FileStatus {
@@ -36,13 +39,14 @@ export function pathParts(path: string) {
   return slash < 0 ? { name: path, folder: "" } : { name: path.slice(slash + 1), folder: path.slice(0, slash) };
 }
 
-export function FileRow({ entry, staged }: { entry: GitStatusEntry; staged: boolean }) {
+/** One status entry: its status symbol in the theme's color, the name, and (with `showFolder`) the folder. */
+export function FileRow({ entry, staged, showFolder = true, indent = false, height = 24 }: { entry: GitStatusEntry; staged: boolean; showFolder?: boolean; indent?: boolean; height?: number }) {
   const status = fileStatus(entry, staged);
-  const color = useSymbolColor(status.color);
+  const color = useThemeTokens("status")[status.token];
   const { name, folder } = pathParts(entry.path);
-  const detail = [folder, entry.originalPath ? `from ${entry.originalPath}` : ""].filter(Boolean).join(" · ");
+  const detail = [showFolder ? folder : "", entry.originalPath ? `from ${entry.originalPath}` : ""].filter(Boolean).join(" · ");
   const conflict = entry.kind === "unmerged" ? `Conflict (${entry.indexStatus}${entry.worktreeStatus})` : "";
-  return <View style={styles.row} accessible accessibilityLabel={[name, status.label, conflict, detail].filter(Boolean).join(", ")}>
+  return <View style={[styles.row, { height }, indent && styles.indent]} accessible accessibilityLabel={[name, status.label, conflict, detail].filter(Boolean).join(", ")}>
     <View style={styles.icon}><SFSymbol name={status.symbol} color={color} size={14} /></View>
     <Text style={styles.name} numberOfLines={1}>{name}</Text>
     {detail ? <Text style={styles.folder} numberOfLines={1} ellipsizeMode="head">{detail}</Text> : null}
@@ -51,7 +55,8 @@ export function FileRow({ entry, staged }: { entry: GitStatusEntry; staged: bool
 }
 
 const styles = StyleSheet.create({
-  row: { height: 24, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 6 },
+  row: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 6 },
+  indent: { paddingLeft: 22 },
   icon: { width: 16, height: 16, alignItems: "center", justifyContent: "center" },
   name: { flexShrink: 0, maxWidth: "70%", fontSize: 13, color: PlatformColor("labelColor") },
   folder: { flex: 1, fontSize: 11, color: PlatformColor("secondaryLabelColor") },

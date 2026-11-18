@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { observable, type Observable } from "@legendapp/state";
 import { presetSettings } from "../settings/presets";
 import { defaultPreset, type GitSettings, type PresetId } from "../settings/schema";
 import { openGitSettings, sparkSettingsIO, type GitSettingsStore } from "../settings/store";
@@ -7,6 +8,8 @@ import { createWindowStateStore, type WindowState, type WindowStateStore } from 
 
 export type WindowLayout = {
   settings: GitSettings;
+  /** The same settings as an observable, for narrow subscriptions (`settings$.panels.diff`); the store's once it is open. */
+  settings$: Observable<GitSettings>;
   base: PresetId;
   /** null until the window's settings are open (and when they could not be opened). */
   store: GitSettingsStore | null;
@@ -29,6 +32,7 @@ export function useWindowLayout(windowId: string, root: string | null): WindowLa
   const [store, setStore] = useState<GitSettingsStore | null>(null);
   const [windowState, setWindowState] = useState<{ store: WindowStateStore | null; initial: WindowState | undefined }>({ store: null, initial: undefined });
   const [documents] = useState(createDiffDocumentCache);
+  const [initial$] = useState(() => observable(presetSettings(defaultPreset)));
   const [memory] = useState(() => {
     const byId = new Map<string, { key?: string; scrollOffset: number }>();
     return (id: string) => { let entry = byId.get(id); if (!entry) byId.set(id, entry = { scrollOffset: 0 }); return entry; };
@@ -69,5 +73,5 @@ export function useWindowLayout(windowId: string, root: string | null): WindowLa
     };
   }, [root]);
 
-  return { ...settings, store, windowState: windowState.store, initialState: windowState.initial, documents, memory };
+  return { ...settings, settings$: store?.settings$ ?? initial$, store, windowState: windowState.store, initialState: windowState.initial, documents, memory };
 }

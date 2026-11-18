@@ -1,7 +1,7 @@
 import { useCallback, useContext, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type ReactElement, type ReactNode } from "react";
-import { FlatList, PlatformColor, Pressable, ScrollView, StyleSheet, Text, View, useColorScheme, type GestureResponderEvent } from "react-native";
+import { FlatList, PlatformColor, Pressable, ScrollView, StyleSheet, Text, View, type GestureResponderEvent } from "react-native";
 import type { ConflictRegion, ConflictRegionSide } from "@legend-apps/git-core";
-import { DiffNativeRow, DiffNativeRowConfig, diffUnifiedChangeBarWidth, diffUnifiedLineNumberWidth, diffUnifiedMarkerWidth, getDiffRowPalette, type DiffDocument, type DiffRenderRow } from "@legend-apps/diff-parser";
+import { DiffNativeRow, DiffNativeRowConfig, parseUnifiedPatch, type DiffDocument, type DiffRenderRow, type DiffSideBySideProjection } from "@legend-apps/diff-parser";
 import { createDiffDocumentCache, DiffDocumentCacheContext } from "./layout/diffDocuments";
 import { unifiedPatchHunkKeys, unifiedPatchLineKey } from "@legend-apps/diff-parser/src/unifiedPatch";
 import { Button } from "@legendapp/spark/ui";
@@ -11,12 +11,19 @@ import { draftDirty, resultLineKinds, type ResultDraft, type ResultDraftStore, t
 import { rowAnchorKeys } from "./reviewThreads";
 import type { ChangesState } from "./gitChanges";
 import { pathParts, useSymbolColor } from "./FileRow";
+import { diffConfigProps, sideBySideColumns, sideBySideLine, withContextLines } from "./diffOptions";
+import { useAppearance, useCodeFont, useDensity, usePanelOptions, useThemeTokens } from "./settings/panelOptions";
 
 const rowHeight = 20;
 const fontFamily = "Menlo";
 const changeTypeKind: Record<number, "+" | "-"> = { 1: "+", 2: "-" };
 
-export type DiffPaneItem = { type: "hunk"; hunkIndex: number } | { type: "line"; row: DiffRenderRow; key: string | null };
+/**
+ * A hunk header, or one list row: a unified line, or a side-by-side pair whose `keys` are both sides' changed lines
+ * (`row` is the side a click blames: the new one when it has one). `itemId`/`rowIndex` address the native row.
+ */
+export type DiffPaneItem = { type: "hunk"; hunkIndex: number } | { type: "line"; row: DiffRenderRow; key: string | null; keys?: readonly string[]; itemId?: number; rowIndex?: number };
+const itemKeys = (item: DiffPaneItem | undefined) => item?.type !== "line" ? [] : item.keys ?? (item.key ? [item.key] : []);
 
 /** A line of the diff: its side (removed lines are on the old side) and 1-based number there, and the file's path on that side. */
 export type DiffLineTarget = { side: "old" | "new"; line: number; path: string };
@@ -52,20 +59,33 @@ export function diffPaneItems(rows: readonly DiffRenderRow[]): DiffPaneItem[] {
   return items;
 }
 
+/** The side-by-side projection's rows as pane items, with a header before each hunk (file headers are dropped). */
+export function sideBySideItems(projection: Pick<DiffSideBySideProjection, "rowCount" | "getPlainRows" | "getItemId">): DiffPaneItem[] {
+  const items: DiffPaneItem[] = [];
+  let hunk = -1;
+  projection.getPlainRows(0, projection.rowCount).forEach((row, listIndex) => {
+    if (row.kind === "file-header" || row.hunkIndex < 0) return;
+    if (row.hunkIndex !== hunk) items.push({ type: "hunk", hunkIndex: hunk = row.hunkIndex });
+    const { primary, keys } = sideBySideLine(row);
+    items.push({ type: "line", row: primary, key: keys[0] ?? null, keys, itemId: projection.getItemId(listIndex), rowIndex: listIndex });
+  });
+  return items;
+}
+
 /** Click selects a changed line, Shift-click extends from the anchor, Command-click toggles. */
 export function nextLineSelection(items: readonly DiffPaneItem[], selected: ReadonlySet<string>, anchor: number | null, index: number, modifiers: { shift?: boolean; meta?: boolean }) {
-  const item = items[index];
-  if (item?.type !== "line" || !item.key) return { selected, anchor };
+  const keys = itemKeys(items[index]);
+  if (!keys.length) return { selected, anchor };
   if (modifiers.shift && anchor !== null) {
-    const keys = items.slice(Math.min(anchor, index), Math.max(anchor, index) + 1).flatMap(entry => entry.type === "line" && entry.key ? [entry.key] : []);
-    return { selected: new Set(keys), anchor };
+    return { selected: new Set(items.slice(Math.min(anchor, index), Math.max(anchor, index) + 1).flatMap(itemKeys)), anchor };
   }
   if (modifiers.meta) {
     const next = new Set(selected);
-    if (!next.delete(item.key)) next.add(item.key);
+    const on = keys.some(key => next.has(key));
+    for (const key of keys) { if (on) next.delete(key); else next.add(key); }
     return { selected: next, anchor: index };
   }
-  return { selected: new Set([item.key]), anchor: index };
+  return { selected: new Set(keys), anchor: index };
 }
 
 /** The item indexes from the range anchor to the cursor, kept inside the cursor's hunk (a GitHub range can't span hunks). */
@@ -200,7 +220,12 @@ export function DiffPane({ patch, disabled, readOnly = false, accessory, onApply
   /** A conflicted text file: its editable Result, kept in `store` and written by `onSave`. */
   result?: { store: ResultDraftStore; onSave: (draft: ResultDraft) => Promise<boolean> };
 }) {
-  const appearance = useColorScheme() === "dark" ? "dark" : "light";
+  const appearance = useAppearance();
+  // Only the diff's options, density, colors and font: a change elsewhere in the settings doesn't render the pane.
+  const options = usePanelOptions("diff");
+  const density = useDensity(options.density);
+  const diffTokens = useThemeTokens("diff");
+  const font = useCodeFont();
   const [loaded, setLoaded] = useState<{ text: string; document: DiffDocument; rows: DiffRenderRow[] } | null>(null);
   // The window's documents, so a pane the layout moves reuses its document; a pane outside a window owns its own.
   const shared = useContext(DiffDocumentCacheContext);
@@ -218,6 +243,12 @@ export function DiffPane({ patch, disabled, readOnly = false, accessory, onApply
   const verb = staged ? "Unstage" : "Stage";
   const discard = staged || readOnly ? undefined : onDiscard;
   const linesLabel = (count: number) => count === 1 ? "1 selected line" : `${count} selected lines`;
+  // What the rows show: Git's patch with fewer context lines when asked; staging still applies to Git's patch.
+  const shown = useMemo(() => withContextLines(patch.text, options.contextLines), [patch.text, options.contextLines]);
+  const shownFile = useMemo(() => shown === patch.text ? patch.file : parseUnifiedPatch(shown)[0] ?? patch.file, [shown, patch.text, patch.file]);
+  const ignoreWhitespace = options.ignoreWhitespace !== "none";
+  const columns = sideBySideColumns(options);
+  const [projection, setProjection] = useState<DiffSideBySideProjection | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -227,26 +258,36 @@ export function DiffPane({ patch, disabled, readOnly = false, accessory, onApply
     lineChange.current?.(null);
     setError(null);
     if (!patch.file?.hunks.length) { setLoaded(null); return; }
-    const { path, text } = patch;
-    documents.acquire(path, text, 10_000).then(result => {
+    const { path } = patch, text = shown;
+    documents.acquire(path, text, 10_000, ignoreWhitespace).then(result => {
       if (!cancelled) setLoaded({ text, document: result.document, rows: result.document.getPlainRows(0, result.document.rowCount) });
     }, (reason: unknown) => { if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason)); });
-    return () => { cancelled = true; documents.release(path, text); };
-  }, [patch.text, patch.path, patch.section]); // eslint-disable-line react-hooks/exhaustive-deps -- patch.file is derived from patch.text
+    return () => { cancelled = true; documents.release(path, text, ignoreWhitespace); };
+  }, [shown, patch.path, patch.section, ignoreWhitespace]); // eslint-disable-line react-hooks/exhaustive-deps -- patch.file is derived from patch.text
   useEffect(() => () => { lineChange.current?.(null); }, []);
+  // Side by side reads the document through its own projection, released with the document or the mode.
+  useEffect(() => {
+    if (!columns || !loaded) { setProjection(null); return; }
+    const created = loaded.document.createSideBySideProjection([]);
+    setProjection(created);
+    return () => { setProjection(null); created.releaseNativeResources(); };
+  }, [columns, loaded]);
 
-  const items = useMemo(() => loaded?.text === patch.text ? diffPaneItems(loaded.rows) : [], [loaded, patch.text]);
+  const items = useMemo(() => loaded?.text !== shown ? [] : columns ? projection ? sideBySideItems(projection) : [] : diffPaneItems(loaded.rows), [loaded, shown, columns, projection]);
   const range = useMemo(() => lineRange(items, rangeAnchor, cursor, patch), [items, rangeAnchor, cursor]); // eslint-disable-line react-hooks/exhaustive-deps -- patch follows items
   useEffect(() => { rangeChange.current?.(range); }, [range]);
   useEffect(() => () => rangeChange.current?.(null), []);
   const bounds = useMemo(() => rangeBounds(items, rangeAnchor, cursor), [items, rangeAnchor, cursor]);
   const inRange = (index: number) => !!bounds && index >= bounds.from && index <= bounds.to;
-  const palette = getDiffRowPalette(appearance);
   // Per pane: two panes can share one cached document, but each needs its own native config entry.
   const paneId = useId();
-  const configId = `git:${paneId}:${loaded?.document.documentId ?? 0}:unified`;
-  const foregroundColor = appearance === "dark" ? "#e6edf3" : "#1f2328";
-  const mutedColor = appearance === "dark" ? "#8b949e" : "#6e7781";
+  const config = useMemo(() => diffConfigProps({ options, density, tokens: diffTokens, font, appearance }), [options, density, diffTokens, font, appearance]);
+  const projectionId = columns ? projection?.projectionId ?? 0 : 0;
+  const configId = `git:${paneId}:${loaded?.document.documentId ?? 0}:${config.presentation}:${projectionId}`;
+  const hunkActions = options.hunkActions === "header";
+  const hunkTitleStyle = useMemo(() => [styles.hunkTitle, { fontFamily: font.family, color: diffTokens.hunkHeader }], [font.family, diffTokens.hunkHeader]);
+  const selectedStyle = useMemo(() => [styles.selected, { backgroundColor: diffTokens.selection }], [diffTokens.selection]);
+  const lineStyle = useMemo(() => [styles.row, { height: config.rowHeight }], [config.rowHeight]);
   const selected = selection.selected;
   const moveCursor = (index: number) => {
     const item = items[index];
@@ -265,6 +306,7 @@ export function DiffPane({ patch, disabled, readOnly = false, accessory, onApply
     discardRef.current = () => { if (!disabled && selected.size) discard?.(selected, patch.text, linesLabel(selected.size)); };
     return () => { discardRef.current = null; };
   });
+  const isSelected = (item: DiffPaneItem) => itemKeys(item).some(key => selected.has(key));
   const regions = patch.conflicted && onPickRegion ? patch.regions : null;
   const twoTextSides = !!patch.conflict && patch.conflict.ours && patch.conflict.theirs && !patch.conflict.binary;
   const message = patch.conflicted ? regions?.regions?.length ? null
@@ -272,7 +314,7 @@ export function DiffPane({ patch, disabled, readOnly = false, accessory, onApply
     : "This file has merge conflicts. Use one side or both, or resolve them in the file, then Mark Resolved."
     : patch.file?.binary ? readOnly ? "Binary file." : `Binary file. ${verb}${discard ? " or discard" : ""} the whole file from the list.`
     : !patch.file ? "No changes to show."
-    : !patch.file.hunks.length ? readOnly ? "No content changes (mode or rename only)." : `No content changes. ${verb} the whole file to include mode or rename changes.`
+    : !patch.file.hunks.length || !shownFile?.hunks.length ? readOnly ? "No content changes (mode or rename only)." : `No content changes. ${verb} the whole file to include mode or rename changes.`
     : error;
 
   const markerColor = useSymbolColor("blue");
@@ -301,25 +343,23 @@ export function DiffPane({ patch, disabled, readOnly = false, accessory, onApply
     </View> : message ? <Text style={styles.message}>{message}</Text> : regions?.regions ? regionList(regions) : loaded && <>
       <DiffNativeRowConfig
         style={styles.config} collapsable={false} configId={configId} configVersion={appearance === "dark" ? 2 : 1} documentId={loaded.document.documentId}
-        presentation="unified" projectionId={0} collapsedFileIndexes="" rowHeight={rowHeight} fontFamily={fontFamily} fontSize={12}
-        foregroundColor={foregroundColor} mutedColor={mutedColor} dividerColor="transparent"
-        addAccentColor={palette.addAccent} addBackgroundColor={palette.addBackground} removeAccentColor={palette.removeAccent} removeBackgroundColor={palette.removeBackground}
-        changeBarWidth={diffUnifiedChangeBarWidth} lineNumberWidth={diffUnifiedLineNumberWidth} markerWidth={diffUnifiedMarkerWidth}
-        highlightChangedCharacters showWhitespaceCharacters={false} syntaxHighlightingEnabled={false} themeName="" horizontalViewportWidth={0}
+        projectionId={projectionId} collapsedFileIndexes="" {...config} dividerColor="transparent"
+        highlightChangedCharacters syntaxHighlightingEnabled={false} themeName="" horizontalViewportWidth={0}
         searchHighlightByRowIndex="" activeSearchHighlightByRowIndex="" searchHighlightColor="transparent" activeSearchHighlightColor="transparent" activeSearchRowHighlightColor="transparent"
         tokenizationVersion={0} tokenizedRowRanges="" />
       <FlatList
         data={items}
-        keyExtractor={(item, index) => item.type === "hunk" ? `hunk:${item.hunkIndex}` : `row:${item.row.index}:${index}`}
+        keyExtractor={(item, index) => item.type === "hunk" ? `hunk:${item.hunkIndex}` : `row:${item.rowIndex ?? item.row.index}:${index}`}
+        extraData={config}
         ListHeaderComponent={header ? <>{header}</> : null}
         renderItem={({ item, index }) => item.type === "hunk" ? <View style={styles.hunk}>
-          <Text style={[styles.hunkTitle, { fontFamily }]} numberOfLines={1} accessibilityLabel={`Hunk ${item.hunkIndex + 1}`}>{hunkTitle(patch.file!.hunks[item.hunkIndex]!)}</Text>
-          {discard ? <Button style={styles.action} disabled={disabled} onPress={() => discard(new Set(unifiedPatchHunkKeys(patch.file!.hunks[item.hunkIndex]!)), patch.text, `hunk ${item.hunkIndex + 1} of “${patch.path}”`)}>Discard Hunk…</Button> : null}
-          {readOnly ? null : <Button style={styles.action} disabled={disabled} onPress={() => onApply(new Set(unifiedPatchHunkKeys(patch.file!.hunks[item.hunkIndex]!)), patch.text)}>{`${verb} Hunk`}</Button>}
+          <Text style={hunkTitleStyle} numberOfLines={1} accessibilityLabel={`Hunk ${item.hunkIndex + 1}`}>{hunkTitle(shownFile!.hunks[item.hunkIndex]!)}</Text>
+          {discard && hunkActions ? <Button style={styles.action} disabled={disabled} onPress={() => discard(new Set(unifiedPatchHunkKeys(shownFile!.hunks[item.hunkIndex]!)), patch.text, `hunk ${item.hunkIndex + 1} of “${patch.path}”`)}>Discard Hunk…</Button> : null}
+          {readOnly || !hunkActions ? null : <Button style={styles.action} disabled={disabled} onPress={() => onApply(new Set(unifiedPatchHunkKeys(shownFile!.hunks[item.hunkIndex]!)), patch.text)}>{`${verb} Hunk`}</Button>}
         </View> : withAnnotations(item.row, <Pressable
           accessibilityRole="button" accessibilityLabel={`${item.row.changeType === 1 ? "Added" : item.row.changeType === 2 ? "Removed" : "Context"} line ${item.row.text}`}
-          accessibilityState={{ selected: readOnly ? inRange(index) : !!item.key && selected.has(item.key) }}
-          accessibilityActions={!readOnly && item.key ? [{ name: "activate" }] : undefined}
+          accessibilityState={{ selected: readOnly ? inRange(index) : isSelected(item) }}
+          accessibilityActions={!readOnly && itemKeys(item).length ? [{ name: "activate" }] : undefined}
           onAccessibilityAction={() => { if (readOnly) setRangeAnchor(index); moveCursor(index); setSelection(state => nextLineSelection(items, state.selected, state.anchor, index, { meta: true })); }}
           onPress={event => {
             const native = event.nativeEvent as MouseDetails;
@@ -335,9 +375,9 @@ export function DiffPane({ patch, disabled, readOnly = false, accessory, onApply
             const target = moveCursor(index);
             if (target) onLineContextMenu?.(target, { x: mouse.pageX ?? 0, y: mouse.pageY ?? 0 });
           }}>
-          <DiffNativeRow adaptiveRender="normal" configId={configId} itemId={item.row.index} rowIndex={item.row.index} style={styles.row} />
+          <DiffNativeRow adaptiveRender="normal" configId={configId} itemId={item.itemId ?? item.row.index} rowIndex={item.rowIndex ?? item.row.index} style={lineStyle} />
           {/* The overlay takes the hit so the native row's text-selection tracking doesn't swallow the click. */}
-          <View style={[styles.hitTarget, (readOnly ? inRange(index) : !!item.key && selected.has(item.key)) && styles.selected]} />
+          <View style={[styles.hitTarget, (readOnly ? inRange(index) : isSelected(item)) && selectedStyle]} />
           {annotated(item.row) ? <SFSymbol name="text.bubble.fill" color={markerColor} size={11} style={styles.marker} accessibilityLabel="Has comments" /> : null}
         </Pressable>)}
       />
