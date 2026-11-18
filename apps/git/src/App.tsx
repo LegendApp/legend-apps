@@ -87,6 +87,8 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
   rootRef.current = root;
   const recents = useRecentRepositories();
   const operation = root ? changes.operation : null;
+  // Git prepared a message (MERGE_MSG) that concludes the operation as one commit.
+  const preparedMessage = operation?.kind === "merge" || operation?.kind === "cherry-pick" || operation?.kind === "revert";
   const queue = useMemo(() => root ? reviewQueue(refs) : [], [root, refs]);
   const selectedQueue = queueEntry(queue, section);
   const queueWorktree = selectedQueue?.kind === "worktree" ? selectedQueue : null;
@@ -209,6 +211,28 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
   }
 
   /**
+   * The local or remote branch a merge or rebase takes: `ref`, else one named in a prompt. Null when cancelled, gone, or
+   * not something to merge (a tag, the current branch).
+   */
+  async function chooseBranch(owner: NonNullable<typeof refsController.current>, ref: string | undefined, title: string, message: string, moved: () => boolean) {
+    let entry = ref ? findRef(owner.current().refs, ref) : null;
+    if (ref && !entry) return null;
+    if (!entry) {
+      const result = await showPrompt({ windowId, title, message, placeholder: "Branch name", confirmLabel: "Continue" })
+        .catch((error: unknown) => { console.error(error); return { canceled: true as const }; });
+      if (result.canceled || !result.value.trim() || moved()) return null;
+      entry = resolveBranchName(owner.current().refs, result.value.trim());
+      if (!entry) { await reportBranchError(`There’s No Branch Named “${result.value.trim()}”`, "Check the name, or pick a branch in the sidebar."); return null; }
+    }
+    return entry.kind === "tag" || (entry.kind === "branch" && entry.ref.current) ? null : entry;
+  }
+
+  /** Re-reads Changes and History after a branch operation, unless another repository opened meanwhile. */
+  function afterOperation(moved: () => boolean) {
+    if (!moved()) { void controller.current?.refresh(); void historyController.current?.refresh(); }
+  }
+
+  /**
    * Merges a local or remote branch into the current one (`git merge --no-edit`) after a sheet saying what happens; asks for
    * the branch's name when none is given. A branch merged already gets Git's "Already up to date."; a merge that stops with
    * conflicts shows Changes, with the operation bar above it.
@@ -218,16 +242,8 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     if (!owner || !into) return;
     // Another repository opened while a sheet was up.
     const moved = () => refsController.current !== owner || rootRef.current !== repository;
-    let entry = ref ? findRef(owner.current().refs, ref) : null;
-    if (ref && !entry) return;
-    if (!entry) {
-      const result = await showPrompt({ windowId, title: `Merge into “${into}”`, message: `Enter the name of a local or remote branch to merge into “${into}”.`, placeholder: "Branch name", confirmLabel: "Continue" })
-        .catch((error: unknown) => { console.error(error); return { canceled: true as const }; });
-      if (result.canceled || !result.value.trim() || moved()) return;
-      entry = resolveBranchName(owner.current().refs, result.value.trim());
-      if (!entry) { await reportBranchError(`There’s No Branch Named “${result.value.trim()}”`, "Check the name, or pick a branch in the sidebar."); return; }
-    }
-    if (entry.kind === "tag" || (entry.kind === "branch" && entry.ref.current)) return;
+    const entry = await chooseBranch(owner, ref, `Merge into “${into}”`, `Enter the name of a local or remote branch to merge into “${into}”.`, moved);
+    if (!entry) return;
     const name = entry.ref.name, title = `Couldn’t Merge “${name}” into “${into}”`;
     const upToDate = () => showMessage({ windowId, kind: "info", title: "Already up to date.", message: `“${into}” already has every commit of “${name}”.` }).catch(console.error);
     let kind: Awaited<ReturnType<typeof owner.mergeKind>>;
@@ -239,7 +255,52 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
       if (result === "up-to-date") await upToDate();
       else if (result === "stopped") setSection("changes");
     } catch (error) { await reportBranchError(title, error); }
-    finally { if (!moved()) { void controller.current?.refresh(); void historyController.current?.refresh(); } }
+    finally { afterOperation(moved); }
+  }
+
+  /**
+   * Rebases the current branch onto a local or remote branch (`git rebase`) after a sheet naming both, the commits that move
+   * and whether they were pushed; asks for the branch's name when none is given. A rebase that stops shows Changes under the
+   * operation bar.
+   */
+  async function rebaseRef(ref?: string) {
+    const owner = refsController.current, branch = currentBranch, repository = rootRef.current;
+    if (!owner || !branch) return;
+    const moved = () => refsController.current !== owner || rootRef.current !== repository;
+    const entry = await chooseBranch(owner, ref, `Rebase “${branch}”`, `Enter the name of a local or remote branch to rebase “${branch}” onto.`, moved);
+    if (!entry) return;
+    const onto = entry.ref.name, title = `Couldn’t Rebase “${branch}” onto “${onto}”`;
+    const upToDate = () => showMessage({ windowId, kind: "info", title: "Already up to date.", message: `“${branch}” already has every commit of “${onto}”.` }).catch(console.error);
+    let plan: Awaited<ReturnType<typeof owner.rebasePlan>>;
+    try { plan = await owner.rebasePlan(entry.ref.ref); } catch (error) { await reportBranchError(title, error); return; }
+    if (!plan.behind) { await upToDate(); return; }
+    if (!await confirmRebase(windowId, branch, onto, plan) || moved()) return;
+    try {
+      const result = await owner.rebase(entry.ref.ref, branch);
+      if (result === "up-to-date") await upToDate();
+      else if (result === "stopped") setSection("changes");
+    } catch (error) { await reportBranchError(title, error); }
+    finally { afterOperation(moved); }
+  }
+
+  /**
+   * Cherry-picks commit `oid` onto the current branch, or reverts it there after asking (`git cherry-pick`, `git revert
+   * --no-edit`). Merge commits are refused; a pick the branch has already says so; one that stops shows Changes.
+   */
+  async function pickCommit(kind: "cherry-pick" | "revert", oid: string) {
+    const owner = refsController.current, branch = currentBranch, repository = rootRef.current;
+    if (!owner || !branch) return;
+    const moved = () => refsController.current !== owner || rootRef.current !== repository;
+    const found = historyRef.current.commits.find(entry => entry.oid === oid);
+    const name = found?.summary ? `“${found.summary}”` : oid.slice(0, 7);
+    const verb = kind === "revert" ? "Revert" : "Cherry-Pick";
+    if (kind === "revert" && (!await confirmRevert(windowId, name, oid.slice(0, 7), branch) || moved())) return;
+    try {
+      const result = await owner.pick(kind, oid, branch);
+      if (result === "stopped") setSection("changes");
+      else if (result === "empty") await showMessage({ windowId, kind: "info", title: `Nothing to ${verb}`, message: `“${branch}” already has the changes of ${name}, so no commit was made.` }).catch(console.error);
+    } catch (error) { await reportBranchError(`Couldn’t ${verb} ${name}`, error); }
+    finally { afterOperation(moved); }
   }
 
   /** Stages a conflicted file to mark it resolved; one that still has conflict markers asks first. */
@@ -658,7 +719,7 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
       // A merge message edited in the composer is the merge commit's message; otherwise Git's prepared one is used.
       continueOperation: () => {
         if (!canContinue(operation)) return;
-        const message = operation.kind === "merge" ? editedMergeMessage.current?.() : null;
+        const message = preparedMessage ? editedMergeMessage.current?.() : null;
         void (message ? controller.current?.commit({ message }) : controller.current?.continueOperation(operation.kind));
       },
       toggleSidebar: () => setSidebarCollapsed(value => !value),
@@ -690,6 +751,8 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
       commit: () => { if (queueWorktree) void commitQueueWorktree(); else commit.current?.(); },
       checkout: ref => void checkout(ref),
       mergeRef: ref => void mergeRef(ref),
+      rebaseRef: ref => void rebaseRef(ref),
+      pickCommit: (kind, oid) => void pickCommit(kind, oid),
       markResolved: path => void markResolved(path),
       switchBranch: () => void switchBranch(),
       newBranch: start => void newBranch(start),
@@ -732,7 +795,7 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
       { type: "submenu", id: "view", label: "View", target: { menu: "view" }, items: [item("show-changes"), item("show-history"), item("show-review"), { type: "separator" }, item("show-file-history"), item("show-all-history")] },
       { type: "submenu", id: "repository", label: "Repository", placement: { before: { menu: "window" } }, items: [item("fetch"), item("pull"), item("push"), item("cancel-network"), { type: "separator" }, item("refresh"), { type: "separator" }, item("create-pull-request"), item("open-github"), { type: "separator" }, item("sign-in-github"), item("sign-out-github")] },
       { type: "submenu", id: "pull-request", label: "Pull Request", placement: { before: { menu: "window" } }, items: [item("review-pull-request"), { type: "separator" }, item("checkout-pull-request"), item("pull-request-worktree")] },
-      { type: "submenu", id: "branch", label: "Branch", placement: { before: { menu: "window" } }, items: [item("switch-branch"), item("new-branch"), { type: "separator" }, item("rename-branch"), item("delete-branch"), { type: "separator" }, item("merge-ref"), { type: "separator" }, item("abort-operation"), item("continue-operation")] },
+      { type: "submenu", id: "branch", label: "Branch", placement: { before: { menu: "window" } }, items: [item("switch-branch"), item("new-branch"), { type: "separator" }, item("rename-branch"), item("delete-branch"), { type: "separator" }, item("merge-ref"), item("rebase-ref"), item("cherry-pick-commit"), item("revert-commit"), { type: "separator" }, item("abort-operation"), item("continue-operation")] },
       { type: "submenu", id: "worktree", label: "Worktree", placement: { before: { menu: "window" } }, items: [item("new-worktree"), item("open-review-worktree"), { type: "separator" }, item("reveal-worktree"), item("remove-worktree")] },
       {
         type: "submenu", id: "changes", label: "Changes", placement: { before: { menu: "window" } },
@@ -835,6 +898,7 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
       const items = [
         commandMenuItem("compare-with-selected", menuContext, { target: oid, shortcut: false }), { type: "separator" as const },
         { ...commandMenuItem("new-branch", menuContext, { target: oid, shortcut: false }), label: "New Branch from Commit…" }, { type: "separator" as const },
+        ...(["cherry-pick-commit", "revert-commit"] as const).map(id => commandMenuItem(id, menuContext, { target: oid, shortcut: false })), { type: "separator" as const },
         ...(["copy-sha", "open-github"] as const).map(id => commandMenuItem(id, menuContext, { target: oid, shortcut: false })),
       ];
       showContextMenu({ windowId, position, items })
@@ -908,10 +972,11 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     const menuContext = contextRef.current;
     const entry = findRef(menuContext.refs, ref);
     if (!entry) return;
-    const merge = entry.kind === "remote" || (entry.kind === "branch" && !entry.ref.current) ? ["merge-ref", null] as const : [];
+    const merge = entry.kind === "remote" || (entry.kind === "branch" && !entry.ref.current) ? ["merge-ref", "rebase-ref", null] as const : [];
     const ids: (CommandId | null)[] = entry.kind === "branch" ? ["checkout-ref", "new-branch", null, ...merge, "rename-branch", "delete-branch", null, ...entry.ref.current ? ["create-pull-request", null] as const : [], "copy-ref-name"]
       : entry.kind === "remote" ? ["checkout-ref", "new-branch", null, ...merge, "copy-ref-name"] : ["new-branch", null, "copy-ref-name"];
-    const labels: Partial<Record<CommandId, string>> = { "new-branch": `New Branch from “${entry.ref.name}”…`, "merge-ref": `Merge “${entry.ref.name}” into “${menuContext.currentBranch ?? "the current branch"}”…` };
+    const labels: Partial<Record<CommandId, string>> = { "new-branch": `New Branch from “${entry.ref.name}”…`, "merge-ref": `Merge “${entry.ref.name}” into “${menuContext.currentBranch ?? "the current branch"}”…`,
+      "rebase-ref": `Rebase “${menuContext.currentBranch ?? "the current branch"}” onto “${entry.ref.name}”…` };
     const items = ids.map(id => id ? { ...commandMenuItem(id, menuContext, { target: ref, shortcut: false }), ...labels[id] ? { label: labels[id] } : {} } : { type: "separator" as const });
     showContextMenu({ windowId, position, items })
       .then(result => { if (!result.canceled) runCommand(result.itemId, contextRef.current, ref); }, console.error);
@@ -924,7 +989,9 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     : sectionReview(section) && !selectedQueue ? "changes"
     : selectedPullNumber !== null && !selectedPull ? "changes" : section;
   const branch = changes.status?.branch;
-  const branchLabel = !branch?.head ? null : branch.head === "(detached)" ? `${branch.oid?.slice(0, 7) ?? "HEAD"} (detached)` : branch.head;
+  // A rebase detaches HEAD while it runs; the branch it rebases keeps the label.
+  const branchLabel = !branch?.head ? null : branch.head !== "(detached)" ? branch.head
+    : operation?.kind === "rebase" && operation.branch ? operation.branch : `${branch.oid?.slice(0, 7) ?? "HEAD"} (detached)`;
   const button = (id: CommandId, symbol: string) => {
     const label = commandLabel(id, context);
     return { type: "button" as const, id, label, symbol, tooltip: label, disabled: !commandEnabled(id, context) };
@@ -1073,7 +1140,7 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     <ChangesList title="Staged" entries={staged.filter(matches("staged"))} filtered={!!filter} selectedPath={selected?.section === "staged" ? selected.path : null}
       onSelect={path => void controller.current?.select(path === null ? null : { section: "staged", path })}
       action="Unstage" disabled={busy} onAction={path => void controller.current?.changeFile(path, false)} onContextMenu={showFileMenu} />
-    <CommitComposer disabled={busy} stagedCount={staged.length} conflictCount={conflicts} merging={changes.merging} unborn={changes.status?.branch.oid === "(initial)"} root={root!}
+    <CommitComposer disabled={busy} stagedCount={staged.length} conflictCount={conflicts} merging={changes.merging} prepared={preparedMessage} unborn={changes.status?.branch.oid === "(initial)"} root={root!}
       commitRef={commit} onCommit={input => controller.current?.commit(input) ?? Promise.resolve(false)} headMessage={() => controller.current?.headMessage() ?? Promise.resolve(null)}
       mergeMessage={() => controller.current?.mergeMessage() ?? Promise.resolve(null)} editedMergeMessageRef={editedMergeMessage}
       readStaged={signal => controller.current?.stagedDiff(signal) ?? Promise.reject(new Error("Open a repository first."))}
@@ -1426,10 +1493,28 @@ async function confirmStashAndSwitch(windowId: string, branch: string, gitMessag
   } catch (error) { console.error(error); return false; }
 }
 
-/**
- * A native warning sheet on the main window; resolves true when the user picks the action. With `safeDefault`,
- * Return picks Cancel (for actions that can lose work without a backup).
- */
+/** The Rebase sheet: both branches, the commits Git replays (rewriting them), and a warning when they were pushed. */
+async function confirmRebase(windowId: string, branch: string, onto: string, plan: { commits: number; pushed: boolean }) {
+  const commits = plan.commits === 1 ? "1 commit" : `${plan.commits} commits`;
+  const message = !plan.commits
+    ? `“${branch}” has no commits of its own since it branched off, so Git fast-forwards it to “${onto}”.`
+    : `Git replays ${commits} of “${branch}” on top of “${onto}”, rewriting ${plan.commits === 1 ? "it as a new commit" : "them as new commits"}. If a commit conflicts, the rebase stops there so you can resolve it, then continue or abort it.`
+      + (plan.pushed ? `\n\nSome of these commits are already pushed to the upstream branch. After the rebase, pushing “${branch}” needs a force push, which rewrites it for everyone.` : "");
+  try {
+    const result = await showMessage({ windowId, kind: plan.pushed ? "warning" : "info", title: `Rebase “${branch}” onto “${onto}”?`, message, buttons: [{ id: "rebase", label: "Rebase" }, { id: "cancel", label: "Cancel" }], defaultButtonId: plan.pushed ? "cancel" : "rebase", cancelButtonId: "cancel" });
+    return result.buttonId === "rebase";
+  } catch (error) { console.error(error); return false; }
+}
+
+/** The Revert sheet: Git adds a commit undoing `name` on `branch`. */
+async function confirmRevert(windowId: string, name: string, short: string, branch: string) {
+  try {
+    const result = await showMessage({ windowId, kind: "info", title: `Revert ${name}?`, message: `Git adds a commit on “${branch}” that undoes the changes of ${short}. If they clash with later changes, the revert stops so you can resolve the conflicts, then continue or abort it.`,
+      buttons: [{ id: "revert", label: "Revert" }, { id: "cancel", label: "Cancel" }], defaultButtonId: "revert", cancelButtonId: "cancel" });
+    return result.buttonId === "revert";
+  } catch (error) { console.error(error); return false; }
+}
+
 /** The Merge sheet: both branches, and whether Git fast-forwards or makes a merge commit. */
 async function confirmMerge(windowId: string, name: string, into: string, kind: "fast-forward" | "merge") {
   const message = kind === "fast-forward"
@@ -1441,6 +1526,10 @@ async function confirmMerge(windowId: string, name: string, into: string, kind: 
   } catch (error) { console.error(error); return false; }
 }
 
+/**
+ * A native warning sheet on the main window; resolves true when the user picks the action. With `safeDefault`,
+ * Return picks Cancel (for actions that can lose work without a backup).
+ */
 async function confirmDestructive(windowId: string, title: string, action: string, message = "Legend Git saves a backup first. Use Changes ▸ Restore Last Discard to bring the changes back.", safeDefault = false) {
   try {
     const result = await showMessage({ windowId, kind: "warning", title, message, buttons: [{ id: "confirm", label: action }, { id: "cancel", label: "Cancel" }], defaultButtonId: safeDefault ? "cancel" : "confirm", cancelButtonId: "cancel" });

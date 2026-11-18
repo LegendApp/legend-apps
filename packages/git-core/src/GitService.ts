@@ -56,6 +56,15 @@ export type GitBackupEntry = { path: string; mode: "100644" | "100755" | "120000
 export type GitDiscardBackup = { ref: string; oid: string; entries: GitBackupEntry[] };
 /** How `GitService.merge` ended: nothing to merge, a fast-forward, a merge commit, or stopped with the merge in progress. */
 export type GitMergeResult = "up-to-date" | "fast-forward" | "merge" | "stopped";
+/** How `GitService.rebase` ended: nothing to do, a fast-forward, commits replayed, or stopped with the rebase in progress. */
+export type GitRebaseResult = "up-to-date" | "fast-forward" | "rebased" | "stopped";
+/**
+ * What rebasing the current branch onto a ref does: `commits` it replays (not merges, not ones the ref already has),
+ * `behind` the ref's commits it lacks, and whether any replayed commit is already on the branch's upstream (`pushed`).
+ */
+export type GitRebasePlan = { branch: string; commits: number; behind: number; pushed: boolean };
+/** How `GitService.cherryPick` and `revert` ended: a new commit, nothing to commit (the change is there already), or stopped. */
+export type GitPickResult = "committed" | "empty" | "stopped";
 export type GitCommitInput = { message: string; amend?: boolean; signoff?: boolean };
 /** A local branch; `upstream` is the short name of the branch it tracks. */
 /** `ahead`/`behind` count commits against the upstream (0 without one); `gone` is set when the upstream ref no longer exists. */
@@ -1064,11 +1073,110 @@ export class GitService {
   }
 
   /** Runs a branch write on the repository queue after checking for index.lock. */
-  private branchWrite<T>(options: GitReadOptions, write: () => Promise<T>) {
+  private branchWrite<T>(options: GitReadOptions, write: (gitDir: string) => Promise<T>) {
     return this.enqueue(options, async (gitDir, commit) => {
       await this.inspect(gitDir, options);
       commit();
-      return write();
+      return write(gitDir);
+    });
+  }
+
+  /** Rejects with `nothing` unless `branch` (when given) is still checked out. */
+  private async requireBranch(branch: string | undefined, nothing: string, options: GitReadOptions) {
+    if (branch !== undefined && (await this.git(["symbolic-ref", "-q", "--short", "HEAD"], options, 5_000, undefined, [0, 1])).trim() !== branch) {
+      throw new Error(`“${branch}” is no longer the current branch. ${nothing}`);
+    }
+  }
+
+  /**
+   * Runs `args` (a rebase, cherry-pick or revert) as part of a queued write with `true` as the editor. Resolves "stopped" when Git
+   * failed and left `kind` in progress where none was before (conflicts, or a hook refused the commit); else rejects with Git's message.
+   */
+  private async runOperation(gitDir: string, kind: GitOperationKind, args: readonly string[], options: GitReadOptions) {
+    const before = await this.readOperation(gitDir, options);
+    try {
+      // Once started, the operation isn't cancelled halfway.
+      await this.git(args, { processEnv: { GIT_EDITOR: "true" } }, 600_000);
+      return "done" as const;
+    } catch (error) {
+      if (error instanceof GitServiceError && error.code === "command-failed" && !before && (await this.readOperation(gitDir, {}))?.kind === kind) return "stopped" as const;
+      throw error;
+    }
+  }
+
+  private head(options: GitReadOptions = {}) {
+    return this.git(["rev-parse", "-q", "--verify", "HEAD"], options, 5_000, undefined, [0, 1]).then(value => value.trim());
+  }
+
+  /** What rebasing the current branch onto `ref` does (see GitRebasePlan); rejects on a detached HEAD. */
+  rebasePlan(ref: string, options: GitReadOptions = {}): Promise<GitRebasePlan> {
+    return this.enqueue(options, async () => {
+      const branch = (await this.git(["symbolic-ref", "-q", "--short", "HEAD"], options, 5_000, undefined, [0, 1])).trim();
+      if (!branch) throw new Error("Check out a branch to rebase it.");
+      const count = async (...args: string[]) => Number((await this.git(["rev-list", "--count", ...args], options, 30_000)).trim());
+      const [commits, behind] = await Promise.all([
+        count("--no-merges", "--cherry-pick", "--right-only", "--end-of-options", `${ref}...HEAD`),
+        count("--end-of-options", `HEAD..${ref}`),
+      ]);
+      // The upstream counts only when its ref is there (not gone, fetched at least once).
+      const configured = (await this.git(["for-each-ref", "--format=%(upstream)", `refs/heads/${branch}`], options, 5_000)).split("\n")[0] ?? "";
+      const upstream = configured && (await this.git(["rev-parse", "-q", "--verify", "--end-of-options", `${configured}^{commit}`], options, 5_000, undefined, [0, 1])).trim() ? configured : "";
+      const pushed = !!upstream && commits > 0
+        && await count("--no-merges", "--end-of-options", "HEAD", `^${ref}`) > await count("--no-merges", "--end-of-options", "HEAD", `^${ref}`, `^${upstream}`);
+      return { branch, commits, behind, pushed };
+    });
+  }
+
+  /**
+   * Rebases the current branch onto `ref` with `git rebase` (non-interactive, `--no-autostash`, `--no-update-refs`; never forces)
+   * on the repository queue after checking index.lock. With `branch`, refuses unless that branch is still checked out. Resolves
+   * "stopped" when Git stopped with the rebase in progress (see operationState); rejects with Git's message, having changed
+   * nothing, when Git refuses (changes in the way, another operation in progress).
+   */
+  rebase(ref: string, { branch, ...options }: GitReadOptions & { branch?: string } = {}): Promise<GitRebaseResult> {
+    return this.branchWrite(options, async (gitDir) => {
+      await this.requireBranch(branch, "Nothing was rebased.", options);
+      const target = (await this.git(["rev-parse", "--verify", "--end-of-options", `${ref}^{commit}`], options, 5_000)).trim();
+      const before = await this.head();
+      if (await this.runOperation(gitDir, "rebase", ["rebase", "--no-autostash", "--no-update-refs", "--end-of-options", ref], options) === "stopped") return "stopped";
+      const after = await this.head();
+      return after === before ? "up-to-date" : after === target ? "fast-forward" : "rebased";
+    });
+  }
+
+  /**
+   * Applies commit `oid` onto the current branch with `git cherry-pick`. A pick that changes nothing (the branch has the change
+   * already, or the commit is empty) is skipped and resolves "empty". Refuses merge commits before running. Otherwise as `rebase`.
+   */
+  cherryPick(oid: string, { branch, ...options }: GitReadOptions & { branch?: string } = {}): Promise<GitPickResult> {
+    return this.pick("cherry-pick", oid, branch, options);
+  }
+
+  /**
+   * Commits the reverse of commit `oid` on the current branch with `git revert --no-edit`. Refuses merge commits before running;
+   * a revert with nothing to undo rejects with Git's message (never "empty"). Otherwise as `rebase`.
+   */
+  revert(oid: string, { branch, ...options }: GitReadOptions & { branch?: string } = {}): Promise<GitPickResult> {
+    return this.pick("revert", oid, branch, options);
+  }
+
+  private pick(kind: "cherry-pick" | "revert", oid: string, branch: string | undefined, options: GitReadOptions) {
+    return this.branchWrite(options, async (gitDir) => {
+      const verb = kind === "revert" ? "Reverting" : "Cherry-picking";
+      await this.requireBranch(branch, `Nothing was ${kind === "revert" ? "reverted" : "cherry-picked"}.`, options);
+      const [commit, ...parents] = (await this.git(["rev-list", "--parents", "-n", "1", "--end-of-options", `${oid}^{commit}`], options, 5_000)).trim().split(" ");
+      if (parents.length > 1) throw new Error(`${verb} a merge commit isn’t supported yet.`);
+      const before = await this.head();
+      const args = kind === "revert" ? ["revert", "--no-edit"] : ["cherry-pick"];
+      if (await this.runOperation(gitDir, kind, [...args, "--end-of-options", commit!], options) === "stopped") {
+        // Git stops a pick that leaves nothing to commit too: no conflicts and an index matching HEAD. It is skipped.
+        const unchanged = kind === "cherry-pick" && !(await this.git(["ls-files", "-u", "-z"], {}, 10_000)).length
+          && await this.git(["diff", "--cached", "--quiet", "HEAD", "--"], {}, 30_000).then(() => true, () => false);
+        if (!unchanged) return "stopped";
+        await this.git(["cherry-pick", "--skip"], { processEnv: { GIT_EDITOR: "true" } }, 60_000);
+        return "empty";
+      }
+      return await this.head() === before ? "empty" : "committed";
     });
   }
 
@@ -1149,13 +1257,10 @@ export class GitService {
    */
   merge(ref: string, { branch, ...options }: GitReadOptions & { branch?: string } = {}): Promise<GitMergeResult> {
     return this.branchWrite(options, async () => {
-      if (branch !== undefined && (await this.git(["symbolic-ref", "-q", "--short", "HEAD"], options, 5_000, undefined, [0, 1])).trim() !== branch) {
-        throw new Error(`“${branch}” is no longer the current branch. Nothing was merged.`);
-      }
+      await this.requireBranch(branch, "Nothing was merged.", options);
       const target = (await this.git(["rev-parse", "--verify", "--end-of-options", `${ref}^{commit}`], options, 5_000)).trim();
       // Once started, the merge isn't cancelled halfway.
-      const head = () => this.git(["rev-parse", "-q", "--verify", "HEAD"], {}, 5_000, undefined, [0, 1]).then(value => value.trim());
-      const before = await head();
+      const before = await this.head();
       // Git's message names what it was given ("Merge branch 'feature'"), so a full ref name is shortened when that is unambiguous.
       const short = ref.replace(/^refs\/(heads|remotes)\//, "");
       const name = short !== ref && !short.startsWith("-") && (await this.git(["rev-parse", "--symbolic-full-name", short], {}, 5_000, undefined, [0, 128])).trim() === ref ? short : ref;
@@ -1167,7 +1272,7 @@ export class GitService {
         if (error instanceof GitServiceError && error.code === "command-failed" && !merging && await mergeHead()) return "stopped";
         throw error;
       }
-      const after = await head();
+      const after = await this.head();
       return after === before ? "up-to-date" : after === target ? "fast-forward" : "merge";
     });
   }

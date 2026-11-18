@@ -685,7 +685,7 @@ it("lists Branches, Remotes and Tags in the sidebar, scopes History to a ref, an
   git.checkoutBranch.mockRejectedValueOnce(new Error("error: Your local changes to the following files would be overwritten by checkout:\n\ta.txt\nPlease commit your changes or stash them before you switch branches.\nAborting"));
   jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: false, itemId: "checkout-ref" });
   await act(async () => { row("ref:refs/heads/feature/ünï").props.onContextMenu({ windowPosition: { x: 1, y: 2 } }); });
-  expect(jest.mocked(showContextMenu).mock.calls.at(-1)![0].items.map((entry: any) => entry.label ?? "-")).toEqual(["Check Out", "New Branch from “feature/ünï”…", "-", "Merge “feature/ünï” into “main”…", "-", "Rename Branch…", "Delete Branch…", "-", "Copy Name"]);
+  expect(jest.mocked(showContextMenu).mock.calls.at(-1)![0].items.map((entry: any) => entry.label ?? "-")).toEqual(["Check Out", "New Branch from “feature/ünï”…", "-", "Merge “feature/ünï” into “main”…", "Rebase “main” onto “feature/ünï”…", "-", "Rename Branch…", "Delete Branch…", "-", "Copy Name"]);
   expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "warning", title: "Couldn’t Switch to “feature/ünï”", message: expect.stringMatching(/^Your local changes .*would be overwritten[\s\S]*Aborting$/) }));
 
   // A remote branch checks out as a tracking local branch, and its selection moves to that branch.
@@ -1423,7 +1423,7 @@ it("merges a branch into the current one after a sheet, shows the stopped merge 
   const menuLabels = () => jest.mocked(showContextMenu).mock.calls.at(-1)![0].items.map((entry: any) => entry.label ?? "-");
 
   // The Branch menu has Merge into Current Branch…; a branch's context menu names both branches. The current branch has none.
-  expect(lastMenu().items.find(entry => entry.id === "branch").items.map((entry: any) => entry.id ?? "-")).toEqual(["switch-branch", "new-branch", "-", "rename-branch", "delete-branch", "-", "merge-ref", "-", "abort-operation", "continue-operation"]);
+  expect(lastMenu().items.find(entry => entry.id === "branch").items.map((entry: any) => entry.id ?? "-")).toEqual(["switch-branch", "new-branch", "-", "rename-branch", "delete-branch", "-", "merge-ref", "rebase-ref", "cherry-pick-commit", "revert-commit", "-", "abort-operation", "continue-operation"]);
   expect(menuItem("merge-ref")).toMatchObject({ label: "Merge into Current Branch…", disabled: false });
   jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: true } as never);
   await act(async () => { row("ref:refs/heads/main").props.onContextMenu({ windowPosition: { x: 1, y: 2 } }); });
@@ -1439,7 +1439,7 @@ it("merges a branch into the current one after a sheet, shows the stopped merge 
   jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "merge" });
   jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: false, itemId: "merge-ref" });
   await act(async () => { row("ref:refs/heads/feature").props.onContextMenu({ windowPosition: { x: 1, y: 2 } }); });
-  expect(menuLabels()).toEqual(["Check Out", "New Branch from “feature”…", "-", "Merge “feature” into “main”…", "-", "Rename Branch…", "Delete Branch…", "-", "Copy Name"]);
+  expect(menuLabels()).toEqual(["Check Out", "New Branch from “feature”…", "-", "Merge “feature” into “main”…", "Rebase “main” onto “feature”…", "-", "Rename Branch…", "Delete Branch…", "-", "Copy Name"]);
   expect(git.mergeKind).toHaveBeenCalledWith("refs/heads/feature", expect.anything());
   expect(showMessage).toHaveBeenCalledWith(expect.objectContaining({ kind: "info", title: "Merge “feature” into “main”?", message: expect.stringContaining("Git makes a merge commit on “main” with its default message."),
     buttons: [{ id: "merge", label: "Merge" }, { id: "cancel", label: "Cancel" }], defaultButtonId: "merge" }));
@@ -1508,7 +1508,7 @@ it("merges a branch into the current one after a sheet, shows the stopped merge 
   jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "merge" });
   jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: false, itemId: "merge-ref" });
   await act(async () => { row("ref:refs/remotes/origin/fix").props.onContextMenu({ windowPosition: { x: 1, y: 2 } }); });
-  expect(menuLabels()).toEqual(["Check Out", "New Branch from “origin/fix”…", "-", "Merge “origin/fix” into “main”…", "-", "Copy Name"]);
+  expect(menuLabels()).toEqual(["Check Out", "New Branch from “origin/fix”…", "-", "Merge “origin/fix” into “main”…", "Rebase “main” onto “origin/fix”…", "-", "Copy Name"]);
   expect(jest.mocked(showMessage).mock.calls.at(-2)![0]).toMatchObject({ title: "Merge “origin/fix” into “main”?", message: expect.stringContaining("Git fast-forwards “main” to “origin/fix”") });
   expect(git.merge).toHaveBeenLastCalledWith("refs/remotes/origin/fix", expect.anything());
   expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "warning", title: "Couldn’t Merge “origin/fix” into “main”", message: expect.stringMatching(/^Your local changes .*overwritten by merge:[\s\S]*Please commit your changes or stash them before you merge\.\nAborting$/) }));
@@ -1523,6 +1523,132 @@ it("merges a branch into the current one after a sheet, shows the stopped merge 
   await act(async () => { lastMenu().onAction({ itemId: "merge-ref" }); });
   expect(git.mergeKind).toHaveBeenLastCalledWith("refs/heads/feature", expect.anything());
   expect(git.merge.mock.calls.length).toBe(merges + 1);
+  await act(async () => { renderer.unmount(); });
+});
+
+it("rebases the current branch after a sheet, shows a stopped rebase with its step and the branch kept, and cherry-picks and reverts commits", async () => {
+  jest.clearAllMocks();
+  jest.mocked(watchDirectories).mockReturnValue({ remove: jest.fn() });
+  const head = "a".repeat(40), side = "c".repeat(40), merged = "d".repeat(40);
+  const commits = [
+    { oid: merged, parents: [head, side], authorName: "Ada", authorEmail: "ada@example.test", time: 3, summary: "Merge feature", lane: 0, color: 0, edges: [] },
+    { oid: side, parents: [head], authorName: "Ada", authorEmail: "ada@example.test", time: 2, summary: "Fix the title", lane: 0, color: 0, edges: [] },
+  ];
+  jest.mocked(openGitHistory).mockImplementation(async () => ({ head: { handle: 1, headOid: head, unborn: false, detached: false }, page: jest.fn(async (offset: number) => ({ offset, commits: offset ? [] : commits, done: true })), close: jest.fn() }));
+  jest.mocked(loadUnifiedDiff).mockReturnValue(new Promise(() => {}));
+  const branch = { oid: head, head: "topic", upstream: null, ahead: 0, behind: 0 };
+  const refs = {
+    branches: [{ name: "main", ref: "refs/heads/main", oid: side, current: false, upstream: null, time: 2 }, { name: "topic", ref: "refs/heads/topic", oid: head, current: true, upstream: null, time: 1 }],
+    remotes: [], tags: [],
+  };
+  const rebasing = { kind: "rebase", branch: "topic", target: "main", commit: null, step: { current: 1, total: 3 }, conflicts: 1, mergeHead: false };
+  const git = { repoRoot: "/repo", resolveRoot: jest.fn(async () => "/repo"), watchLocations: jest.fn(async () => ({ root: "/repo", gitDir: "/repo/.git", commonDir: "/repo/.git", ignoredPaths: [] })),
+    status: jest.fn(async (): Promise<unknown> => ({ branch, entries: [] })), lastDiscard: jest.fn(async () => null), operationState: jest.fn(async (): Promise<unknown> => null),
+    revParse: jest.fn(async () => head), refDecorations: jest.fn(async () => new Map()), remoteUrl: jest.fn(async () => null), currentBranch: jest.fn(async () => "topic"),
+    listRefs: jest.fn(async () => refs), listStashes: jest.fn(async () => []), listWorktrees: jest.fn(async () => []), fileDiff: jest.fn(async () => ""),
+    rebasePlan: jest.fn(async () => ({ branch: "topic", commits: 3, behind: 2, pushed: true })), rebase: jest.fn(async () => "rebased"),
+    cherryPick: jest.fn(async () => "committed"), revert: jest.fn(async () => "committed"), mergeMessage: jest.fn(async () => "Fix the title\n\n(cherry picked from commit cccc)"),
+    continueOperation: jest.fn(async () => {}), commit: jest.fn(async () => {}), commitDetails: jest.fn(() => new Promise(() => {})) };
+  jest.mocked(getGitService).mockReturnValue(git as unknown as GitService);
+  jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
+  let renderer!: ReactTestRenderer;
+  await act(async () => { renderer = create(<App />); });
+  await act(async () => { openRepository(); });
+  const sidebar = () => renderer.root.findAllByType(Sidebar)[0]!;
+  const row = (id: string) => sidebar().findAllByType(SidebarItem).find(item => item.props.id === id)!;
+  const menuItem = (id: string) => lastMenu().items.flatMap(entry => entry.items ?? []).find(entry => entry.id === id);
+  const inputs = () => renderer.root.findAllByType(TextInput);
+  const menuLabels = () => jest.mocked(showContextMenu).mock.calls.at(-1)![0].items.map((entry: any) => entry.label ?? "-");
+  const toolbarBranch = () => (jest.mocked(setWindowOptions).mock.calls.at(-1)![1].macos!.toolbar!.items! as any[]).find(entry => entry.id === "branch").label;
+
+  // The sheet names both branches and the commits that move, and warns (Cancel first) that pushed ones are rewritten.
+  expect(menuItem("rebase-ref")).toMatchObject({ label: "Rebase Current Branch onto…", disabled: false });
+  jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "cancel" });
+  jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: false, itemId: "rebase-ref" });
+  await act(async () => { row("ref:refs/heads/main").props.onContextMenu({ windowPosition: { x: 1, y: 2 } }); });
+  expect(menuLabels()).toContain("Rebase “topic” onto “main”…");
+  expect(git.rebasePlan).toHaveBeenCalledWith("refs/heads/main", expect.anything());
+  expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "warning", title: "Rebase “topic” onto “main”?", buttons: [{ id: "rebase", label: "Rebase" }, { id: "cancel", label: "Cancel" }], defaultButtonId: "cancel",
+    message: expect.stringMatching(/^Git replays 3 commits of “topic” on top of “main”, rewriting them as new commits\.[\s\S]*already pushed to the upstream branch/) }));
+  expect(git.rebase).not.toHaveBeenCalled();
+
+  // Rebase runs it; it stops with a conflict: Changes shows the bar with the step, the branch keeps its label, nothing fills the composer.
+  git.rebasePlan.mockResolvedValue({ branch: "topic", commits: 3, behind: 2, pushed: false });
+  git.rebase.mockImplementationOnce(async () => {
+    git.status.mockResolvedValue({ branch: { ...branch, head: "(detached)" }, entries: [{ kind: "unmerged", path: "a.txt", indexStatus: "U", worktreeStatus: "U" }] });
+    git.operationState.mockResolvedValue(rebasing);
+    return "stopped";
+  });
+  await act(async () => { sidebar().props.onSelectionChange({ id: "history" }); });
+  jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "rebase" });
+  jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: false, itemId: "rebase-ref" });
+  await act(async () => { row("ref:refs/heads/main").props.onContextMenu({ windowPosition: { x: 1, y: 2 } }); });
+  expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "info", defaultButtonId: "rebase", message: expect.not.stringContaining("pushed") }));
+  expect(git.rebase).toHaveBeenCalledWith("refs/heads/main", expect.objectContaining({ branch: "topic" }));
+  expect(sidebar().props.selectedId).toBe("changes");
+  expect(renderer.root.findByType(StateBar).props.text).toBe("Rebasing “topic” onto “main”, commit 1 of 3 — 1 conflicted file");
+  expect(menuItem("continue-operation")).toMatchObject({ label: "Continue Rebase", disabled: true });
+  expect(toolbarBranch()).toBe("topic");
+  expect(inputs()[0]!.props.value).toBe("");
+  // Resolved, Continue runs `git rebase --continue`.
+  git.status.mockResolvedValue({ branch: { ...branch, head: "(detached)" }, entries: [{ kind: "ordinary", path: "a.txt", indexStatus: "M", worktreeStatus: "." }] });
+  git.operationState.mockResolvedValue({ ...rebasing, conflicts: 0 });
+  await act(async () => { lastMenu().onAction({ itemId: "refresh" }); });
+  git.continueOperation.mockImplementationOnce(async () => { git.operationState.mockResolvedValue(null); git.status.mockResolvedValue({ branch, entries: [] }); });
+  await act(async () => { lastMenu().onAction({ itemId: "continue-operation" }); });
+  expect(git.continueOperation).toHaveBeenCalledWith("rebase", expect.anything());
+  expect(git.commit).not.toHaveBeenCalled();
+  expect(renderer.root.findAllByType(StateBar)).toHaveLength(0);
+  // Up to date: no sheet, no rebase.
+  git.rebasePlan.mockResolvedValueOnce({ branch: "topic", commits: 1, behind: 0, pushed: false });
+  await act(async () => { sidebar().props.onSelectionChange({ id: "ref:refs/heads/main" }); });
+  await act(async () => { lastMenu().onAction({ itemId: "rebase-ref" }); });
+  expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ title: "Already up to date.", message: "“topic” already has every commit of “main”." }));
+  expect(git.rebase).toHaveBeenCalledTimes(1);
+
+  // A History row's menu cherry-picks a commit at once and History re-reads.
+  await act(async () => { sidebar().props.onSelectionChange({ id: "history" }); });
+  const reads = git.revParse.mock.calls.length;
+  const openRowMenu = async (oid: string, itemId: string) => {
+    jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: false, itemId } as never);
+    let commitRow!: ReactTestRenderer;
+    await act(async () => { commitRow = create(renderer.root.findByType("LegendList" as any).props.renderItem({ item: commits.find(entry => entry.oid === oid) })); });
+    await act(async () => { commitRow.root.findByProps({ accessibilityRole: "button" }).props.onTouchEnd({ nativeEvent: { button: 2, pageX: 1, pageY: 2 } }); });
+  };
+  await openRowMenu(side, "cherry-pick-commit");
+  expect(menuLabels()).toEqual(expect.arrayContaining(["Cherry-Pick Commit", "Revert Commit…"]));
+  expect(git.cherryPick).toHaveBeenCalledWith(side, expect.objectContaining({ branch: "topic" }));
+  expect(git.revParse.mock.calls.length).toBeGreaterThan(reads);
+  // A pick the branch has already says so.
+  git.cherryPick.mockResolvedValueOnce("empty");
+  await openRowMenu(side, "cherry-pick-commit");
+  expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "info", title: "Nothing to Cherry-Pick", message: "“topic” already has the changes of “Fix the title”, so no commit was made." }));
+  // Revert asks first; Cancel reverts nothing, Revert runs it.
+  jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "cancel" });
+  await openRowMenu(side, "revert-commit");
+  expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ title: "Revert “Fix the title”?", buttons: [{ id: "revert", label: "Revert" }, { id: "cancel", label: "Cancel" }], defaultButtonId: "revert" }));
+  expect(git.revert).not.toHaveBeenCalled();
+  jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "revert" });
+  await openRowMenu(side, "revert-commit");
+  expect(git.revert).toHaveBeenCalledWith(side, expect.objectContaining({ branch: "topic" }));
+  // A merge commit is refused with git-core's message.
+  git.cherryPick.mockRejectedValueOnce(new Error("Cherry-picking a merge commit isn’t supported yet."));
+  await openRowMenu(merged, "cherry-pick-commit");
+  expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "warning", title: "Couldn’t Cherry-Pick “Merge feature”", message: "Cherry-picking a merge commit isn’t supported yet." }));
+
+  // A conflicting pick stops: Changes shows the bar and Git's prepared message; an edited message commits the pick.
+  git.cherryPick.mockImplementationOnce(async () => {
+    git.status.mockResolvedValue({ branch, entries: [{ kind: "ordinary", path: "a.txt", indexStatus: "M", worktreeStatus: "." }] });
+    git.operationState.mockResolvedValue({ kind: "cherry-pick", branch: "topic", target: null, commit: { oid: "ccccccc", subject: "Fix the title" }, step: null, conflicts: 0, mergeHead: false });
+    return "stopped";
+  });
+  await openRowMenu(side, "cherry-pick-commit");
+  expect(sidebar().props.selectedId).toBe("changes");
+  expect(renderer.root.findByType(StateBar).props.text).toBe("Cherry-picking “Fix the title” (ccccccc) onto “topic”");
+  expect(inputs().map(input => input.props.value)).toEqual(["Fix the title", "(cherry picked from commit cccc)"]);
+  await act(async () => { inputs()[0]!.props.onChangeText("Fix the title on topic"); });
+  await act(async () => { lastMenu().onAction({ itemId: "continue-operation" }); });
+  expect(git.commit).toHaveBeenLastCalledWith(expect.objectContaining({ message: "Fix the title on topic\n\n(cherry picked from commit cccc)\n" }), expect.anything());
   await act(async () => { renderer.unmount(); });
 });
 

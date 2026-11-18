@@ -7,10 +7,12 @@ import { createCommitMessageGenerator, type CommitMessageGeneration } from "./co
 
 export type CommitMessageGenerator = ReturnType<typeof createCommitMessageGenerator>;
 
-export function CommitComposer({ disabled, stagedCount, conflictCount, merging, unborn, root, onCommit, headMessage, mergeMessage, editedMergeMessageRef, commitRef, readStaged, confirmReplace, generatorRef, onGeneratingChange }: {
+export function CommitComposer({ disabled, stagedCount, conflictCount, merging, prepared = merging, unborn, root, onCommit, headMessage, mergeMessage, editedMergeMessageRef, commitRef, readStaged, confirmReplace, generatorRef, onGeneratingChange }: {
   disabled: boolean; stagedCount: number; conflictCount: number; merging: boolean; unborn: boolean; root: string;
   onCommit: (input: GitCommitInput) => Promise<boolean>; headMessage: () => Promise<string | null>;
-  /** The merge message Git prepared, shown while a merge is in progress. */
+  /** Whether Git prepared a message (a merge, cherry-pick or revert in progress); defaults to `merging`. */
+  prepared?: boolean;
+  /** The message Git prepared, shown while `prepared`. */
   mergeMessage: () => Promise<string | null>;
   /** Set to read the merge message when the user edited Git's, else null. */
   editedMergeMessageRef?: { current: (() => string | null) | null };
@@ -72,10 +74,10 @@ export function CommitComposer({ disabled, stagedCount, conflictCount, merging, 
     commitRef.current = () => void commit();
     return () => { commitRef.current = null; };
   });
-  // A merge in progress fills empty fields with Git's message, edited or not; they empty again when the merge ends.
+  // A merge, cherry-pick or revert in progress fills empty fields with Git's message, edited or not; they empty again when it ends.
   const merged = useRef<CommitDraft | null>(null);
   useEffect(() => {
-    if (!merging) {
+    if (!prepared) {
       if (merged.current) setDraft({ subject: "", body: "" });
       merged.current = null;
       return;
@@ -87,7 +89,7 @@ export function CommitComposer({ disabled, stagedCount, conflictCount, merging, 
       setDraft(merged.current);
     });
     return () => { live = false; };
-  }, [merging, root]); // eslint-disable-line react-hooks/exhaustive-deps -- read once per merge
+  }, [prepared, root]); // eslint-disable-line react-hooks/exhaustive-deps -- read once per operation
   useEffect(() => {
     if (!editedMergeMessageRef) return;
     editedMergeMessageRef.current = () => {

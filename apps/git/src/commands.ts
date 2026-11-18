@@ -121,6 +121,10 @@ export type CommandContext = {
     deleteBranch(ref: string): void;
     /** Merges a local or remote branch into the current one after a confirm sheet; without a ref, asks for its name first. */
     mergeRef(ref?: string): void;
+    /** Rebases the current branch onto a local or remote branch after a confirm sheet; without a ref, asks for its name first. */
+    rebaseRef(ref?: string): void;
+    /** Cherry-picks a commit onto the current branch, or reverts it there after asking. */
+    pickCommit(kind: "cherry-pick" | "revert", oid: string): void;
     /** Stages a conflicted file, asking first when it still has conflict markers. */
     markResolved(path: string): void;
     copyText(text: string): void;
@@ -328,6 +332,14 @@ export const commands = [
       : !!(context.refs?.branches.some(branch => !branch.current) || context.refs?.remotes.some(remote => remote.branches.length))),
     run: (context, target) => context.run.mergeRef(mergeable(context, target)?.ref.ref),
   },
+  {
+    id: "rebase-ref", label: "Rebase Current Branch onto…",
+    enabled: (context, target) => canMerge(context) && (target ? !!mergeable(context, target)
+      : !!(context.refs?.branches.some(branch => !branch.current) || context.refs?.remotes.some(remote => remote.branches.length))),
+    run: (context, target) => context.run.rebaseRef(mergeable(context, target)?.ref.ref),
+  },
+  { id: "cherry-pick-commit", label: "Cherry-Pick Commit", enabled: (context, target) => canMerge(context) && !!commit(context, target), run: (context, target) => context.run.pickCommit("cherry-pick", commit(context, target)!) },
+  { id: "revert-commit", label: "Revert Commit…", enabled: (context, target) => canMerge(context) && !!commit(context, target), run: (context, target) => context.run.pickCommit("revert", commit(context, target)!) },
   {
     id: "mark-resolved", label: "Mark Resolved",
     enabled: (context, target) => { const path = target ?? (context.section === "changes" ? context.selectedFile : null); return context.hasRepository && !context.busy && !!path && context.conflicted.includes(path); },

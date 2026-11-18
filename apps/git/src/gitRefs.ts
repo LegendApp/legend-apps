@@ -125,6 +125,20 @@ export function createGitRefs(onChange: (state: RefsState) => void, serviceFor: 
     merge(ref: string, branch: string) {
       return write((git, signal) => git.merge(ref, { branch, signal }));
     },
+    /** What rebasing the current branch onto the ref does (see GitService.rebasePlan). */
+    rebasePlan(ref: string) {
+      const git = service, controller = active;
+      if (!git || !controller || closed) return Promise.reject(new Error("Open a repository first."));
+      return git.rebasePlan(ref, { signal: controller.signal });
+    },
+    /** Rebases `branch`, the current branch, onto the ref (`git rebase`); rejects with Git's message when Git refuses. */
+    rebase(ref: string, branch: string) {
+      return write((git, signal) => git.rebase(ref, { branch, signal }));
+    },
+    /** Cherry-picks or reverts commit `oid` on `branch`, the current branch; rejects with Git's message when Git refuses. */
+    pick(kind: "cherry-pick" | "revert", oid: string, branch: string) {
+      return write((git, signal) => kind === "revert" ? git.revert(oid, { branch, signal }) : git.cherryPick(oid, { branch, signal }));
+    },
     /** Checks out a local branch, or a remote branch as a tracking local branch; resolves with the local branch's ref name. */
     checkout(entry: RefEntry) {
       if (entry.kind === "tag") return Promise.reject(new Error("Check out a branch, not a tag."));
