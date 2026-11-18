@@ -2,6 +2,7 @@
 // runtime syntax such as parameter properties. The Spark process runner is wired in by `sparkGitService.ts`.
 import type { ProcessExit, ProcessOptions, ProcessResult } from "@legendapp/spark/processes";
 import { parseGitStatus } from "./gitStatus.ts";
+import { parseConflictRegions, resolveConflictRegion, type ConflictRegionSide, type GitConflictRegions } from "./conflictRegions.ts";
 
 export type GitRunner = (options: ProcessOptions) => Promise<ProcessResult>;
 export type GitDecoder = (bytes: Uint8Array) => string;
@@ -1350,6 +1351,53 @@ export class GitService {
     const file = (await this.process("sh", ["-c", conflictProbe, "legend-git-conflict", `${root}/${path}`], options)).trim();
     const edited = /^[0-9a-f]{40,64}$/.test(file) && file !== ours?.oid && file !== theirs?.oid;
     return { ours: !!ours, theirs: !!theirs, binary: await this.binaryConflict(stages, options), edited };
+  }
+
+  /**
+   * Conflicted `path`'s worktree text and its conflict regions (see parseConflictRegions), or null when it isn't conflicted,
+   * is gone, isn't a regular file, or isn't UTF-8 text.
+   */
+  conflictRegions(path: string, options: GitReadOptions = {}): Promise<GitConflictRegions | null> {
+    if (!isRepoPath(path)) return Promise.reject(new Error("Expected a repository-relative file path."));
+    return this.enqueue(options, async () => {
+      const root = (await this.git(["rev-parse", "--show-toplevel"], options)).replace(/\n$/, "");
+      const text = await this.conflictText(root, path, options);
+      return text === null ? null : { text, regions: parseConflictRegions(text, await this.markerSize(root, path, options)) };
+    });
+  }
+
+  /** The length of `path`'s conflict markers: its conflict-marker-size attribute, else Git's 7. */
+  private async markerSize(root: string, path: string, options: GitReadOptions) {
+    const [, , value = ""] = (await this.git(["-C", root, "--literal-pathspecs", "check-attr", "-z", "conflict-marker-size", "--", path], options, 10_000)).split("\0");
+    return /^[1-9][0-9]*$/.test(value) ? Number(value) : 7;
+  }
+
+  private async conflictText(root: string, path: string, options: GitReadOptions) {
+    if (!await this.conflictStages(root, path, options)) return null;
+    const text = await this.process("sh", ["-c", 'if test -f "$1" && ! test -L "$1"; then printf x && cat -- "$1"; fi', "legend-git-conflict-text", `${root}/${path}`], options, 10_000);
+    // Bytes that aren't UTF-8 decode to U+FFFD and wouldn't be written back as they were.
+    return text.startsWith("x") && !/[\0\uFFFD]/.test(text) ? text.slice(1) : null;
+  }
+
+  /**
+   * Replaces conflict region `index` of conflicted `path` with ours, theirs or both in the worktree file only (it stays
+   * conflicted until staged). `shown` is the text the regions were read from: when the file differs from it, rejects
+   * without writing, since the region may have moved.
+   */
+  resolveConflictRegion(path: string, index: number, side: ConflictRegionSide, shown: string, options: GitReadOptions = {}) {
+    if (!isRepoPath(path)) return Promise.reject(new Error("Expected a repository-relative file path."));
+    return this.enqueue(options, async (_gitDir, commit) => {
+      const root = (await this.git(["rev-parse", "--show-toplevel"], options)).replace(/\n$/, "");
+      const name = `“${path.split("/").pop()}”`;
+      const text = await this.conflictText(root, path, options);
+      if (text === null) throw new Error(`${name} is no longer a conflicted text file. Refresh and try again.`);
+      if (text !== shown) throw new Error(`${name} changed since its conflicts were shown, so nothing was picked. Review them again.`);
+      const next = resolveConflictRegion(text, index, side, await this.markerSize(root, path, options));
+      commit();
+      // Written in full beside the file first, then copied over it (keeping its mode and links); not cancellable once begun.
+      await this.process("sh", ["-c", 't=$(mktemp "$1.XXXXXX") || exit 1; if cat > "$t"; then cat -- "$t" > "$1"; s=$?; else s=1; fi; rm -f -- "$t"; exit $s',
+        "legend-git-conflict-write", `${root}/${path}`], { ...options, signal: undefined }, 60_000, next);
+    });
   }
 
   /**

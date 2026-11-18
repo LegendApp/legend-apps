@@ -1,4 +1,4 @@
-import { getGitService, watchGitRepo, type GitCommitInput, type GitConflictFile, type GitConflictSide, type GitDirectoryWatcher, type GitDiscardBackup, type GitOperation, type GitOperationKind, type GitService, type GitStatus, type GitStatusEntry } from "@legend-apps/git-core";
+import { getGitService, watchGitRepo, type GitCommitInput, type ConflictRegionSide, type GitConflictFile, type GitConflictRegions, type GitConflictSide, type GitDirectoryWatcher, type GitDiscardBackup, type GitOperation, type GitOperationKind, type GitService, type GitStatus, type GitStatusEntry } from "@legend-apps/git-core";
 import type { ConflictEntry } from "./gitOperation";
 import { applyPatchSelection, discardPatchSelection, loadFilePatch, type FilePatch } from "./gitPatch";
 
@@ -7,8 +7,11 @@ export type ChangesSelection = { section: ChangesSection; path: string };
 export type ChangesState = {
   root: string | null; status: GitStatus | null; loading: boolean; writing: boolean; error: string | null;
   selection: ChangesSelection | null;
-  /** A conflicted file's patch has no diff; `conflict` says which picks apply (null when the read failed). */
-  patch: (FilePatch & ChangesSelection & { conflicted: boolean; conflict?: GitConflictFile | null }) | null;
+  /**
+   * A conflicted file's patch has no diff; `conflict` says which picks apply and `regions` holds its worktree text and
+   * conflict regions (each null when the read failed or the file isn't text).
+   */
+  patch: (FilePatch & ChangesSelection & { conflicted: boolean; conflict?: GitConflictFile | null; regions?: GitConflictRegions | null }) | null;
   lastDiscard: GitDiscardBackup | null;
   /** A merge is in progress, so committing concludes it even when the index matches HEAD. */
   merging: boolean;
@@ -66,7 +69,8 @@ export function createGitChanges(onChange: (state: ChangesState) => void, watch:
     const entry = selectedEntry(status, selection);
     const conflicted = entry?.kind === "unmerged";
     const patch = entry && selection ? { ...selection, conflicted, ...conflicted
-      ? { text: "", file: null, conflict: await git.conflictFile(entry.path, { signal: controller.signal }).catch(() => null) }
+      ? { text: "", file: null, ...await Promise.all([git.conflictFile(entry.path, { signal: controller.signal }).catch(() => null), git.conflictRegions(entry.path, { signal: controller.signal }).catch(() => null)])
+        .then(([conflict, regions]) => ({ conflict, regions })) }
       : await loadFilePatch(git, entry, selection.section === "staged", controller.signal) } : null;
     if (current(controller) && run === generation && selection === state.selection) publish({ status, lastDiscard, merging, operation, error: null, patch, selection: entry ? selection : null });
   };
@@ -188,6 +192,10 @@ export function createGitChanges(onChange: (state: ChangesState) => void, watch:
     /** Resolves a conflicted file with Git's "ours" or "theirs" side, or both, and stages it. */
     resolveConflict(path: string, side: GitConflictSide) {
       return write((git, signal) => git.resolveConflict(path, side, { signal }));
+    },
+    /** Resolves conflict region `index` of `path` in the worktree file; refused when the file no longer matches `shown`. */
+    resolveConflictRegion(path: string, index: number, side: ConflictRegionSide, shown: string) {
+      return write((git, signal) => git.resolveConflictRegion(path, index, side, shown, { signal }));
     },
     /** The open repository's staged diff; aborted by `signal` or by opening another repository. */
     async stagedDiff(signal: AbortSignal) {

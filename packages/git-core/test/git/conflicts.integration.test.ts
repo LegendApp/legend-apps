@@ -174,3 +174,64 @@ describe("conflict picks", () => {
     expect(await git.operationState()).toBeNull();
   });
 });
+
+describe("conflict region picks", () => {
+  const sides = (file: string) => {
+    const main = base.replace("2", "main 2").replace("8", "main 8"), feature = base.replace("2", "feature 2").replace("8", "feature 8");
+    return [{ [file]: base }, { [file]: main }, { [file]: feature }] as const;
+  };
+
+  it("resolves one region in the worktree only, keeping the other byte for byte, and the last leaves no markers", async () => {
+    const file = "docs/größe app.ts";
+    const { path, git } = setup("regions", ...sides(file));
+    fixtureGit(path, "config", "merge.conflictStyle", "diff3");
+    conflictOf(path, "merge");
+    const shown = await git.conflictRegions(file);
+    expect(shown?.regions?.map(region => [region.ours, region.base, region.theirs])).toEqual([[["main 2"], ["2"], ["feature 2"]], [["main 8"], ["8"], ["feature 8"]]]);
+    const second = shown!.text.slice(shown!.text.indexOf("<<<<<<<", shown!.text.indexOf(">>>>>>>")));
+    await git.resolveConflictRegion(file, 0, "theirs", shown!.text);
+    const after = read(path, file);
+    expect(after).toBe(`1\nfeature 2\n3\n4\n5\n6\n7\n${second}`);
+    // Still conflicted and unstaged: Mark Resolved stays explicit.
+    expect(status(path)).toContain(`UU "docs/gr`);
+    expect(await git.conflictFile(file)).toMatchObject({ edited: false });
+    const next = await git.conflictRegions(file);
+    expect(next?.regions).toHaveLength(1);
+    await git.resolveConflictRegion(file, 0, "both", next!.text);
+    expect(read(path, file)).toBe(base.replace("2", "feature 2").replace("8", "main 8\nfeature 8"));
+    expect(await git.conflictRegions(file)).toMatchObject({ regions: [] });
+    expect(await git.hasConflictMarkers(file)).toBe(false);
+    expect((await git.operationState())?.conflicts).toBe(1);
+  });
+
+  it("refuses a pick when the file changed since it was shown, writing nothing", async () => {
+    const { path, git } = setup("regions-edited", ...sides("a.txt"));
+    conflictOf(path, "merge");
+    const shown = (await git.conflictRegions("a.txt"))!;
+    const edited = shown.text.replace("1\n", "0\n1\n");
+    writeFileSync(join(path, "a.txt"), edited);
+    await expect(git.resolveConflictRegion("a.txt", 0, "ours", shown.text)).rejects.toThrow("“a.txt” changed since its conflicts were shown, so nothing was picked.");
+    expect(read(path, "a.txt")).toBe(edited);
+  });
+
+  it("reads and resolves markers of the file's conflict-marker-size", async () => {
+    const { path, git } = setup("regions-size", { ".gitattributes": "*.md conflict-marker-size=12\n", "a.md": base }, { "a.md": base.replace("2", "main 2") }, { "a.md": base.replace("2", "feature 2") });
+    conflictOf(path, "merge");
+    const shown = (await git.conflictRegions("a.md"))!;
+    expect(shown.text).toContain("<<<<<<<<<<<< HEAD\n");
+    expect(shown.regions?.map(region => [region.ours, region.theirs])).toEqual([[["main 2"], ["feature 2"]]]);
+    await git.resolveConflictRegion("a.md", 0, "ours", shown.text);
+    expect(read(path, "a.md")).toBe(base.replace("2", "main 2"));
+  });
+
+  it("has no regions for a file that isn't conflicted, is binary, or is gone", async () => {
+    const { path, git } = setup("regions-none", { "a.bin": Buffer.from([0, 1, 2]), "gone.txt": base }, { "a.bin": Buffer.from([0, 1, 3]), "gone.txt": base.replace("2", "main 2") },
+      { "a.bin": Buffer.from([0, 1, 4]), "gone.txt": null });
+    conflictOf(path, "merge");
+    expect(await git.conflictRegions("README.md")).toBeNull();
+    expect(await git.conflictRegions("a.bin")).toBeNull();
+    rmSync(join(path, "gone.txt"));
+    expect(await git.conflictRegions("gone.txt")).toBeNull();
+    await expect(git.resolveConflictRegion("gone.txt", 0, "ours", "")).rejects.toThrow("no longer a conflicted text file");
+  });
+});

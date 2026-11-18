@@ -4,7 +4,7 @@ import { watchDirectories } from "@legend-apps/file-system-watcher";
 import { GitBranchNotMergedError, GitLocalChangesError, GitPullDivergedError, GitPushRejectedError, GitServiceError, GitStashDropError, type GitConflictFile, type GitConflictSide, type GitRefList, type GitStash, type GitStatusEntry } from "@legend-apps/git-core";
 import { Button } from "@legendapp/spark/ui";
 import { conflictSides, conflictedEntries, createGitChanges, emptyChanges, stagedEntries, unstagedEntries } from "./gitChanges";
-import { DiffPane, type DiffLineTarget } from "./DiffPane";
+import { DiffPane, PickButton, type DiffLineTarget } from "./DiffPane";
 import { CommitDetails, HistoryList, type BlameTarget, type HistoryActions } from "./HistoryView";
 import { commandEnabled, commandLabel, commandMenuItem, queueEntry, runCommand, sectionPullRequest, sectionRef, sectionReview, sectionShowsHistory, sectionStash, sectionWorktree, type CommandContext, type CommandId, type Section } from "./commands";
 import { queueDetail, queuePushTarget, reviewQueue, type QueueEntry } from "./gitQueue";
@@ -27,7 +27,7 @@ import { GitHubError, reviewSummary, type GitHubPullRequest, type ReviewEvent, t
 import { commentCounts, commentRange, placeThreads, threadLines } from "./reviewThreads";
 import { CommentSheet, ReviewThreadView } from "./ReviewThreadView";
 import { StateBar } from "./StateBar";
-import { abortLabel, abortWarning, canContinue, conflictPickable, operationText } from "./gitOperation";
+import { abortLabel, abortWarning, canContinue, conflictPickable, conflictSideName, operationText } from "./gitOperation";
 import { recentLabels, recentRepositories, useRecentRepositories } from "./gitRecents";
 import { FileRow, pathParts, useSymbolColor } from "./FileRow";
 import { CommitComposer, type CommitMessageGenerator } from "./CommitComposer";
@@ -1220,15 +1220,15 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
   const conflict = conflictList.find(entry => entry.path === conflictPath);
   const resolveButton = conflictPath ? <>
     {conflict && (["ours", "theirs", "both"] as const).filter(side => conflictPickable(conflict, side)).map(side => {
-      const id = `use-${side}` as const, label = commandLabel(id, context, conflictPath);
-      // Sized to the label like Diff's buttons: labels name branches.
-      return <Button key={id} style={{ height: 24, width: Math.max(64, Math.ceil(label.length * 7) + 28) }} disabled={!commandEnabled(id, context, conflictPath)}
-        onPress={() => runCommand(id, contextRef.current, conflictPath)}>{label}</Button>;
+      const id = `use-${side}` as const;
+      return <PickButton key={id} label={commandLabel(id, context, conflictPath)} disabled={!commandEnabled(id, context, conflictPath)} onPress={() => runCommand(id, contextRef.current, conflictPath)} />;
     })}
     <Button style={styles.markResolved} disabled={!commandEnabled("mark-resolved", context, conflictPath)}
       onPress={() => runCommand("mark-resolved", contextRef.current, conflictPath)}>Mark Resolved</Button>
   </> : null;
   const changesDetail = changes.patch ? <DiffPane patch={changes.patch} disabled={busy} applyRef={applyLines} discardRef={discardLines} accessory={resolveButton}
+    conflictLabels={{ ours: conflictSideName(operation, "ours"), theirs: conflictSideName(operation, "theirs") }}
+    onPickRegion={(index, side, shown) => { if (conflictPath) void controller.current?.resolveConflictRegion(conflictPath, index, side, shown); }}
     onLineChange={target => setBlameTarget(changesBlameTarget(target))}
     onLineContextMenu={(target, position) => { const blame = changesBlameTarget(target); if (blame) showLineMenu(blame, position); }}
     onApply={(keys, text) => void controller.current?.changeLines(keys, text)}

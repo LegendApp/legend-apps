@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from "react";
-import { FlatList, PlatformColor, Pressable, StyleSheet, Text, View, useColorScheme, type GestureResponderEvent } from "react-native";
+import { FlatList, PlatformColor, Pressable, ScrollView, StyleSheet, Text, View, useColorScheme, type GestureResponderEvent } from "react-native";
+import type { ConflictRegion, ConflictRegionSide } from "@legend-apps/git-core";
 import { DiffNativeRow, DiffNativeRowConfig, diffUnifiedChangeBarWidth, diffUnifiedLineNumberWidth, diffUnifiedMarkerWidth, getDiffRowPalette, loadUnifiedDiff, type DiffDocument, type DiffRenderRow } from "@legend-apps/diff-parser";
 import { unifiedPatchHunkKeys, unifiedPatchLineKey } from "@legend-apps/diff-parser/src/unifiedPatch";
 import { Button } from "@legendapp/spark/ui";
@@ -90,7 +91,46 @@ export function lineRange(items: readonly DiffPaneItem[], anchor: number | null,
   return { start, end };
 }
 
-export function DiffPane({ patch, disabled, readOnly = false, accessory, onApply, applyRef, onDiscard, discardRef, onLineChange, onLineContextMenu, annotations, header, onRangeChange }: {
+/** A conflict pick's button, sized to its label like Diff's buttons (labels name branches). */
+export function PickButton({ label, disabled, onPress }: { label: string; disabled: boolean; onPress: () => void }) {
+  return <Button style={{ height: 24, width: Math.max(64, Math.ceil(label.length * 7) + 28) }} disabled={disabled} onPress={onPress}>{label}</Button>;
+}
+
+const sideTint = {
+  light: { ours: "rgba(9, 105, 218, 0.08)", oursBar: "rgba(9, 105, 218, 0.6)", theirs: "rgba(130, 80, 223, 0.08)", theirsBar: "rgba(130, 80, 223, 0.6)" },
+  dark: { ours: "rgba(56, 139, 253, 0.14)", oursBar: "rgba(56, 139, 253, 0.7)", theirs: "rgba(163, 113, 247, 0.14)", theirsBar: "rgba(163, 113, 247, 0.7)" },
+};
+
+/** One conflict region: a header with its picks, then ours, the common ancestor when Git wrote it, and theirs. */
+function ConflictRegionView({ region, index, count, labels, disabled, appearance, onPick }: {
+  region: ConflictRegion; index: number; count: number; labels: { ours: string; theirs: string }; disabled: boolean; appearance: "light" | "dark";
+  onPick: (side: ConflictRegionSide) => void;
+}) {
+  const tint = sideTint[appearance];
+  const section = (title: string, lines: readonly string[], firstLine: number, color: string | null, bar: string | null) => <View>
+    <Text style={styles.regionLabel} numberOfLines={1}>{title}</Text>
+    <View style={[styles.regionLines, color ? { backgroundColor: color, borderLeftColor: bar! } : styles.regionBase]}>
+      {lines.length ? lines.map((line, offset) => <View key={offset} style={styles.regionLine}>
+        <Text style={[styles.regionNumber, { fontFamily }]}>{firstLine + offset}</Text>
+        <Text style={[styles.regionText, { fontFamily }]} numberOfLines={1}>{line || " "}</Text>
+      </View>) : <Text style={styles.regionEmpty}>No lines</Text>}
+    </View>
+  </View>;
+  const oursAt = region.start + 2, baseAt = oursAt + region.ours.length + 1, theirsAt = (region.base ? baseAt + region.base.length : oursAt + region.ours.length) + 1;
+  return <View style={styles.region}>
+    <View style={styles.hunk}>
+      <Text style={styles.hunkTitle} numberOfLines={1} accessibilityRole="header">{`Conflict ${index + 1} of ${count}, line ${region.start + 1}`}</Text>
+      <PickButton label={`Use ${labels.ours}`} disabled={disabled} onPress={() => onPick("ours")} />
+      <PickButton label={`Use ${labels.theirs}`} disabled={disabled} onPress={() => onPick("theirs")} />
+      <PickButton label="Use Both" disabled={disabled} onPress={() => onPick("both")} />
+    </View>
+    {section(labels.ours, region.ours, oursAt, tint.ours, tint.oursBar)}
+    {region.base ? section("Common ancestor", region.base, baseAt, null, null) : null}
+    {section(labels.theirs, region.theirs, theirsAt, tint.theirs, tint.theirsBar)}
+  </View>;
+}
+
+export function DiffPane({ patch, disabled, readOnly = false, accessory, onApply, applyRef, onDiscard, discardRef, onLineChange, onLineContextMenu, annotations, header, onRangeChange, conflictLabels, onPickRegion }: {
   patch: NonNullable<ChangesState["patch"]>; disabled: boolean;
   /** History: no staging or discard actions and no line selection. */
   readOnly?: boolean;
@@ -109,6 +149,10 @@ export function DiffPane({ patch, disabled, readOnly = false, accessory, onApply
   header?: ReactNode;
   /** readOnly: Shift-click extends the clicked line into a range; called with its first and last lines. */
   onRangeChange?: (range: { start: DiffLineTarget; end: DiffLineTarget } | null) => void;
+  /** A conflicted file: what its sides are called ("“main”"), for its regions' sections and picks. */
+  conflictLabels?: { ours: string; theirs: string };
+  /** A conflicted file: resolves one region in the worktree file, given the text its regions were read from. */
+  onPickRegion?: (index: number, side: ConflictRegionSide, shown: string) => void;
 }) {
   const appearance = useColorScheme() === "dark" ? "dark" : "light";
   const [loaded, setLoaded] = useState<{ text: string; document: DiffDocument; rows: DiffRenderRow[] } | null>(null);
@@ -172,7 +216,11 @@ export function DiffPane({ patch, disabled, readOnly = false, accessory, onApply
     discardRef.current = () => { if (!disabled && selected.size) discard?.(selected, patch.text, linesLabel(selected.size)); };
     return () => { discardRef.current = null; };
   });
-  const message = patch.conflicted ? "This file has merge conflicts. Use one side or both, or resolve them in the file, then Mark Resolved."
+  const regions = patch.conflicted && onPickRegion ? patch.regions : null;
+  const twoTextSides = !!patch.conflict && patch.conflict.ours && patch.conflict.theirs && !patch.conflict.binary;
+  const message = patch.conflicted ? regions?.regions?.length ? null
+    : regions?.regions && twoTextSides ? "No conflict markers are left. Review the file, then Mark Resolved."
+    : "This file has merge conflicts. Use one side or both, or resolve them in the file, then Mark Resolved."
     : patch.file?.binary ? readOnly ? "Binary file." : `Binary file. ${verb}${discard ? " or discard" : ""} the whole file from the list.`
     : !patch.file ? "No changes to show."
     : !patch.file.hunks.length ? readOnly ? "No content changes (mode or rename only)." : `No content changes. ${verb} the whole file to include mode or rename changes.`
@@ -194,7 +242,10 @@ export function DiffPane({ patch, disabled, readOnly = false, accessory, onApply
       {readOnly || patch.conflicted ? null : <Button style={styles.action} disabled={disabled || !selected.size} onPress={() => onApply(selected, patch.text)}>{`${verb} Lines`}</Button>}
       {accessory}
     </View>
-    {message ? <Text style={styles.message}>{message}</Text> : loaded && <>
+    {message ? <Text style={styles.message}>{message}</Text> : regions?.regions ? <ScrollView key={patch.path} contentContainerStyle={styles.regions}>
+      {regions.regions.map((region, index) => <ConflictRegionView key={`${index}:${region.start}`} region={region} index={index} count={regions.regions!.length}
+        labels={conflictLabels ?? { ours: "Ours", theirs: "Theirs" }} disabled={disabled} appearance={appearance} onPick={side => onPickRegion!(index, side, regions.text)} />)}
+    </ScrollView> : loaded && <>
       <DiffNativeRowConfig
         style={styles.config} collapsable={false} configId={configId} configVersion={appearance === "dark" ? 2 : 1} documentId={loaded.document.documentId}
         presentation="unified" projectionId={0} collapsedFileIndexes="" rowHeight={rowHeight} fontFamily={fontFamily} fontSize={12}
@@ -255,4 +306,13 @@ const styles = StyleSheet.create({
   hitTarget: { ...StyleSheet.absoluteFillObject },
   marker: { position: "absolute", left: 6, top: 4, width: 13, height: 12 },
   selected: { backgroundColor: PlatformColor("selectedContentBackgroundColor"), opacity: 0.28 },
+  regions: { paddingBottom: 16 },
+  region: { marginBottom: 12 },
+  regionLabel: { paddingLeft: 16, paddingTop: 6, paddingBottom: 3, fontSize: 11, fontWeight: "600", color: PlatformColor("secondaryLabelColor") },
+  regionLines: { borderLeftWidth: 3, paddingVertical: 2 },
+  regionBase: { borderLeftColor: PlatformColor("separatorColor"), backgroundColor: PlatformColor("controlBackgroundColor") },
+  regionLine: { flexDirection: "row", height: rowHeight, alignItems: "center" },
+  regionNumber: { width: 44, paddingRight: 10, textAlign: "right", fontSize: 11, color: PlatformColor("tertiaryLabelColor") },
+  regionText: { flex: 1, fontSize: 12, color: PlatformColor("labelColor") },
+  regionEmpty: { paddingLeft: 54, height: rowHeight, lineHeight: rowHeight, fontSize: 11, fontStyle: "italic", color: PlatformColor("tertiaryLabelColor") },
 });

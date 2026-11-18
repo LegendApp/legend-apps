@@ -19,6 +19,7 @@ function setup() {
     discardFiles: jest.fn(async (_paths: readonly string[], _options?: GitReadOptions) => backup), discardPatch: jest.fn(async (_path: string, _patch: string, _options?: GitReadOptions) => backup),
     restoreDiscard: jest.fn(async (_ref: string, _options?: GitReadOptions) => ({ restored: backup, replaced: backup })),
     conflictFile: jest.fn(async (_path: string, _options?: GitReadOptions) => ({ ours: true, theirs: true, binary: true, edited: false })),
+    conflictRegions: jest.fn(async (_path: string, _options?: GitReadOptions) => null),
     commit: jest.fn(async (_input: GitCommitInput, _options?: GitReadOptions) => {}), headMessage: jest.fn(async (_options?: GitReadOptions) => "Subject\n\nBody"),
   };
   const watch = jest.fn((_paths: string[], listener: typeof notify) => { notify = listener; return { remove }; });
