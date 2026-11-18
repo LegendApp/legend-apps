@@ -149,9 +149,11 @@
       "name": "@legend-apps/app-git",
       "version": "0.0.1",
       "dependencies": {
+        "@legend-apps/color-picker": "workspace:*",
         "@legend-apps/diff-parser": "workspace:*",
         "@legend-apps/file-system-watcher": "workspace:*",
         "@legend-apps/git-core": "workspace:*",
+        "@legend-apps/reorder-controls": "workspace:*",
         "@legend-apps/source-editor": "workspace:*",
         "@legend-apps/syntax-parser": "workspace:*",
         "@legendapp/list": "catalog:",

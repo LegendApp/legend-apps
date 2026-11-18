@@ -1,0 +1,7 @@
+{
+  "$schema": "https://legend.so/git/git-settings.v1.schema.json",
+  "version": 1,
+  "name": "GitKraken",
+  "description": "GitKraken's organization: the graph in the middle with a refs column, details or staging on the right, and the diff replacing the graph while a file is selected; comfortable rows.",
+  "extends": "gitkraken"
+}

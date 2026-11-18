@@ -1,0 +1,7 @@
+{
+  "$schema": "https://legend.so/git/git-settings.v1.schema.json",
+  "version": 1,
+  "name": "SourceTree",
+  "description": "The default preset.",
+  "extends": "sourcetree"
+}

@@ -72,3 +72,20 @@ export async function openWorktreeWindow(path: string, repoName: string, title: 
   if (existing) { await showWindow(id, { focus: true }); return existing; }
   return openWindow({ id, component: worktreeWindowModule, props: { windowId: id, initialPath: path, repoName }, title, size: { width: 1100, height: 720 }, appearance: "system", transparent: true });
 }
+
+const settingsModule = () => require("./settings/SettingsWindow") as typeof import("./settings/SettingsWindow");
+const settingsWindowId = "git-settings";
+// Registered when the app starts, not on first open: an open Settings window remounts its component after a reload.
+AppRegistry.registerComponent("GitSettingsWindow", () => () => createElement(WindowProvider, { id: settingsWindowId, children: createElement(settingsModule().GitSettingsWindow) }));
+
+/**
+ * Opens Settings (or brings it forward) on `page`, for the repository of the window it was opened from: its scope popup
+ * offers This Repository for that root.
+ */
+export async function openSettingsWindow(root: string | null, page?: import("./settings/SettingsWindow").SettingsPageId) {
+  settingsModule().settingsTarget$.assign({ root, ...page ? { page } : {} });
+  const existing = await getWindow(settingsWindowId).catch(() => null);
+  if (existing) { await showWindow(settingsWindowId, { focus: true }); return; }
+  const { createSettingsWindowOptions } = require("@legendapp/spark/settings/window") as typeof import("@legendapp/spark/settings/window");
+  await openWindow({ ...createSettingsWindowOptions({ title: "Settings" }), id: settingsWindowId, component: "GitSettingsWindow" } as Parameters<typeof openWindow>[0]);
+}

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { observable, type Observable } from "@legendapp/state";
 import { presetSettings } from "../settings/presets";
 import { defaultPreset, type GitSettings, type PresetId } from "../settings/schema";
-import { openGitSettings, sparkSettingsIO, type GitSettingsStore } from "../settings/store";
+import { acquireGitSettings, sparkSettingsIO, type GitSettingsStore } from "../settings/store";
 import { createDiffDocumentCache } from "./diffDocuments";
 import { createWindowStateStore, type WindowState, type WindowStateStore } from "./windowState";
 
@@ -54,9 +54,10 @@ export function useWindowLayout(windowId: string, root: string | null): WindowLa
 
   useEffect(() => {
     let disposed = false, opened: GitSettingsStore | null = null, unsubscribe: (() => void) | null = null;
-    openGitSettings(root).then(async next => {
+    const shared = acquireGitSettings(root);
+    shared.store.then(async next => {
       opened = next;
-      if (disposed) { void next.close(); return; }
+      if (disposed) return;
       await next.ready;
       if (disposed) return;
       const publish = () => setSettings({ settings: next.settings$.peek(), base: next.base$.peek() });
@@ -69,7 +70,7 @@ export function useWindowLayout(windowId: string, root: string | null): WindowLa
       disposed = true;
       unsubscribe?.();
       setStore(current => current === opened ? null : current);
-      void opened?.close();
+      shared.release();
     };
   }, [root]);
 

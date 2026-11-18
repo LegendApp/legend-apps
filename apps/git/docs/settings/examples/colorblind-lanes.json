@@ -1,0 +1,41 @@
+{
+  "$schema": "https://legend.so/git/git-settings.v1.schema.json",
+  "version": 1,
+  "name": "Colorblind lanes",
+  "description": "Use colorblind-safe lane colors and higher-contrast added/removed lines in dark mode.",
+  "theme": {
+    "name": "Colorblind Safe",
+    "light": {
+      "lanes": [
+        "#0072B2",
+        "#E69F00",
+        "#009E73",
+        "#CC79A7",
+        "#56B4E9",
+        "#D55E00",
+        "#F0E442",
+        "#000000",
+        "#00000042"
+      ]
+    },
+    "dark": {
+      "lanes": [
+        "#56B4E9",
+        "#E69F00",
+        "#009E73",
+        "#CC79A7",
+        "#0072B2",
+        "#D55E00",
+        "#F0E442",
+        "#FFFFFF",
+        "#FFFFFF40"
+      ],
+      "diff": {
+        "addedLine": "#0B3D5C",
+        "removedLine": "#5C2A00",
+        "addedWord": "#56B4E9",
+        "removedWord": "#F5A05A"
+      }
+    }
+  }
+}

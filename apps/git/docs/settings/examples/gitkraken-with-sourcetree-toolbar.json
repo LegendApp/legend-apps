@@ -1,0 +1,24 @@
+{
+  "$schema": "https://legend.so/git/git-settings.v1.schema.json",
+  "version": 1,
+  "name": "Gitkraken with sourcetree toolbar",
+  "description": "Use GitKraken's layout but with SourceTree's toolbar.",
+  "extends": "gitkraken",
+  "toolbar": {
+    "displayMode": "iconAndLabel",
+    "items": [
+      "commit",
+      "pull",
+      "push",
+      "fetch",
+      "space",
+      "new-branch",
+      "merge-ref",
+      "stash-changes",
+      "flexibleSpace",
+      "networkProgress",
+      "reveal-repository",
+      "search"
+    ]
+  }
+}

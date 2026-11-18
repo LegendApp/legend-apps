@@ -1,0 +1,7 @@
+{
+  "$schema": "https://legend.so/git/git-settings.v1.schema.json",
+  "version": 1,
+  "name": "Fork",
+  "description": "Fork's organization: commit list over details, files and diff; unstaged over staged with the composer below; compact rows, thin lanes, icon-only toolbar.",
+  "extends": "fork"
+}

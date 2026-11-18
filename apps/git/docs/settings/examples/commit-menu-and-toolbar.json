@@ -1,0 +1,37 @@
+{
+  "$schema": "https://legend.so/git/git-settings.v1.schema.json",
+  "version": 1,
+  "name": "Commit menu and toolbar",
+  "description": "Add Cherry-Pick and Revert to the commit context menu at the top, and remove Copy SHA from the toolbar.",
+  "contextMenus": {
+    "commit": [
+      "cherry-pick-commit",
+      "revert-commit",
+      "separator",
+      "compare-with-selected",
+      "separator",
+      "new-branch",
+      "separator",
+      "interactive-rebase-commit",
+      "separator",
+      "copy-sha",
+      "open-github"
+    ]
+  },
+  "toolbar": {
+    "items": [
+      "commit",
+      "pull",
+      "push",
+      "fetch",
+      "space",
+      "new-branch",
+      "merge-ref",
+      "stash-changes",
+      "flexibleSpace",
+      "networkProgress",
+      "reveal-repository",
+      "search"
+    ]
+  }
+}

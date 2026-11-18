@@ -1,0 +1,23 @@
+{
+  "$schema": "https://legend.so/git/git-settings.v1.schema.json",
+  "version": 1,
+  "name": "Compact",
+  "description": "Compact everything; I have a 13-inch screen.",
+  "density": "compact",
+  "toolbar": {
+    "displayMode": "iconOnly"
+  },
+  "theme": {
+    "fonts": {
+      "codeSize": 11
+    }
+  },
+  "panels": {
+    "composer": {
+      "bodyLines": 3
+    },
+    "diff": {
+      "contextLines": 2
+    }
+  }
+}

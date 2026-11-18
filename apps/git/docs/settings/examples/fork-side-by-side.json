@@ -1,0 +1,12 @@
+{
+  "$schema": "https://legend.so/git/git-settings.v1.schema.json",
+  "version": 1,
+  "name": "Fork side by side",
+  "description": "Make it look like Fork but keep the diff side by side.",
+  "extends": "fork",
+  "panels": {
+    "diff": {
+      "mode": "sideBySide"
+    }
+  }
+}

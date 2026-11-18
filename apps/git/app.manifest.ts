@@ -27,6 +27,7 @@ const manifest = {
       "@legendapp/spark/links",
       "@legendapp/spark/app",
       "@legendapp/spark/secure-storage",
+      "@legend-apps/color-picker",
     ],
     ios: [],
     android: [],

@@ -1,0 +1,36 @@
+{
+  "$schema": "https://legend.so/git/git-settings.v1.schema.json",
+  "version": 1,
+  "name": "Repo sidebar",
+  "description": "For this repository only, show tags in the sidebar expanded and hide pull requests.",
+  "sidebar": {
+    "sections": [
+      {
+        "id": "workspace"
+      },
+      {
+        "id": "reviewQueue"
+      },
+      {
+        "id": "branches"
+      },
+      {
+        "id": "remotes"
+      },
+      {
+        "id": "tags",
+        "expanded": true
+      },
+      {
+        "id": "stashes"
+      },
+      {
+        "id": "worktrees"
+      },
+      {
+        "id": "pullRequests",
+        "visible": false
+      }
+    ]
+  }
+}

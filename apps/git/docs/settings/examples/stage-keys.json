@@ -1,0 +1,14 @@
+{
+  "$schema": "https://legend.so/git/git-settings.v1.schema.json",
+  "version": 1,
+  "name": "Stage keys",
+  "description": "Bind Stage to Space and Unstage to Shift-Space.",
+  "keybindings": {
+    "stage-file": [
+      "Space"
+    ],
+    "unstage-file": [
+      "Shift+Space"
+    ]
+  }
+}

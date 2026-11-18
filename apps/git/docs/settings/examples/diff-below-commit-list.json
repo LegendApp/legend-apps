@@ -1,0 +1,126 @@
+{
+  "$schema": "https://legend.so/git/git-settings.v1.schema.json",
+  "version": 1,
+  "name": "Diff below commit list",
+  "description": "Put the diff below the commit list instead of on the right, and hide the author column.",
+  "extends": "fork",
+  "layout": {
+    "active": "diff-below",
+    "layouts": {
+      "diff-below": {
+        "description": "Fork's layout with the diff under the commit list and the commit's details and files at the bottom.",
+        "sidebar": {
+          "width": 200
+        },
+        "views": {
+          "default": {
+            "type": "split",
+            "direction": "column",
+            "children": [
+              {
+                "node": {
+                  "type": "panel",
+                  "panel": "commitList"
+                },
+                "size": 240,
+                "minSize": 140
+              },
+              {
+                "node": {
+                  "type": "panel",
+                  "panel": "diff"
+                },
+                "minSize": 200
+              },
+              {
+                "node": {
+                  "type": "split",
+                  "direction": "row",
+                  "children": [
+                    {
+                      "node": {
+                        "type": "panel",
+                        "panel": "commitDetails"
+                      },
+                      "size": 360
+                    },
+                    {
+                      "node": {
+                        "type": "panel",
+                        "panel": "fileList"
+                      }
+                    }
+                  ]
+                },
+                "size": 180
+              }
+            ]
+          },
+          "changes": {
+            "type": "split",
+            "direction": "row",
+            "children": [
+              {
+                "node": {
+                  "type": "split",
+                  "direction": "column",
+                  "children": [
+                    {
+                      "node": {
+                        "type": "panel",
+                        "panel": "unstaged"
+                      }
+                    },
+                    {
+                      "node": {
+                        "type": "panel",
+                        "panel": "staged"
+                      }
+                    },
+                    {
+                      "node": {
+                        "type": "panel",
+                        "panel": "composer"
+                      },
+                      "size": 132,
+                      "minSize": 104
+                    }
+                  ]
+                },
+                "size": 320,
+                "minSize": 260
+              },
+              {
+                "node": {
+                  "type": "panel",
+                  "panel": "diff"
+                },
+                "minSize": 400
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "panels": {
+    "commitList": {
+      "columns": [
+        {
+          "id": "graph"
+        },
+        {
+          "id": "subject"
+        },
+        {
+          "id": "date",
+          "width": 140
+        },
+        {
+          "id": "sha",
+          "width": 72
+        }
+      ]
+    }
+  }
+}

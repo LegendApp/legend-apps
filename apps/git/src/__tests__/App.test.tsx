@@ -21,7 +21,7 @@ import { blameLine, loadUnifiedDiff, openGitHistory } from "@legend-apps/diff-pa
 import { setStringAsync } from "@legendapp/spark/clipboard";
 import { showContextMenu } from "@legendapp/spark/context-menu";
 import { openURL } from "@legendapp/spark/links";
-import { openWorktreeWindow } from "../gitWindows";
+import { openSettingsWindow, openWorktreeWindow } from "../gitWindows";
 import { DiffPane } from "../DiffPane";
 import { CommentSheet, ReviewThreadView } from "../ReviewThreadView";
 import { CreatePullRequestSheet } from "../CreatePullRequestSheet";
@@ -30,6 +30,7 @@ import { gitHubAccount } from "../gitHubAccount";
 
 jest.mock("@legend-apps/git-core", () => ({ ...jest.requireActual("@legend-apps/git-core"), getGitService: jest.fn() }));
 jest.mock("react-native", () => ({
+  AppRegistry: { registerComponent: jest.fn() },
   PlatformColor: (name: string) => name,
   StyleSheet: { create: (styles: unknown) => styles },
   Text: "Text", View: "View", Pressable: "Pressable", FlatList: "FlatList", ScrollView: "ScrollView", Switch: "Switch", TextInput: "TextInput", useColorScheme: () => "light",
@@ -83,7 +84,7 @@ jest.mock("@legendapp/spark/windows", () => ({ setWindowOptions: jest.fn(async (
 // Refresh, search) stands in for SourceTree's. actions.test.ts covers each preset's toolbar.
 jest.mock("../settings/presets/sourcetree.json", () => ({ ...jest.requireActual("../settings/presets/sourcetree.json"),
   toolbar: { displayMode: "iconOnly", items: ["toggle-sidebar", "branchPicker", "flexibleSpace", "viewSwitcher", "networkProgress", "refresh", "search"] } }));
-jest.mock("../gitWindows", () => ({ ...jest.requireActual("../gitWindows"), openWorktreeWindow: jest.fn(async () => ({})) }));
+jest.mock("../gitWindows", () => ({ ...jest.requireActual("../gitWindows"), openWorktreeWindow: jest.fn(async () => ({})), openSettingsWindow: jest.fn(async () => {}) }));
 jest.mock("@legendapp/spark/windows/macos", () => ({
   addMacOSWindowListener: jest.fn(async () => ({ remove: jest.fn(async () => {}) })),
   setToolbarItemText: jest.fn(async () => {}),
@@ -137,6 +138,18 @@ it("gives the window the settings' appearance and switches the diff mode from Vi
     await act(async () => { renderer?.unmount(); });
     await files.writeText("/data/settings.json", JSON.stringify({ version: 1 }));
   }
+});
+
+it("opens Settings from the app menu, and its Toolbar pane from View ▸ Customize Toolbar…", async () => {
+  jest.clearAllMocks();
+  let renderer!: ReactTestRenderer;
+  await act(async () => { renderer = create(<App />); });
+  const app = lastMenu().items.find(entry => entry.id === "app");
+  expect(app.items).toEqual([{ type: "action", id: "settings", label: "Settings…", target: { role: "settings" } }]);
+  expect(lastMenu().items.find(entry => entry.id === "view").items.at(-1)).toEqual({ type: "action", id: "customize-toolbar", label: "Customize Toolbar…" });
+  await act(async () => { lastMenu().onAction({ itemId: "settings" }); lastMenu().onAction({ itemId: "customize-toolbar" }); });
+  expect(jest.mocked(openSettingsWindow).mock.calls).toEqual([[null, undefined], [null, "toolbar"]]);
+  await act(async () => { renderer.unmount(); });
 });
 
 it("takes key bindings from settings into the menu bar and the hotkey router, and sends no toolbar update when the toolbar is unchanged", async () => {

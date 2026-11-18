@@ -31,6 +31,8 @@ type Layer = {
   /** A newer app's file, or one with a JSON syntax error: never written. */
   readOnly: boolean;
   parseIssue: SettingsIssue | null;
+  /** An unsaved file shown in place of `file` (Customize with AI's preview); edits go into it until it is kept or reverted. */
+  preview: SettingsDocument | null;
 };
 
 /** Line and column for a JSON.parse failure, from the engine's message (V8 and Hermes word it differently). */
@@ -84,6 +86,8 @@ export function applySparseEdit(file: SettingsDocument, path: readonly string[],
 
 export const formatSettingsFile = (file: SettingsDocument) => `${JSON.stringify(file, null, 2)}\n`;
 
+export type LayerState = { file: SettingsDocument | null; exists: boolean; previewing: boolean; readOnly: boolean };
+
 export type GitSettingsStore = {
   /** Effective settings: defaults ⊕ preset ⊕ user ⊕ repository. Unchanged subtrees keep their identity. */
   settings$: Observable<GitSettings>;
@@ -91,6 +95,8 @@ export type GitSettingsStore = {
   issues$: Observable<SettingsIssue[]>;
   /** The base preset: `extends` of the highest layer that sets it. */
   base$: Observable<PresetId>;
+  /** Each layer as the window uses it, for rendering (`layerFile` is the same, read once). Null: no such layer. */
+  layers$: Observable<Record<LayerId, LayerState | null>>;
   paths: { user: string; repo: string | null };
   /** Resolves once both layers are read and watched. */
   ready: Promise<void>;
@@ -98,6 +104,15 @@ export type GitSettingsStore = {
   edit(layer: LayerId, path: readonly string[], value: unknown): Promise<void>;
   /** Copies a layer's file to `<file>.bak` (before an import replaces it). */
   backup(layer: LayerId): Promise<void>;
+  /** Writes a whole layer file (an import); refuses a newer version's file. A file with a JSON error may be replaced. */
+  replace(layer: LayerId, file: SettingsDocument): Promise<void>;
+  /** Writes a layer's text back as it was (Undo Import); undefined writes an empty file. */
+  restore(layer: LayerId, text: string | undefined): Promise<void>;
+  /** Shows `file` in place of the layer without writing it; null ends the preview. */
+  preview(layer: LayerId, file: SettingsDocument | null): void;
+  /** The layer's file as the window uses it (the preview while there is one), and its text on disk. */
+  layerFile(layer: LayerId): { file: SettingsDocument | null; text: string | undefined; previewing: boolean };
+  hasLayer(layer: LayerId): boolean;
   /** Re-reads a layer from disk; false when its text is what the store last read or wrote. */
   reload(layer: LayerId): Promise<boolean>;
   isReadOnly(layer: LayerId): boolean;
@@ -110,12 +125,14 @@ export type GitSettingsStore = {
  */
 export function createGitSettingsStore({ io, directory, repositoryRoot = null }: { io: SettingsIO; directory: string; repositoryRoot?: string | null }): GitSettingsStore {
   const paths = { user: `${directory}/settings.json`, repo: repositoryRoot ? `${directory}/repositories/${sha1(repositoryRoot)}.json` : null };
-  const emptyLayer = (path: string): Layer => ({ path, text: undefined, file: null, diskVersion: null, value: {}, issues: [], readOnly: false, parseIssue: null });
+  const emptyLayer = (path: string): Layer => ({ path, text: undefined, file: null, diskVersion: null, value: {}, issues: [], readOnly: false, parseIssue: null, preview: null });
   const layers: Record<LayerId, Layer | null> = { user: emptyLayer(paths.user), repo: paths.repo ? emptyLayer(paths.repo) : null };
   const order: LayerId[] = ["user", "repo"];
   const settings$ = observable<GitSettings>(presetSettings(defaultPreset));
   const issues$ = observable<SettingsIssue[]>([]);
   const base$ = observable<PresetId>(defaultPreset);
+  const layerState = (layer: Layer | null): LayerState | null => layer && { file: layer.preview ?? layer.file, exists: layer.text !== undefined, previewing: !!layer.preview, readOnly: layer.readOnly };
+  const layers$ = observable<Record<LayerId, LayerState | null>>({ user: layerState(layers.user), repo: layerState(layers.repo) });
   const watchers: { remove(): unknown }[] = [];
   let closed = false;
   let queue: Promise<unknown> = Promise.resolve();
@@ -145,12 +162,17 @@ export function createGitSettingsStore({ io, directory, repositoryRoot = null }:
 
   function recompute() {
     const present = order.map(id => layers[id]).filter((layer): layer is Layer => !!layer);
-    const extending = [...present].reverse().map(layer => layer.parseIssue ? undefined : layer.file?.extends).find(isPresetId);
+    const extending = [...present].reverse().map(layer => layer.preview ? layer.preview.extends : layer.parseIssue ? undefined : layer.file?.extends).find(isPresetId);
     const base = extending ?? defaultPreset;
     let effective = presetSettings(base);
     const issues: SettingsIssue[] = [];
     for (const layer of present) {
-      if (layer.parseIssue || !layer.file) {
+      if (layer.preview) {
+        const result = validateSettingsFile(layer.preview, { file: layer.path, fallbackView: kind => presetView(base, kind) });
+        layer.value = result.value;
+        layer.issues = result.issues;
+        effective = mergeSettings(effective, settingsPart(result.value));
+      } else if (layer.parseIssue || !layer.file) {
         layer.value = {};
         layer.issues = layer.parseIssue ? [layer.parseIssue] : [];
         layer.readOnly = !!layer.parseIssue;
@@ -164,6 +186,7 @@ export function createGitSettingsStore({ io, directory, repositoryRoot = null }:
       issues.push(...layer.issues);
     }
     base$.set(base);
+    layers$.set(shareStructure(layers$.peek(), { user: layerState(layers.user), repo: layerState(layers.repo) }));
     settings$.set(shareStructure(settings$.peek(), effective));
     if (!deepEqual(issues$.peek(), issues)) issues$.set(issues);
   }
@@ -211,6 +234,13 @@ export function createGitSettingsStore({ io, directory, repositoryRoot = null }:
     if (paths.repo) await watchFolder(`${directory}/repositories`);
   })();
 
+  async function write(layer: Layer, text: string) {
+    if (text === layer.text) { recompute(); return; }
+    parse(layer, text);
+    recompute();
+    await io.write(layer.path, text);
+  }
+
   async function reloadLayer(id: LayerId) {
     const changed = await readLayer(id);
     if (changed) recompute();
@@ -218,11 +248,16 @@ export function createGitSettingsStore({ io, directory, repositoryRoot = null }:
   }
 
   return {
-    settings$, issues$, base$, paths, ready,
+    settings$, issues$, base$, layers$, paths, ready,
     isReadOnly: id => !!layers[id]?.readOnly,
     reload: id => ready.then(() => serial(() => reloadLayer(id))),
     edit: (id, path, value) => ready.then(() => serial(async () => {
       const layer = layerOf(id);
+      if (layer.preview) {
+        layer.preview = applySparseEdit(layer.preview, path, value, below(id));
+        recompute();
+        return;
+      }
       if (layer.readOnly) throw new Error(layer.parseIssue ? `${layer.path} has an error (${layer.parseIssue.message}); fix the file first` : `${layer.path} was written by a newer Legend Git; it is read-only`);
       const start: SettingsDocument = layer.file ?? { $schema: schemaUrl, version: settingsVersion, ...id === "repo" ? { root: repositoryRoot } : {} };
       const file = applySparseEdit(start, path, value, below(id));
@@ -230,14 +265,29 @@ export function createGitSettingsStore({ io, directory, repositoryRoot = null }:
       // A migrated file is written at the current version, after a backup the older app can still read.
       if (layer.diskVersion !== null && layer.diskVersion < settingsVersion && layer.text !== undefined) await io.write(`${layer.path}.bak`, layer.text);
       file.version = settingsVersion;
-      const text = formatSettingsFile(file);
-      if (text === layer.text) return;
-      layer.text = text;
-      layer.file = file;
-      layer.diskVersion = settingsVersion;
-      recompute();
-      await io.write(layer.path, text);
+      await write(layer, formatSettingsFile(file));
     })),
+    replace: (id, file) => ready.then(() => serial(async () => {
+      const layer = layerOf(id);
+      if (layer.diskVersion !== null && layer.diskVersion > settingsVersion) throw new Error(`${layer.path} was written by a newer Legend Git; it is read-only`);
+      layer.preview = null;
+      await write(layer, formatSettingsFile({ ...file, version: settingsVersion, ...id === "repo" ? { root: repositoryRoot } : {} }));
+    })),
+    restore: (id, text) => ready.then(() => serial(async () => {
+      const layer = layerOf(id);
+      layer.preview = null;
+      await write(layer, text ?? formatSettingsFile({ $schema: schemaUrl, version: settingsVersion, ...id === "repo" ? { root: repositoryRoot } : {} }));
+    })),
+    preview(id, file) {
+      const layer = layerOf(id);
+      layer.preview = file && JSON.parse(JSON.stringify(file)) as SettingsDocument;
+      recompute();
+    },
+    layerFile(id) {
+      const layer = layerOf(id);
+      return { file: layer.preview ?? layer.file, text: layer.text, previewing: !!layer.preview };
+    },
+    hasLayer: id => !!layers[id],
     backup: id => ready.then(() => serial(async () => {
       const layer = layerOf(id);
       if (layer.text !== undefined) await io.write(`${layer.path}.bak`, layer.text);
@@ -270,4 +320,31 @@ export function sparkSettingsIO(): SettingsIO {
 export async function openGitSettings(repositoryRoot: string | null, io: SettingsIO = sparkSettingsIO()) {
   const files = require("@legendapp/spark/files") as typeof import("@legendapp/spark/files");
   return createGitSettingsStore({ io, directory: await files.getDirectory("data"), repositoryRoot });
+}
+
+const shared = new Map<string, { store: Promise<GitSettingsStore>; users: number }>();
+
+/**
+ * One store per repository for every window of the app (repository windows and the Settings window share it, so an AI
+ * preview shows in the window it was made for). Each `acquire` is paired with one `release`; the last closes it.
+ */
+export function acquireGitSettings(repositoryRoot: string | null, open: (root: string | null) => Promise<GitSettingsStore> = openGitSettings) {
+  const key = repositoryRoot ?? "";
+  let entry = shared.get(key);
+  if (!entry) shared.set(key, entry = { store: open(repositoryRoot), users: 0 });
+  entry.users += 1;
+  const current = entry;
+  current.store.catch(() => { if (shared.get(key) === current) shared.delete(key); });
+  let released = false;
+  return {
+    store: current.store,
+    release() {
+      if (released) return;
+      released = true;
+      current.users -= 1;
+      if (current.users > 0 || shared.get(key) !== current) return;
+      shared.delete(key);
+      void current.store.then(store => store.close(), () => {});
+    },
+  };
 }
