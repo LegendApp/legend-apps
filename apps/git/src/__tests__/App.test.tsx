@@ -762,6 +762,60 @@ it("has no branches and no New Branch on an unborn HEAD", async () => {
   await act(async () => { renderer.unmount(); });
 });
 
+it("offers Edit ▸ Undo for the reflog's newest operation, says why a refused one can't run, and asks before undoing", async () => {
+  jest.clearAllMocks();
+  jest.mocked(watchDirectories).mockReturnValue({ remove: jest.fn() });
+  const head = "a".repeat(40), before = "b".repeat(40);
+  const merge = { kind: "merge", branch: "main", from: { oid: head, subject: "Merge branch 'feature'" }, to: { oid: before, subject: "Make it red" }, toBranch: null, name: "feature", keepsChanges: false, refusal: null, entry: "x" };
+  let plan: object | null = null;
+  const git = { resolveRoot: jest.fn(async () => "/repo"), watchLocations: jest.fn(async () => ({ root: "/repo", gitDir: "/repo/.git", commonDir: "/repo/.git", ignoredPaths: [] })),
+    status: jest.fn(async () => ({ branch: { oid: head, head: "main", upstream: null, ahead: 0, behind: 0 }, entries: [] })), lastDiscard: jest.fn(async () => null), operationState: jest.fn(async () => null),
+    listRefs: jest.fn(async () => ({ branches: [{ name: "main", ref: "refs/heads/main", oid: head, current: true, upstream: null, time: 1 }], remotes: [], tags: [] })), listStashes: jest.fn(async () => []), listWorktrees: jest.fn(async () => []),
+    undoPlan: jest.fn(async () => plan), undo: jest.fn(async () => { plan = null; }) };
+  jest.mocked(getGitService).mockReturnValue(git as unknown as GitService);
+  let renderer!: ReactTestRenderer;
+  await act(async () => { renderer = create(<App />); });
+  const menuItem = (id: string) => lastMenu().items.flatMap(entry => entry.items ?? []).find(entry => entry.id === id);
+  // No repository, then nothing to undo: "Undo", off, and never ⌘Z (text editing keeps it).
+  expect(menuItem("undo-operation")).toEqual({ type: "action", id: "undo-operation", label: "Undo", disabled: true });
+  expect(lastMenu().items.find(entry => entry.id === "edit").items[0].id).toBe("undo-operation");
+  jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
+  await act(async () => { openRepository(); });
+  expect(menuItem("undo-operation")).toMatchObject({ label: "Undo", disabled: true });
+
+  // A refused undo stays enabled and says why when chosen, without asking or undoing.
+  plan = { ...merge, refusal: "“b.txt” has changes that undoing would overwrite. Commit, stash or discard them first." };
+  await act(async () => { lastMenu().onAction({ itemId: "refresh" }); });
+  expect(menuItem("undo-operation")).toMatchObject({ label: "Undo Merge…", disabled: false });
+  await act(async () => { lastMenu().onAction({ itemId: "undo-operation" }); });
+  expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "warning", title: "Couldn’t Undo Merge", message: expect.stringMatching(/^“b\.txt” has changes/) }));
+  expect(git.undo).not.toHaveBeenCalled();
+
+  // The sheet names what moves where; Cancel changes nothing, the named button undoes and the label goes back to Undo.
+  plan = merge;
+  await act(async () => { lastMenu().onAction({ itemId: "refresh" }); });
+  jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "cancel" } as any);
+  await act(async () => { lastMenu().onAction({ itemId: "undo-operation" }); });
+  expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ title: "Undo the merge of “feature”?",
+    message: "“main” moves back from aaaaaaa “Merge branch 'feature'” to bbbbbbb “Make it red”. The worktree and index follow; changes to other files are kept.",
+    buttons: [{ id: "confirm", label: "Undo Merge" }, { id: "cancel", label: "Cancel" }] }));
+  expect(git.undo).not.toHaveBeenCalled();
+  jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "confirm" } as any);
+  await act(async () => { lastMenu().onAction({ itemId: "undo-operation" }); });
+  expect(git.undo).toHaveBeenCalledWith(merge, expect.anything());
+  expect(menuItem("undo-operation")).toMatchObject({ label: "Undo", disabled: true });
+
+  // Git's refusal at undo time (a newer operation came in) shows as a warning.
+  plan = { ...merge, kind: "commit", keepsChanges: true, name: null };
+  await act(async () => { lastMenu().onAction({ itemId: "refresh" }); });
+  expect(menuItem("undo-operation")).toMatchObject({ label: "Undo Commit…", disabled: false });
+  git.undo.mockRejectedValueOnce(new Error("The repository changed since this undo was offered. Look at the new state, then try again."));
+  jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "confirm" } as any);
+  await act(async () => { lastMenu().onAction({ itemId: "undo-operation" }); });
+  expect(showMessage).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "warning", title: "Couldn’t Undo Commit", message: expect.stringMatching(/changed since/) }));
+  await act(async () => { renderer.unmount(); });
+});
+
 it("leaves a selected ref when another repository opens, without walking that ref in the new one", async () => {
   jest.clearAllMocks();
   jest.mocked(watchDirectories).mockReturnValue({ remove: jest.fn() });

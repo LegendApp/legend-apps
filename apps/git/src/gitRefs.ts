@@ -1,10 +1,11 @@
-import { getGitService, type GitAddWorktreeOptions, type GitBranch, type GitRefList, type GitRemoteBranch, type GitService, type GitStash, type GitTag, type GitWorktree } from "@legend-apps/git-core";
+import { getGitService, type GitAddWorktreeOptions, type GitUndo, type GitBranch, type GitRefList, type GitRemoteBranch, type GitService, type GitStash, type GitTag, type GitWorktree } from "@legend-apps/git-core";
 
 /** A worktree and its number of changed paths (null until counted, or when its folder can't be read). */
 export type WorktreeEntry = GitWorktree & { changes: number | null };
 /** `outgoing`: commits each local branch without a live upstream has that the default branch doesn't, by full ref name (null until read, or when there's no default branch). */
-export type RefsState = { root: string | null; refs: GitRefList | null; stashes: GitStash[] | null; worktrees: WorktreeEntry[] | null; outgoing: Record<string, number> | null; writing: boolean; error: string | null };
-export const emptyRefs: RefsState = { root: null, refs: null, stashes: null, worktrees: null, outgoing: null, writing: false, error: null };
+/** `undo`: the newest operation Edit ▸ Undo can take back (see GitService.undoPlan), or null. */
+export type RefsState = { root: string | null; refs: GitRefList | null; stashes: GitStash[] | null; worktrees: WorktreeEntry[] | null; outgoing: Record<string, number> | null; undo: GitUndo | null; writing: boolean; error: string | null };
+export const emptyRefs: RefsState = { root: null, refs: null, stashes: null, worktrees: null, outgoing: null, undo: null, writing: false, error: null };
 
 /** A sidebar ref: a local branch, a remote branch or a tag, found by its full ref name. */
 export type RefEntry = { kind: "branch"; ref: GitBranch } | { kind: "remote"; ref: GitRemoteBranch } | { kind: "tag"; ref: GitTag };
@@ -55,11 +56,14 @@ export function createGitRefs(onChange: (state: RefsState) => void, serviceFor: 
 
   const read = async (git: GitService, controller: AbortController, current: number) => {
     try {
+      // A failed undo read only leaves Undo off.
+      const undo = Promise.resolve().then(() => git.undoPlan({ signal: controller.signal })).catch(() => null);
       const [refs, stashes, listed] = await Promise.all([git.listRefs({ signal: controller.signal }), git.listStashes({ signal: controller.signal }), git.listWorktrees({ signal: controller.signal })]);
+      const plan = await undo;
       if (current !== run || active !== controller || closed) return;
       // Counts from the last read stay shown until the new ones land; a missing folder has none.
       const previous = new Map(state.worktrees?.map(entry => [entry.path, entry.changes]));
-      publish({ refs, stashes, worktrees: listed.map(entry => ({ ...entry, changes: previous.get(entry.path) ?? null })), error: null });
+      publish({ refs, stashes, worktrees: listed.map(entry => ({ ...entry, changes: previous.get(entry.path) ?? null })), undo: plan, error: null });
       // One extra read for branches the Review Queue compares with the default branch instead of an upstream.
       const base = refs.defaultBranch;
       if (base && refs.branches.some(branch => !branch.upstream || branch.gone)) {
@@ -193,6 +197,10 @@ export function createGitRefs(onChange: (state: RefsState) => void, serviceFor: 
     /** Rejects with GitBranchNotMergedError when `force` is off and the branch has unmerged commits. */
     delete(name: string, force = false) {
       return write((git, signal) => git.deleteBranch(name, { force, signal }));
+    },
+    /** Undoes the operation `plan` describes (see GitService.undo); rejects, changing nothing, when it is refused or no longer the newest. */
+    undo(plan: GitUndo) {
+      return write((git, signal) => git.undo(plan, { signal }));
     },
     dispose() { closed = true; active?.abort(); active = undefined; service = undefined; },
   };

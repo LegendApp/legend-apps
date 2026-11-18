@@ -97,6 +97,33 @@ export type GitAddWorktreeOptions = GitReadOptions & ({ branch: string; newBranc
 export type GitStagedFile = { path: string; originalPath: string | null; binary: boolean; added: number; deleted: number };
 /** The staged changes as `git diff --cached` text; files past the size cap are listed but left out of `patch`. */
 export type GitStagedDiff = { files: GitStagedFile[]; patch: string; truncated: boolean; omitted: string[] };
+/** An operation Edit ▸ Undo can take back; see GitService.undoPlan. */
+export type GitUndoKind = "commit" | "amend" | "merge" | "rebase" | "cherry-pick" | "revert" | "reset" | "checkout" | "branch-delete";
+export type GitUndoCommit = { oid: string; subject: string };
+/**
+ * The newest operation and what undoing it does. `branch` (null when detached) moves from `from` to `to`; a checkout
+ * switches back from `from` to `to` (to `toBranch` when that was a branch); a deleted branch `branch` comes back at `to`.
+ * `name` is what was merged, rebased onto or picked, when the reflog says. `refusal` says why it can't be undone now.
+ */
+export type GitUndo = {
+  kind: GitUndoKind; branch: string | null; from: GitUndoCommit | null; to: GitUndoCommit; toBranch: string | null; name: string | null;
+  /** Commit and amend keep their changes staged; the others move the worktree too. */
+  keepsChanges: boolean;
+  refusal: string | null;
+  /** Identifies the reflog entry, so undo() refuses when a newer operation came in between. */
+  entry: string;
+};
+const deletedBranchesRef = "refs/legend-git/deleted-branches";
+// Per path, NUL-separated: the worktree file's blob id (with the repository's filters), "-" when missing, "x" for anything else.
+const worktreeBlobs = `for p do
+  if test -L "./$p" || test -d "./$p"; then printf 'x\\0'
+  elif test -f "./$p"; then o=$(git hash-object -- "./$p") || exit 1; printf '%s\\0' "$o"
+  elif test -e "./$p"; then printf 'x\\0'
+  else printf -- '-\\0'; fi
+done`;
+const deletedBranchMarker = "Legend Git deleted branch";
+const undoReflogAction = "legend-git undo";
+
 export const discardRefPrefix = "refs/legend-git/discarded/";
 const restoredRefPrefix = "refs/legend-git/restored/";
 const replacedRefPrefix = "refs/legend-git/replaced/";
@@ -1459,13 +1486,212 @@ export class GitService {
    */
   deleteBranch(name: string, { force = false, ...options }: GitReadOptions & { force?: boolean } = {}) {
     return this.branchWrite(options, async () => {
+      const tip = (await this.git(["rev-parse", "-q", "--verify", `refs/heads/${name}^{commit}`], options, 5_000, undefined, [0, 1])).trim();
+      const head = (await this.headEntry(options))?.key ?? "";
+      // Its upstream and other settings, which Git removes with it.
+      const config = Object.fromEntries((await this.git(["config", "-z", "--get-regexp", `^branch\\.${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\.`], options, 5_000, undefined, [0, 1])).split("\0").filter(Boolean)
+        .map(entry => { const newline = entry.indexOf("\n"); return [entry.slice(`branch.${name}.`.length, newline), entry.slice(newline + 1)]; }));
       try {
         await this.git(["branch", force ? "-D" : "-d", "--end-of-options", name], options);
       } catch (error) {
         if (!force && error instanceof GitServiceError && !await this.branchMerged(name, options)) throw new GitBranchNotMergedError(name, error.message);
         throw error;
       }
+      // Git drops a deleted branch's reflog, so Undo reads a record commit instead: the tip (kept reachable as its first
+      // parent), HEAD's reflog entry at the time and the previous record.
+      if (tip) await this.recordDeletedBranch(name, tip, head, config).catch(() => {});
     });
+  }
+
+  /** HEAD's newest reflog entry as "<oid> <time> <message>", or "" when it has none. */
+  private async headEntry(options: GitReadOptions, skip = 0) {
+    const [oid = "", selector = "", subject = ""] = (await this.git(["log", "-g", "-1", `--skip=${skip}`, "--date=unix", "--format=%H%x00%gd%x00%gs", "HEAD", "--"], options, 10_000, undefined, [0, 128])).replace(/\n$/, "").split("\0");
+    const time = /@\{(\d+)\}$/.exec(selector)?.[1] ?? "";
+    return oid ? { oid, subject, key: `${oid} ${time} ${subject}` } : null;
+  }
+
+  private async commitSubject(oid: string, options: GitReadOptions): Promise<GitUndoCommit> {
+    const subject = (await this.git(["log", "-1", "--format=%s", "--end-of-options", oid, "--"], options, 10_000, undefined, [0, 128])).replace(/\n$/, "");
+    return { oid, subject };
+  }
+
+  /** The newest record of a branch Legend Git deleted: the branch, its tip, HEAD's reflog entry when it was deleted, and the record before it. */
+  private async deletedBranch(options: GitReadOptions) {
+    const record = (await this.git(["rev-parse", "-q", "--verify", `${deletedBranchesRef}^{commit}`], options, 5_000, undefined, [0, 1])).trim();
+    if (!record) return null;
+    const [parents = "", body = ""] = (await this.git(["log", "-1", "--format=%P%x00%B", record, "--"], options, 10_000)).split("\0");
+    const [tip, previous] = parents.trim().split(" ");
+    if (!body.startsWith(`${deletedBranchMarker}\n\n`) || !tip) return null;
+    try {
+      const { branch, head, config = {} } = JSON.parse(body.slice(deletedBranchMarker.length + 2)) as { branch: string; head: string; config?: Record<string, string> };
+      return { record, branch, head, config, tip, previous: previous ?? null };
+    } catch { return null; }
+  }
+
+  /**
+   * Paths the move from HEAD to `to` changes that have changes of their own (staged, unstaged, untracked or ignored).
+   * `safe` ones already hold exactly what `to` has, so nothing is lost when they are overwritten; the rest are `unsafe`.
+   */
+  private async overwritten(to: string, options: GitReadOptions) {
+    const moved = (await this.git(["diff", "--name-only", "--no-renames", "-z", to, "HEAD", "--"], options)).split("\0").filter(Boolean);
+    if (!moved.length) return { safe: [], unsafe: [] };
+    // Ignored folders are listed as "dir/"; a path under one counts as changed.
+    const dirty = (await this.git(["status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=all", "--ignored=matching"], options)).split("\0").filter(Boolean).map(record => record.slice(3));
+    const paths = moved.filter(path => dirty.some(entry => entry === path || entry.endsWith("/") && path.startsWith(entry)));
+    if (!paths.length) return { safe: [], unsafe: [] };
+    const target = new Map((await this.git(["--literal-pathspecs", "ls-tree", "-z", "--full-tree", to, "--", ...paths], options)).split("\0").filter(Boolean).map(record => {
+      const [meta = "", path = ""] = record.split("\t");
+      const [mode, , oid] = meta.split(" ");
+      return [path, mode === "120000" || mode === "160000" ? "x" : oid!];
+    }));
+    const current = (await this.process("sh", ["-c", worktreeBlobs, "legend-git-blobs", ...paths], options)).split("\0");
+    const safe: string[] = [], unsafe: string[] = [];
+    paths.forEach((path, index) => {
+      const blob = current[index], wanted = target.get(path) ?? "-";
+      (blob !== "x" && blob === wanted ? safe : unsafe).push(path);
+    });
+    return { safe, unsafe };
+  }
+
+  /** The remote branch containing `oid` among the branch's upstream and same-named remote branches, or null. */
+  private async pushedTo(branch: string, oid: string, options: GitReadOptions) {
+    const upstream = (await this.git(["for-each-ref", "--format=%(upstream)", `refs/heads/${branch}`], options, 5_000)).trim();
+    const candidates = (await this.git(["for-each-ref", "--format=%(refname)", "refs/remotes"], options, 10_000)).split("\n")
+      .filter(ref => ref && (ref === upstream || ref.endsWith(`/${branch}`)) && !ref.endsWith("/HEAD"));
+    for (const ref of candidates) {
+      // Exit 1: not an ancestor.
+      if (await this.git(["merge-base", "--is-ancestor", oid, ref], options, 10_000).then(() => true, () => false)) return ref.slice("refs/remotes/".length);
+    }
+    return null;
+  }
+
+  /** A merge's reflog names what was merged as typed: "@{u}" (Pull) becomes the upstream's name, a commit id a branch's when one points there. */
+  private async mergedName(name: string, branch: string | null, options: GitReadOptions) {
+    if (/^@\{(u|upstream)\}$/.test(name) && branch) {
+      return (await this.git(["for-each-ref", "--format=%(upstream:short)", `refs/heads/${branch}`], options, 5_000)).trim() || name;
+    }
+    return /^[0-9a-f]{7,64}$/.test(name) ? await this.nameCommit(name, options) ?? name.slice(0, 7) : name;
+  }
+
+  private async readUndo(gitDir: string, options: GitReadOptions): Promise<GitUndo | null> {
+    const state = await this.inspect(gitDir, options);
+    if (await this.unborn(options)) return null;
+    const latest = await this.headEntry(options);
+    const deleted = await this.deletedBranch(options);
+    // A branch made again under the deleted one's name hides that deletion, and Undo goes on to HEAD's operation.
+    if (deleted && deleted.head === (latest?.key ?? "") && !(await this.git(["rev-parse", "-q", "--verify", `refs/heads/${deleted.branch}`], options, 5_000, undefined, [0, 1])).trim()) {
+      return {
+        kind: "branch-delete", branch: deleted.branch, from: null, to: await this.commitSubject(deleted.tip, options), toBranch: null, name: null, keepsChanges: true, refusal: null, entry: deleted.record,
+      };
+    }
+    if (!latest || latest.subject.startsWith(undoReflogAction)) return null;
+    const head = await this.head(options);
+    if (head !== latest.oid) return null;
+    const { subject } = latest;
+    const previous = await this.headEntry(options, 1);
+    let kind: GitUndoKind | null = null, name: string | null = null, to = previous?.oid ?? "", toBranch: string | null = null;
+    let match: RegExpExecArray | null;
+    if (/^commit: /.test(subject)) kind = "commit";
+    else if (/^commit \(amend\): /.test(subject)) kind = "amend";
+    else if (/^commit \(merge\): /.test(subject)) kind = "merge";
+    else if ((match = /^merge (.+?): /.exec(subject))) { kind = "merge"; name = await this.mergedName(match[1]!, state.branch, options); }
+    else if (/^cherry-pick: /.test(subject) || /^commit \(cherry-pick\): /.test(subject)) kind = "cherry-pick";
+    else if (/^revert: /.test(subject) || /^commit \(revert\): /.test(subject)) kind = "revert";
+    else if (/^reset: moving to /.test(subject)) kind = "reset";
+    else if ((match = /^rebase(?: -[im])? \(finish\): returning to refs\/heads\/(.+)$/.exec(subject))) {
+      // The branch's own reflog has one entry for the whole rebase; the one before it is the tip before the rebase.
+      const branch = match[1]!;
+      if (branch !== state.branch) return null;
+      const lines = (await this.git(["log", "-g", "-2", "--format=%H%x00%gs", `refs/heads/${branch}`, "--"], options, 10_000, undefined, [0, 128])).split("\n").filter(Boolean).map(line => line.split("\0"));
+      if (lines.length < 2 || lines[0]![0] !== head || !/^rebase(?: -[im])? \(finish\): /.test(lines[0]![1] ?? "")) return null;
+      kind = "rebase"; to = lines[1]![0]!;
+      name = /onto ([0-9a-f]+)$/.exec(lines[0]![1]!)?.[1] ?? null;
+      if (name) name = await this.nameCommit(name, options);
+    } else if ((match = /^checkout: moving from (.+) to (.+)$/.exec(subject))) {
+      const [, fromName, toName] = match;
+      if (fromName === toName) return null;
+      kind = "checkout";
+      // A branch that is still there is checked out again; otherwise HEAD goes back to the commit, detached.
+      const branchOid = (await this.git(["rev-parse", "-q", "--verify", `refs/heads/${fromName}^{commit}`], options, 5_000, undefined, [0, 1])).trim();
+      if (branchOid && fromName !== state.branch) { toBranch = fromName!; to = branchOid; }
+      name = toName!;
+    }
+    if (!kind || !to || to === head && kind !== "checkout") return null;
+    const keepsChanges = kind === "commit" || kind === "amend";
+    const plan: GitUndo = {
+      kind, branch: state.branch, from: await this.commitSubject(head, options), to: await this.commitSubject(to, options), toBranch, name, keepsChanges, refusal: null, entry: latest.key,
+    };
+    const operation = await this.readOperation(gitDir, options);
+    if (operation) { plan.refusal = `A ${operation.kind} is in progress. Continue or abort it first.`; return plan; }
+    // A fast-forward (Pull is one) made no commit of its own, so moving back never needs a force push.
+    if (kind !== "checkout" && kind !== "reset" && state.branch && !/: Fast-forward$/.test(subject)) {
+      const pushed = await this.pushedTo(state.branch, head, options);
+      if (pushed) { plan.refusal = `“${state.branch}” was already pushed to “${pushed}” with this ${kind === "amend" ? "amended commit" : kind}. Undoing it here would leave the remote ahead and need a force push, so Legend Git doesn’t undo it.`; return plan; }
+    }
+    if (!keepsChanges) {
+      const paths = (await this.overwritten(to, options)).unsafe;
+      if (paths.length) {
+        const list = paths.length === 1 ? `“${paths[0]}” has changes` : `${paths.length} files have changes, including “${paths[0]}”,`;
+        plan.refusal = `${list} that undoing would overwrite. Commit, stash or discard them first.`;
+      }
+    }
+    return plan;
+  }
+
+  /**
+   * The newest operation in HEAD's reflog (or the newest branch Legend Git deleted, when that came after it) that Edit ▸ Undo
+   * can take back, or null. Reflog entries written by an undo are never undone (there is no redo).
+   */
+  undoPlan(options: GitReadOptions = {}) {
+    return this.enqueue(options, gitDir => this.readUndo(gitDir, options));
+  }
+
+  /**
+   * Undoes `plan` (from undoPlan) as a queued write, after reading it again: rejects, changing nothing, when the newest
+   * operation is no longer the same one or the plan is now refused. Commit and amend move the branch back with
+   * `git reset --soft` (their changes stay staged); merge, rebase, cherry-pick, revert and reset with `git reset --keep`;
+   * a checkout switches back; a deleted branch is created again at its tip.
+   */
+  undo(plan: GitUndo, options: GitReadOptions = {}) {
+    return this.enqueue(options, async (gitDir, commit) => {
+      const current = await this.readUndo(gitDir, options);
+      if (!current || current.entry !== plan.entry || current.kind !== plan.kind || current.to.oid !== plan.to.oid) throw new Error("The repository changed since this undo was offered. Look at the new state, then try again.");
+      if (current.refusal) throw new Error(current.refusal);
+      commit();
+      const env = { processEnv: { GIT_REFLOG_ACTION: undoReflogAction } };
+      if (current.kind === "branch-delete") {
+        await this.git(["branch", "--end-of-options", current.branch!, current.to.oid], options);
+        const deleted = await this.deletedBranch(options);
+        for (const [key, value] of Object.entries(deleted?.config ?? {})) await this.git(["config", `branch.${current.branch}.${key}`, value], {}).catch(() => {});
+        if (deleted?.previous) await this.git(["update-ref", "-m", `${undoReflogAction}: restored ${current.branch}`, deletedBranchesRef, deleted.previous, deleted.record], {});
+        else await this.git(["update-ref", "-d", deletedBranchesRef, current.entry], {});
+      } else if (current.kind === "checkout") {
+        await this.git(current.toBranch ? ["switch", "--no-guess", "--end-of-options", current.toBranch] : ["switch", "--detach", "--end-of-options", current.to.oid], env, 120_000);
+      } else {
+        if (!current.keepsChanges) {
+          // Changed files that already hold what `to` has (the usual soft or mixed reset) go back to HEAD's version first, so
+          // `reset --keep` takes them; it then writes the same content again.
+          const { safe } = await this.overwritten(current.to.oid, {});
+          const inHead = new Set((await this.git(["--literal-pathspecs", "ls-tree", "-z", "--name-only", "--full-tree", "HEAD", "--", ...safe], {})).split("\0").filter(Boolean));
+          const tracked = safe.filter(path => inHead.has(path)), added = safe.filter(path => !inHead.has(path));
+          if (tracked.length) await this.git(["--literal-pathspecs", "checkout", "-q", "HEAD", "--", ...tracked], {});
+          if (added.length) await this.git(["--literal-pathspecs", "rm", "-q", "-f", "-r", "--ignore-unmatch", "--cached", "--", ...added], {});
+          if (added.length) await this.process("sh", ["-c", 'for p do rm -f -- "./$p" || exit 1; done', "legend-git-remove", ...added], {});
+        }
+        await this.git(["reset", "-q", current.keepsChanges ? "--soft" : "--keep", "--end-of-options", current.to.oid], env, 120_000);
+      }
+    });
+  }
+
+  /** Records a deleted branch; earlier records that a newer HEAD operation hides are dropped, so their commits can be pruned. */
+  private async recordDeletedBranch(branch: string, tip: string, head: string, config: Record<string, string>) {
+    const old = (await this.git(["rev-parse", "-q", "--verify", `${deletedBranchesRef}^{commit}`], {}, 5_000, undefined, [0, 1])).trim();
+    const previous = old && (await this.deletedBranch({}))?.head === head ? old : "";
+    const tree = (await this.git(["mktree"], {}, 10_000, "")).trim();
+    const identity = ["-c", "user.name=Legend Git", "-c", "user.email=legend-git@localhost", "-c", "commit.gpgsign=false"];
+    const message = `${deletedBranchMarker}\n\n${JSON.stringify({ branch, head, config })}\n`;
+    const record = (await this.git([...identity, "commit-tree", tree, "-p", tip, ...previous ? ["-p", previous] : []], {}, 10_000, message)).trim();
+    await this.git(["update-ref", "-m", `legend-git: deleted ${branch}`, deletedBranchesRef, record, old || "0".repeat(record.length)], {});
   }
 
   /** Stash entries, newest first. */

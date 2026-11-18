@@ -1,4 +1,5 @@
-import type { GitConflictSide, GitOperation, GitRefList, GitStash } from "@legend-apps/git-core";
+import type { GitConflictSide, GitOperation, GitRefList, GitStash, GitUndo } from "@legend-apps/git-core";
+import { undoLabel } from "./gitUndo";
 import { abortLabel, canContinue, conflictPickable, conflictPickLabel, continueLabel, type ConflictEntry } from "./gitOperation";
 import { searchScopes, type SearchScope } from "./gitHistory";
 import { findRef, type WorktreeEntry } from "./gitRefs";
@@ -79,6 +80,8 @@ export type CommandContext = {
   operation: GitOperation | null;
   /** Files with merge conflicts and the sides that have them. */
   conflicts: readonly ConflictEntry[];
+  /** The newest operation Edit ▸ Undo can take back, or null. */
+  undo: GitUndo | null;
   /** The GitHub account pull requests are read with. */
   gitHub: GitHubAccountState;
   /** Open pull requests' numbers (signed in, on a GitHub repository), and whether a comment or review is being posted. */
@@ -125,6 +128,8 @@ export type CommandContext = {
     rebaseRef(ref?: string): void;
     /** Cherry-picks a commit onto the current branch, or reverts it there after asking. */
     pickCommit(kind: "cherry-pick" | "revert", oid: string): void;
+    /** Undoes the newest operation after a sheet saying what moves where, or says why it can't. */
+    undo(): void;
     /** Stages a conflicted file, asking first when it still has conflict markers. */
     markResolved(path: string): void;
     /** Resolves a conflicted file with one side, or both, and stages it; asks first when the file was resolved by hand. */
@@ -217,6 +222,11 @@ const canStash = (context: CommandContext) => canWriteBranch(context) && context
 
 export const commands = [
   { id: "open-repository", label: "Open Repository…", shortcut: "Cmd+o", enabled: () => true, run: context => context.run.openRepository() },
+  {
+    // Refused undos stay enabled, so running one says why. No ⌘Z: that stays with text editing.
+    id: "undo-operation", label: context => undoLabel(context.undo),
+    enabled: context => context.hasRepository && !!context.undo && !context.busy && !context.branchBusy && !context.network, run: context => context.run.undo(),
+  },
   { id: "open-recent", label: "Open Recent", enabled: (context, target) => !!target && context.recents.includes(target), run: (context, target) => context.run.openRecent(target!) },
   {
     id: "abort-operation", label: context => context.operation ? `${abortLabel(context.operation.kind)}…` : "Abort Operation…",

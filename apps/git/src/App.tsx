@@ -39,6 +39,7 @@ import { SidebarSplitView } from "@legendapp/spark/ui/split-view";
 import { addWindowListener, setWindowOptions } from "@legendapp/spark/windows";
 import { addMacOSWindowListener, setToolbarItemText, type MacOSToolbarItem } from "@legendapp/spark/windows/macos";
 import { createResultDraftStore, draftDirty, type ResultDraft } from "./resultDraft";
+import { undoSheet } from "./gitUndo";
 
 const contentInset = 52;
 
@@ -563,6 +564,21 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     } catch (error) { await reportBranchError(`Couldn’t Rename “${entry.ref.name}”`, error); }
   }
 
+  /**
+   * Edit ▸ Undo: a refused undo says why; otherwise a sheet names what moves where before the reflog's newest operation is
+   * taken back. Git's refusal (the repository changed meanwhile) shows as a warning.
+   */
+  async function undoOperation() {
+    const owner = refsController.current, plan = refsRef.current.undo, repository = rootRef.current;
+    if (!owner || !plan) return;
+    const moved = () => refsController.current !== owner || rootRef.current !== repository;
+    const sheet = undoSheet(plan);
+    if (plan.refusal) { await reportBranchError(`Couldn’t ${sheet.button}`, plan.refusal); return; }
+    if (!await confirmDestructive(windowId, sheet.title, sheet.button, sheet.message) || moved()) return;
+    try { await owner.undo(plan); } catch (error) { await reportBranchError(`Couldn’t ${sheet.button}`, error); }
+    finally { afterOperation(moved); }
+  }
+
   /** Asks first; when Git refuses because the branch is not fully merged, asks again before `git branch -D`. */
   async function deleteBranch(ref: string) {
     const entry = findRef(refsRef.current.refs, ref), owner = refsController.current;
@@ -780,6 +796,7 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     refs: root ? refs.refs : null,
     unborn: !root || changes.status?.branch.oid === "(initial)",
     branchBusy: refs.writing,
+    undo: root ? refs.undo : null,
     stashes: root ? refs.stashes : null,
     hasChanges: !!changes.status?.entries.length,
     worktrees: root ? refs.worktrees : null,
@@ -844,6 +861,7 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
       newBranch: start => void newBranch(start),
       renameBranch: ref => void renameBranch(ref),
       deleteBranch: ref => void deleteBranch(ref),
+      undo: () => void undoOperation(),
       copyText: text => { setStringAsync(text).catch(console.error); },
       stashChanges: includeUntracked => void stashChanges(includeUntracked),
       applyStash: oid => void stashWrite(oid, "apply"),
@@ -876,7 +894,7 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
         // AppKit's own Open Recent (filled from the system's recent documents) sits between these two.
         item("open-repository"), item("open-worktree"),
       ] },
-      { type: "submenu", id: "edit", label: "Edit", target: { menu: "edit" }, items: [item("copy-sha"), { type: "separator" }, item("blame-line")] },
+      { type: "submenu", id: "edit", label: "Edit", target: { menu: "edit" }, items: [item("undo-operation"), { type: "separator" }, item("copy-sha"), { type: "separator" }, item("blame-line")] },
       // AppKit's own View ▸ Show/Hide Sidebar drives the split view, so the menu has no second one.
       { type: "submenu", id: "view", label: "View", target: { menu: "view" }, items: [item("show-changes"), item("show-history"), item("show-review"), { type: "separator" }, item("show-file-history"), item("show-all-history")] },
       { type: "submenu", id: "repository", label: "Repository", placement: { before: { menu: "window" } }, items: [item("fetch"), item("pull"), item("push"), item("cancel-network"), { type: "separator" }, item("refresh"), { type: "separator" }, item("create-pull-request"), item("open-github"), { type: "separator" }, item("sign-in-github"), item("sign-out-github")] },
