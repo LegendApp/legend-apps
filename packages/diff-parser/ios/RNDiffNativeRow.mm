@@ -1477,13 +1477,13 @@ static void RNDiffDrawHorizontalText(
   NSString *activeSearchHighlights = [config searchHighlightsForRowIndex:self.rowIndex active:YES];
 
   [backgroundColor setFill];
-  NSRectFill(self.bounds);
+  NSRectFillUsingOperation(self.bounds, NSCompositingOperationSourceOver);
   if (activeSearchHighlights.length > 0) {
     [config.activeSearchRowHighlightColor setFill];
     NSRectFillUsingOperation(self.bounds, NSCompositingOperationSourceOver);
   }
   [accentColor setFill];
-  NSRectFill(NSMakeRect(0, 0, config.changeBarWidth, self.bounds.size.height));
+  NSRectFillUsingOperation(NSMakeRect(0, 0, config.changeBarWidth, self.bounds.size.height), NSCompositingOperationSourceOver);
 
   const CGFloat textY = MAX(0, (config.rowHeight - config.font.ascender + config.font.descender) / 2.0);
   if (!lightRender) {
@@ -1552,7 +1552,7 @@ static void RNDiffDrawHorizontalText(
   NSColor *backgroundColor = isAdd ? config.addBackgroundColor : isRemove ? config.removeBackgroundColor : NSColor.clearColor;
 
   [backgroundColor setFill];
-  NSRectFill(columnRect);
+  NSRectFillUsingOperation(columnRect, NSCompositingOperationSourceOver);
   if (activeHighlights.length > 0) {
     [config.activeSearchRowHighlightColor setFill];
     NSRectFillUsingOperation(columnRect, NSCompositingOperationSourceOver);
@@ -1643,7 +1643,7 @@ static void RNDiffDrawHorizontalText(
                activeHighlights:[config searchHighlightsForRowIndex:newRowIndex active:YES]];
 
   [config.dividerColor setFill];
-  NSRectFill(NSMakeRect(leftWidth, 0, 1, self.bounds.size.height));
+  NSRectFillUsingOperation(NSMakeRect(leftWidth, 0, 1, self.bounds.size.height), NSCompositingOperationSourceOver);
 }
 
 - (void)drawRect:(NSRect)dirtyRect
