@@ -147,7 +147,8 @@ const CommitRow = memo(function CommitRow({ commit, columns, palette, path, sele
 });
 
 /** History's list column: the commit list with its graph, one file's history, or the unborn/loading state. */
-export function HistoryList({ history, actions }: { history: HistoryState; actions: HistoryActions }) {
+/** `memory` keeps the scroll offset across a remount (the layout moving the pane), by panel instance id. */
+export function HistoryList({ history, actions, memory }: { history: HistoryState; actions: HistoryActions; memory?: { key?: string; scrollOffset: number } }) {
   const { commits, refs, selectedOid, currentBranch, file, search, compare, range } = history;
   const onSelect = useCallback((oid: string) => actions.select(oid), [actions]);
   const onCompare = useCallback((oid: string) => actions.compare(oid), [actions]);
@@ -159,6 +160,9 @@ export function HistoryList({ history, actions }: { history: HistoryState; actio
 
   if (history.head?.unborn) return <EmptyState title="No Commits Yet" message="Make the first commit from Changes." />;
   if (!history.head) return history.error ? <Text accessibilityRole="alert" style={styles.error}>{history.error}</Text> : <EmptyState title="Loading History…" />;
+  const listId = search ? `search:${search.scope}:${search.text}` : file?.path ?? (range ? `range:${range.base}..${history.ref}` : undefined);
+  // A remembered offset applies only to the same list (the log of the same ref, or the same search, file or range).
+  const listKey = listId ?? `log:${history.ref ?? ""}`;
   const folder = file && pathParts(file.path);
   const filter = search ?? file ?? range;
   const scopeLabel = search && searchScopes.find(entry => entry.scope === search.scope)!.label;
@@ -185,7 +189,7 @@ export function HistoryList({ history, actions }: { history: HistoryState; actio
       : range?.loading && !range.commits.length ? <EmptyState title="Loading Commits…" />
       : range && !range.commits.length ? range.error ? null : <EmptyState symbol="checkmark.circle" title="Nothing to Push" message="Every commit is on the upstream already." />
       : <LegendList<RowCommit>
-        key={search ? `search:${search.scope}:${search.text}` : file?.path ?? (range ? `range:${range.base}..${history.ref}` : undefined)}
+        key={listId}
         data={filter ? filter.commits : commits}
         keyExtractor={item => item.oid}
         estimatedItemSize={historyRowHeight}
@@ -194,6 +198,8 @@ export function HistoryList({ history, actions }: { history: HistoryState; actio
         recycleItems
         onEndReached={() => actions.loadMore()}
         onEndReachedThreshold={2}
+        initialScrollOffset={memory?.key === listKey ? memory.scrollOffset : undefined}
+        onScroll={memory ? event => { memory.key = listKey; memory.scrollOffset = event.nativeEvent.contentOffset.y; } : undefined}
         renderItem={({ item }) => <CommitRow commit={item} columns={filter ? 0 : columns} palette={palette} path={file?.path} selected={highlighted(item.oid)} refs={refs.get(item.oid)} currentBranch={currentBranch} onSelect={onSelect} onCompare={onCompare} onContextMenu={onContextMenu} />}
         ListFooterComponent={(filter ?? history).done ? null : <Text style={styles.footer}>Loading more…</Text>}
       />}
@@ -201,14 +207,27 @@ export function HistoryList({ history, actions }: { history: HistoryState; actio
 }
 
 /** History's detail pane: the selected commit's header, message, changed files and the selected file's patch. */
-export function CommitDetails({ history, actions }: { history: HistoryState; actions: HistoryActions }) {
-  const { details } = history;
-  if (history.compare) return <CompareDetails history={history} actions={actions} />;
-  if (!details) return <EmptyState title="No Selection" message="Select a commit to see its details." />;
+/** The commitDetails panel: the selected commit's subject, SHA and metadata, or the two commits being compared. */
+export function CommitInfo({ history, actions }: { history: HistoryState; actions: HistoryActions }) {
+  const { details, compare } = history;
+  if (compare) {
+    return <View style={styles.details}>
+      <View style={styles.header}>
+        <View style={styles.headerTitle}>
+          <Text style={styles.subject} accessibilityRole="header" numberOfLines={1}>{`Comparing ${shortOid(compare.base)} → ${shortOid(compare.target)}`}</Text>
+          <Text style={styles.compareLine} numberOfLines={1} selectable>{`From ${commitLabel(history, compare.base)}`}</Text>
+          <Text style={styles.compareLine} numberOfLines={1} selectable>{`To ${commitLabel(history, compare.target)}`}</Text>
+        </View>
+        <Button style={styles.action} onPress={() => actions.swapCompare()}>Swap</Button>
+        <Button style={styles.action} onPress={() => actions.closeCompare()}>Done</Button>
+      </View>
+      {compare.error ? <Text accessibilityRole="alert" style={styles.error}>{compare.error}</Text> : null}
+    </View>;
+  }
+  if (!details) return <View style={styles.details} />;
   if (details.error) return <Text accessibilityRole="alert" style={styles.error}>{details.error}</Text>;
   const commit = details.commit;
   if (!commit) return <EmptyState title="Loading Commit…" />;
-  const file = details.files.find(entry => entry.path === details.selectedPath);
   const body = commit.message.split("\n").slice(1).join("\n").replace(/^\n+/, "");
   const sameCommitter = commit.committer.name === commit.author.name && commit.committer.email === commit.author.email && commit.committer.time === commit.author.time;
   const date = (seconds: number) => new Date(seconds * 1000).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
@@ -222,7 +241,7 @@ export function CommitDetails({ history, actions }: { history: HistoryState; act
       <Button style={styles.action} onPress={() => actions.copySha(commit.oid)}>Copy SHA</Button>
       {commitGitHubUrl(history, commit.oid) ? <Button style={styles.wideAction} onPress={() => actions.openOnGitHub(commit.oid)}>Open on GitHub</Button> : null}
     </View>
-    <ScrollView style={styles.metaScroll} contentContainerStyle={styles.meta2}>
+    <ScrollView style={styles.fill} contentContainerStyle={styles.meta2}>
       <Field label="Author" value={`${commit.author.name} <${commit.author.email}>  ${date(commit.author.time)}`} />
       {sameCommitter ? null : <Field label="Committer" value={`${commit.committer.name} <${commit.committer.email}>  ${date(commit.committer.time)}`} />}
       <View style={styles.field}>
@@ -233,16 +252,38 @@ export function CommitDetails({ history, actions }: { history: HistoryState; act
       </View>
       {body ? <Text style={styles.body} selectable>{body}</Text> : null}
     </ScrollView>
-    <View style={styles.files}>
-      <Text style={styles.filesHeading}>{details.files.length === 1 ? "1 changed file" : `${details.files.length} changed files`}{commit.parents.length > 1 ? " (compared with the first parent)" : ""}</Text>
-      {details.files.length ? <Sidebar style={{ height: Math.min(details.files.length * 24 + 4, 120) }} selectedId={details.selectedPath} onSelectionChange={event => { if (event.id) actions.selectFile(event.id); }} defaultRowHeight={24}>
-        {details.files.map(entry => <SidebarItem key={entry.path} id={entry.path} onContextMenu={event => actions.fileContextMenu(entry.path, event.windowPosition)}>
-          <Text style={styles.file} numberOfLines={1}>{entry.file.oldPath && entry.file.newPath && entry.file.oldPath !== entry.file.newPath ? `${entry.file.oldPath} → ${entry.file.newPath}` : entry.path}</Text>
-        </SidebarItem>)}
-      </Sidebar> : null}
-    </View>
-    {file ? <CommitDiff file={file} actions={actions} oldSource={commit.parents[0]} newSource={commit.oid} /> : null}
   </View>;
+}
+
+/** The fileList panel in History: the selected commit's files, or the files two compared commits differ in. */
+export function CommitFiles({ history, actions }: { history: HistoryState; actions: HistoryActions }) {
+  const { details, compare } = history;
+  const source = compare ? (compare.loading || compare.error ? null : compare) : details?.commit ? details : null;
+  if (!source) return <View style={styles.details} />;
+  const merge = !compare && (details?.commit?.parents.length ?? 0) > 1;
+  if (compare && !source.files.length) return <EmptyState title="No Differences" message="The two commits have the same files." />;
+  return <View style={styles.details}>
+    <Text style={styles.filesHeading}>{source.files.length === 1 ? "1 changed file" : `${source.files.length} changed files`}{merge ? " (compared with the first parent)" : ""}</Text>
+    {source.files.length ? <Sidebar style={styles.fill} selectedId={source.selectedPath} onSelectionChange={event => { if (event.id) actions.selectFile(event.id); }} defaultRowHeight={24}>
+      {source.files.map(entry => <SidebarItem key={entry.path} id={entry.path} onContextMenu={event => actions.fileContextMenu(entry.path, event.windowPosition)}>
+        <Text style={styles.file} numberOfLines={1}>{entry.file.oldPath && entry.file.newPath && entry.file.oldPath !== entry.file.newPath ? `${entry.file.oldPath} → ${entry.file.newPath}` : entry.path}</Text>
+      </SidebarItem>)}
+    </Sidebar> : null}
+  </View>;
+}
+
+/** The diff panel in History: the selected file of the selected commit, or of the comparison. */
+export function CommitFileDiff({ history, actions }: { history: HistoryState; actions: HistoryActions }) {
+  const { details, compare } = history;
+  if (compare) {
+    if (compare.loading) return <EmptyState title="Comparing…" />;
+    const file = compare.files.find(entry => entry.path === compare.selectedPath);
+    return file ? <CommitDiff file={file} actions={actions} oldSource={compare.base} newSource={compare.target} /> : <EmptyState title="No Selection" message="Select a file to see its changes." />;
+  }
+  const commit = details?.commit;
+  const file = commit ? details.files.find(entry => entry.path === details.selectedPath) : undefined;
+  if (!commit || !file) return <EmptyState title="No Selection" message={commit ? "Select a file to see its changes." : "Select a commit to see its details."} />;
+  return <CommitDiff file={file} actions={actions} oldSource={commit.parents[0]} newSource={commit.oid} />;
 }
 
 /** A read-only diff whose lines blame as of `newSource` (added and context lines) or `oldSource` (removed lines). */
@@ -260,37 +301,6 @@ function commitLabel(history: HistoryState, oid: string) {
 const listedSummary = (history: HistoryState, oid: string) =>
   (history.search?.commits.find(commit => commit.oid === oid) ?? history.file?.commits.find(commit => commit.oid === oid) ?? history.range?.commits.find(commit => commit.oid === oid) ?? history.commits.find(commit => commit.oid === oid))?.summary;
 
-/** Two commits compared: `git diff base target`, its changed files and the selected file's patch. */
-function CompareDetails({ history, actions }: { history: HistoryState; actions: HistoryActions }) {
-  const compare = history.compare!;
-  const file = compare.files.find(entry => entry.path === compare.selectedPath);
-  return <View style={styles.details}>
-    <View style={styles.header}>
-      <View style={styles.headerTitle}>
-        <Text style={styles.subject} accessibilityRole="header" numberOfLines={1}>{`Comparing ${shortOid(compare.base)} → ${shortOid(compare.target)}`}</Text>
-        <Text style={styles.compareLine} numberOfLines={1} selectable>{`From ${commitLabel(history, compare.base)}`}</Text>
-        <Text style={styles.compareLine} numberOfLines={1} selectable>{`To ${commitLabel(history, compare.target)}`}</Text>
-      </View>
-      <Button style={styles.action} onPress={() => actions.swapCompare()}>Swap</Button>
-      <Button style={styles.action} onPress={() => actions.closeCompare()}>Done</Button>
-    </View>
-    {compare.error ? <Text accessibilityRole="alert" style={styles.error}>{compare.error}</Text>
-      : compare.loading ? <EmptyState title="Comparing…" />
-      : !compare.files.length ? <EmptyState title="No Differences" message="The two commits have the same files." />
-      : <>
-        <View style={styles.files}>
-          <Text style={styles.filesHeading}>{compare.files.length === 1 ? "1 changed file" : `${compare.files.length} changed files`}</Text>
-          <Sidebar style={{ height: Math.min(compare.files.length * 24 + 4, 120) }} selectedId={compare.selectedPath} onSelectionChange={event => { if (event.id) actions.selectFile(event.id); }} defaultRowHeight={24}>
-            {compare.files.map(entry => <SidebarItem key={entry.path} id={entry.path} onContextMenu={event => actions.fileContextMenu(entry.path, event.windowPosition)}>
-              <Text style={styles.file} numberOfLines={1}>{entry.file.oldPath && entry.file.newPath && entry.file.oldPath !== entry.file.newPath ? `${entry.file.oldPath} → ${entry.file.newPath}` : entry.path}</Text>
-            </SidebarItem>)}
-          </Sidebar>
-        </View>
-        {file ? <CommitDiff file={file} actions={actions} oldSource={compare.base} newSource={compare.target} /> : null}
-      </>}
-  </View>;
-}
-
 function Field({ label, value }: { label: string; value: string }) {
   return <View style={styles.field}>
     <Text style={styles.fieldLabel}>{label}</Text>
@@ -301,6 +311,7 @@ function Field({ label, value }: { label: string; value: string }) {
 const styles = StyleSheet.create({
   list: { flex: 1 },
   details: { flex: 1 },
+  fill: { flex: 1 },
   error: { padding: 12, fontSize: 13, color: PlatformColor("systemRedColor") },
   footer: { padding: 12, fontSize: 12, textAlign: "center", color: PlatformColor("secondaryLabelColor") },
   row: { height: historyRowHeight, flexDirection: "row", gap: 6, paddingHorizontal: 8, marginHorizontal: 6, borderRadius: 5 },
@@ -331,14 +342,12 @@ const styles = StyleSheet.create({
   compareLine: { fontSize: 12, color: PlatformColor("secondaryLabelColor") },
   action: { width: 96, height: 28 },
   wideAction: { width: 128, height: 28 },
-  metaScroll: { maxHeight: 180, flexGrow: 0 },
   meta2: { paddingHorizontal: 16, paddingVertical: 8, gap: 4 },
   field: { flexDirection: "row", alignItems: "center", gap: 8 },
   fieldLabel: { width: 72, fontSize: 12, color: PlatformColor("secondaryLabelColor") },
   fieldValue: { flex: 1, fontSize: 12, color: PlatformColor("labelColor") },
   link: { fontSize: 12, fontFamily: "Menlo", color: PlatformColor("linkColor") },
   body: { marginTop: 6, fontSize: 12, color: PlatformColor("labelColor") },
-  files: { maxHeight: 160, borderTopWidth: StyleSheet.hairlineWidth, borderColor: PlatformColor("separatorColor") },
   filesHeading: { paddingHorizontal: 16, paddingVertical: 6, fontSize: 12, fontWeight: "600", color: PlatformColor("secondaryLabelColor") },
   file: { flex: 1, paddingHorizontal: 8, fontSize: 12, color: PlatformColor("labelColor") },
 });

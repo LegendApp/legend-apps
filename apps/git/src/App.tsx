@@ -5,7 +5,14 @@ import { GitBranchNotMergedError, GitLocalChangesError, GitPullDivergedError, Gi
 import { Button } from "@legendapp/spark/ui";
 import { conflictSides, conflictedEntries, createGitChanges, emptyChanges, stagedEntries, unstagedEntries } from "./gitChanges";
 import { DiffPane, PickButton, type DiffLineTarget } from "./DiffPane";
-import { CommitDetails, HistoryList, type BlameTarget, type HistoryActions } from "./HistoryView";
+import { CommitFileDiff, CommitFiles, CommitInfo, HistoryList, type BlameTarget, type HistoryActions } from "./HistoryView";
+import { LayoutHost, type PanelRenderers } from "./layout/LayoutHost";
+import { DiffDocumentCacheContext } from "./layout/diffDocuments";
+import { layoutMenu, runLayoutAction } from "./layout/layoutMenu";
+import { planPanels, viewKindFor, windowPlan, type LayoutConditions } from "./layout/plan";
+import { useWindowLayout } from "./layout/useWindowLayout";
+import type { PanelId } from "./settings/schema";
+import { activeLayout } from "./settings/presets";
 import { commandEnabled, commandLabel, commandMenuItem, queueEntry, runCommand, sectionPullRequest, sectionRef, sectionReview, sectionShowsHistory, sectionStash, sectionWorktree, type CommandContext, type CommandId, type Section } from "./commands";
 import { queueDetail, queuePushTarget, reviewQueue, type QueueEntry } from "./gitQueue";
 import { createGitRefs, emptyRefs, findRef, recentBranches, resolveBranchName, type WorktreeEntry } from "./gitRefs";
@@ -95,6 +102,18 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
   const rootRef = useRef(root);
   rootRef.current = root;
   const recents = useRecentRepositories();
+  // The window's settings (layout) and its remembered sizes; the repository layer follows the open repository.
+  const layout = useWindowLayout(windowId, root);
+  const layoutRef = useRef(layout);
+  layoutRef.current = layout;
+  // The pane Move Pane acts on: the one clicked last (state for the menu's label, the ref for the menu runner).
+  const [focusedPanelId, setFocusedPanelId] = useState("diff");
+  const focusedPanel = useRef(focusedPanelId);
+  const layoutReady = layout.initialState !== undefined;
+  useEffect(() => {
+    if (layout.initialState) setSidebarCollapsed(layout.initialState.sidebarCollapsed ?? false);
+  }, [layout.initialState]);
+  useEffect(() => { if (layoutReady) layout.windowState?.setSidebarCollapsed(sidebarCollapsed); }, [sidebarCollapsed, layoutReady, layout.windowState]);
   const operation = root ? changes.operation : null;
   // Git prepared a message (MERGE_MSG) that concludes the operation as one commit.
   const preparedMessage = operation?.kind === "merge" || operation?.kind === "cherry-pick" || operation?.kind === "revert";
@@ -960,7 +979,8 @@ Rebase anyway?`,
       ] },
       { type: "submenu", id: "edit", label: "Edit", target: { menu: "edit" }, items: [item("undo-operation"), { type: "separator" }, item("copy-sha"), { type: "separator" }, item("blame-line")] },
       // AppKit's own View ▸ Show/Hide Sidebar drives the split view, so the menu has no second one.
-      { type: "submenu", id: "view", label: "View", target: { menu: "view" }, items: [item("show-changes"), item("show-history"), item("show-review"), { type: "separator" }, item("show-file-history"), item("show-all-history")] },
+      { type: "submenu", id: "view", label: "View", target: { menu: "view" }, items: [item("show-changes"), item("show-history"), item("show-review"), { type: "separator" }, item("show-file-history"), item("show-all-history"), { type: "separator" },
+        layoutMenu(layout, viewKindFor(section), focusedPanelId)] },
       { type: "submenu", id: "repository", label: "Repository", placement: { before: { menu: "window" } }, items: [item("fetch"), item("pull"), item("push"), item("cancel-network"), { type: "separator" }, item("refresh"), { type: "separator" }, item("create-pull-request"), item("open-github"), { type: "separator" }, item("sign-in-github"), item("sign-out-github")] },
       { type: "submenu", id: "pull-request", label: "Pull Request", placement: { before: { menu: "window" } }, items: [item("review-pull-request"), { type: "separator" }, item("checkout-pull-request"), item("pull-request-worktree")] },
       { type: "submenu", id: "branch", label: "Branch", placement: { before: { menu: "window" } }, items: [item("switch-branch"), item("new-branch"), { type: "separator" }, item("rename-branch"), item("delete-branch"), { type: "separator" }, item("merge-ref"), item("rebase-ref"), item("interactive-rebase-ref"), item("cherry-pick-commit"), item("revert-commit"), { type: "separator" }, item("abort-operation"), item("continue-operation")] },
@@ -1290,7 +1310,11 @@ Rebase anyway?`,
       if (initialPath) openWorktreePaths.delete(initialPath);
       for (const pending of [registration, closeRegistration, focusRegistration, ...openRequests ? [openRequests] : []]) void pending.then(listener => listener.remove()).catch(console.error);
     };
-    registerMenuRunner(windowId, itemId => { if (!disposed) runCommand(itemId, contextRef.current); });
+    registerMenuRunner(windowId, itemId => {
+      if (disposed) return;
+      if (itemId.startsWith("layout:")) void runLayoutAction(itemId, { windowId, layout: layoutRef.current, kind: viewKindFor(contextRef.current.section), focused: focusedPanel.current });
+      else runCommand(itemId, contextRef.current);
+    });
     const closeRegistration = addWindowListener(windowId, "closed", close);
     // Pull requests re-read when the window comes to the front (and on ⌘R), never on a timer.
     const focusRegistration = addWindowListener(windowId, "focusChanged", event => {
@@ -1309,22 +1333,19 @@ Rebase anyway?`,
     return close;
   }, []); // eslint-disable-line react-hooks/exhaustive-deps -- one window, one set of controllers
 
-  // Stays mounted (hidden) in History so the commit message draft and a running generation survive a section switch.
-  const changesList = <View style={[styles.listPane, section !== "changes" && styles.hidden]}>
-    <ChangesList title="Unstaged" entries={unstaged.filter(matches("unstaged"))} filtered={!!filter} selectedPath={selected?.section === "unstaged" ? selected.path : null}
-      onSelect={path => void selectChange(path === null ? null : { section: "unstaged", path })}
-      action="Stage" disabled={busy} onAction={path => { if (context.conflicts.some(entry => entry.path === path)) void markResolved(path); else void controller.current?.changeFile(path, true); }} onContextMenu={showFileMenu}
-      secondaryAction="Discard…" secondaryDisabled={!canDiscardFile} onSecondaryAction={() => void discardFile()} />
-    <ChangesList title="Staged" entries={staged.filter(matches("staged"))} filtered={!!filter} selectedPath={selected?.section === "staged" ? selected.path : null}
-      onSelect={path => void selectChange(path === null ? null : { section: "staged", path })}
-      action="Unstage" disabled={busy} onAction={path => void controller.current?.changeFile(path, false)} onContextMenu={showFileMenu} />
-    <CommitComposer disabled={busy} stagedCount={staged.length} conflictCount={conflicts} merging={changes.merging} prepared={preparedMessage} unborn={changes.status?.branch.oid === "(initial)"} root={root!}
+  const unstagedList = <ChangesList title="Unstaged" entries={unstaged.filter(matches("unstaged"))} filtered={!!filter} selectedPath={selected?.section === "unstaged" ? selected.path : null}
+    onSelect={path => void selectChange(path === null ? null : { section: "unstaged", path })}
+    action="Stage" disabled={busy} onAction={path => { if (context.conflicts.some(entry => entry.path === path)) void markResolved(path); else void controller.current?.changeFile(path, true); }} onContextMenu={showFileMenu}
+    secondaryAction="Discard…" secondaryDisabled={!canDiscardFile} onSecondaryAction={() => void discardFile()} />;
+  const stagedList = <ChangesList title="Staged" entries={staged.filter(matches("staged"))} filtered={!!filter} selectedPath={selected?.section === "staged" ? selected.path : null}
+    onSelect={path => void selectChange(path === null ? null : { section: "staged", path })}
+    action="Unstage" disabled={busy} onAction={path => void controller.current?.changeFile(path, false)} onContextMenu={showFileMenu} />;
+  const composer = <CommitComposer disabled={busy} stagedCount={staged.length} conflictCount={conflicts} merging={changes.merging} prepared={preparedMessage} unborn={changes.status?.branch.oid === "(initial)"} root={root!}
       commitRef={commit} onCommit={input => controller.current?.commit(input) ?? Promise.resolve(false)} headMessage={() => controller.current?.headMessage() ?? Promise.resolve(null)}
       mergeMessage={() => controller.current?.mergeMessage() ?? Promise.resolve(null)} editedMergeMessageRef={editedMergeMessage}
       readStaged={signal => controller.current?.stagedDiff(signal) ?? Promise.reject(new Error("Open a repository first."))}
       confirmReplace={() => confirmDestructive(windowId, "Replace the commit message?", "Replace", "The generated message replaces the summary and description you wrote.")}
-      generatorRef={generator} onGeneratingChange={setGenerating} />
-  </View>;
+      generatorRef={generator} onGeneratingChange={setGenerating} />;
 
   const stashEntry = selectedStash ? refs.stashes?.find(entry => entry.oid === selectedStash) ?? null : null;
   const stashFile = stashPreview.oid === selectedStash ? stashPreview.files.find(file => file.path === stashPreview.selectedPath) : undefined;
@@ -1392,18 +1413,89 @@ Rebase anyway?`,
     : unstaged.length || staged.length ? <EmptyState title="No Selection" message="Select a file to view its changes." />
     : <EmptyState symbol="checkmark.circle" title="Working Tree Clean" message="There are no changes to commit." />;
 
+  // Panels by layout id (spec §5.4). Controllers own the state outside React, so a panel the layout moves remounts cheaply.
+  const kind = viewKindFor(section);
+  const changesActive = kind === "changes";
+  const listPanel = (content: ReactNode) => <View style={styles.panel}>{content}</View>;
+  const historyList = (id: string) => <HistoryList history={history} actions={historyActions} memory={layout.memory(id)} />;
+  const changesPanels: PanelRenderers = {
+    unstaged: () => listPanel(unstagedList),
+    staged: () => listPanel(stagedList),
+    changes: () => listPanel(<>{unstagedList}{stagedList}</>),
+    composer: () => listPanel(composer),
+    // Shown only while Changes is: the hidden copy keeps the composer, not a second diff or graph.
+    diff: () => changesActive ? changesDetail : null,
+    commitList: ({ id }) => changesActive ? listPanel(historyList(id)) : null,
+    empty: () => null,
+  };
+  const historyPanels: PanelRenderers = {
+    commitList: ({ id }) => listPanel(queueBranch ? <>
+      <View style={[styles.heading, styles.tallHeading]}>
+        <View style={styles.headingStack}>
+          <Text style={[styles.headingLabel, styles.fixed]} accessibilityRole="header" numberOfLines={1}>{queueBranch.name}</Text>
+          <Text style={styles.headingNote} numberOfLines={1}>{`${queueBranch.ahead === 1 ? "1 commit" : `${queueBranch.ahead} commits`} not on ${queueBranch.upstream ?? queueBranch.base.replace(/^refs\/(heads|remotes)\//, "")}`}</Text>
+        </View>
+        {queuePushButton}
+      </View>
+      <View style={[styles.root, styles.separated]}>{historyList(id)}</View>
+    </> : historyList(id)),
+    commitDetails: () => <CommitInfo history={history} actions={historyActions} />,
+    fileList: () => listPanel(<CommitFiles history={history} actions={historyActions} />),
+    diff: () => <CommitFileDiff history={history} actions={historyActions} />,
+    empty: () => null,
+  };
+  const sectionPanels: PanelRenderers = showsHistory || queueBranch ? historyPanels
+    : stashEntry ? { fileList: () => listPanel(<StashFiles stash={stashEntry} preview={stashPreview} filter={filter} onSelect={path => stashController.current?.selectFile(path)} />), diff: () => stashDetail, empty: () => null }
+    : worktreeEntry ? { fileList: () => listPanel(<WorktreeFiles worktree={worktreeEntry} preview={worktreePreview} filter={filter} accessory={worktreeOpenButton} onSelect={path => worktreeController.current?.selectFile(path)} />), diff: () => worktreeDetailPane, empty: () => null }
+    : queueWorktree ? { fileList: () => listPanel(<>
+      <WorktreeFiles worktree={queueWorktree} title={queueWorktree.branch ? `${queueWorktree.name} — ${queueWorktree.branch}` : queueWorktree.name} preview={worktreePreview} filter={filter}
+        accessory={queueStageButton} onSelect={path => worktreeController.current?.selectFile(path)} />
+      <View style={styles.queueBar}>
+        {commandEnabled("open-worktree", context, queueWorktree.path) ? <Button style={styles.queueOpen} onPress={() => runCommand("open-worktree", contextRef.current, queueWorktree.path)}>Open Window</Button> : null}
+        <View style={styles.root} />
+        {queuePushButton}
+        <Button style={styles.discard} disabled={!commandEnabled("commit", context)} onPress={() => runCommand("commit", contextRef.current)}>Commit…</Button>
+      </View>
+    </>), diff: () => worktreeDetailPane, empty: () => null }
+    : selectedPull ? { fileList: () => listPanel(<PullRequestFiles pull={selectedPull} state={pulls} filter={filter} onSelect={path => pullsController.current?.selectFile(path)}
+      review={<>
+        {selectedPull.url ? <Button style={styles.openPull} onPress={() => runCommand("open-github", contextRef.current)}>Open on GitHub</Button> : null}
+        <Button style={styles.action} disabled={!commandEnabled("review-pull-request", context)} onPress={() => runCommand("review-pull-request", contextRef.current)}>Review…</Button>
+      </>} />), diff: () => pullDetail, empty: () => null }
+    : { empty: () => null };
+  const has = (panels: PanelRenderers) => (panel: PanelId) => !!panels[panel];
+  const changesConditions: LayoutConditions = { fileSelected: !!selected, commitSelected: !!history.selectedOid, operationInProgress: !!operation };
+  const sectionConditions: LayoutConditions = {
+    fileSelected: showsHistory || queueBranch ? !!(history.compare ? history.compare.selectedPath : history.details?.selectedPath)
+      : stashEntry ? !!stashPreview.selectedPath : worktreeEntry || queueWorktree ? !!worktreePreview.selectedPath : selectedPull ? !!pulls.selectedPath : false,
+    commitSelected: !!(queueBranch ? history.selectedOid : selectedCommit), operationInProgress: !!operation,
+  };
+  const focusPanel = (id: string) => { focusedPanel.current = id; setFocusedPanelId(id); };
+  const activeSidebar = activeLayout(layout.settings, layout.base).sidebar;
+  // Spark throws when the width is below the minimum; a remembered width or a settings file can be.
+  const sidebarMinWidth = activeSidebar?.minWidth ?? 180;
+  const sidebarWidth = Math.max(layout.initialState?.sidebarWidth ?? activeSidebar?.width ?? 220, sidebarMinWidth);
+  const changesPlan = windowPlan(layout.settings, layout.base, "changes", changesConditions, has(changesPanels));
+  // A layout that shows the graph in Changes (GitKraken) needs HEAD's log loaded, as History does.
+  const changesGraph = !!root && kind === "changes" && planPanels(changesPlan).includes("commitList");
+  useEffect(() => {
+    if (!changesGraph) return;
+    historyController.current?.setRef(null);
+    void historyController.current?.activate();
+  }, [changesGraph, root]);
+
   return (<>
     {windowId === mainWindowId ? <GitMenu menu={menu} /> : null}
-    <SidebarSplitView
+    {/* Starts at the remembered sidebar width, so the split view waits for the window state (one small file). */}
+    {layoutReady ? <SidebarSplitView
       appearance="system"
       style={styles.root}
-      sidebarWidth={220}
-      sidebarMinWidth={180}
-      listWidth={320}
-      listMinWidth={260}
+      sidebarWidth={sidebarWidth}
+      sidebarMinWidth={sidebarMinWidth}
       contentMinWidth={480}
       sidebarCollapsed={sidebarCollapsed}
       onSidebarCollapsedChange={setSidebarCollapsed}
+      onResize={event => layout.windowState?.onResize(event)}
       titleBar={{ content: { height: contentInset, material: "titlebar" } }}
       sidebar={
         <Sidebar style={styles.root} selectedId={root ? sidebarSection : null} onSelectionChange={event => {
@@ -1429,37 +1521,6 @@ Rebase anyway?`,
             <SidebarItem id="empty" selectable={false}><Text style={styles.sidebarNote}>No repository open</Text></SidebarItem>}
         </Sidebar>
       }
-      list={root ? <>
-        {changesList}
-        {showsHistory ? <View style={styles.listPane}><HistoryList history={history} actions={historyActions} /></View> : null}
-        {stashEntry ? <View style={styles.listPane}><StashFiles stash={stashEntry} preview={stashPreview} filter={filter} onSelect={path => stashController.current?.selectFile(path)} /></View> : null}
-        {worktreeEntry ? <View style={styles.listPane}><WorktreeFiles worktree={worktreeEntry} preview={worktreePreview} filter={filter} accessory={worktreeOpenButton} onSelect={path => worktreeController.current?.selectFile(path)} /></View> : null}
-        {queueWorktree ? <View style={styles.listPane}>
-          <WorktreeFiles worktree={queueWorktree} title={queueWorktree.branch ? `${queueWorktree.name} — ${queueWorktree.branch}` : queueWorktree.name} preview={worktreePreview} filter={filter}
-            accessory={queueStageButton} onSelect={path => worktreeController.current?.selectFile(path)} />
-          <View style={styles.queueBar}>
-            {commandEnabled("open-worktree", context, queueWorktree.path) ? <Button style={styles.queueOpen} onPress={() => runCommand("open-worktree", contextRef.current, queueWorktree.path)}>Open Window</Button> : null}
-            <View style={styles.root} />
-            {queuePushButton}
-            <Button style={styles.discard} disabled={!commandEnabled("commit", context)} onPress={() => runCommand("commit", contextRef.current)}>Commit…</Button>
-          </View>
-        </View> : null}
-        {selectedPull ? <View style={styles.listPane}><PullRequestFiles pull={selectedPull} state={pulls} filter={filter} onSelect={path => pullsController.current?.selectFile(path)}
-          review={<>
-            {selectedPull.url ? <Button style={styles.openPull} onPress={() => runCommand("open-github", contextRef.current)}>Open on GitHub</Button> : null}
-            <Button style={styles.action} disabled={!commandEnabled("review-pull-request", context)} onPress={() => runCommand("review-pull-request", contextRef.current)}>Review…</Button>
-          </>} /></View> : null}
-        {queueBranch ? <View style={styles.listPane}>
-          <View style={[styles.heading, styles.tallHeading]}>
-            <View style={styles.headingStack}>
-              <Text style={[styles.headingLabel, styles.fixed]} accessibilityRole="header" numberOfLines={1}>{queueBranch.name}</Text>
-              <Text style={styles.headingNote} numberOfLines={1}>{`${queueBranch.ahead === 1 ? "1 commit" : `${queueBranch.ahead} commits`} not on ${queueBranch.upstream ?? queueBranch.base.replace(/^refs\/(heads|remotes)\//, "")}`}</Text>
-            </View>
-            {queuePushButton}
-          </View>
-          <View style={[styles.root, styles.separated]}><HistoryList history={history} actions={historyActions} /></View>
-        </View> : null}
-      </> : undefined}
       content={
         <View style={styles.content}>
           {/* The operation bar (merge, rebase, …) and Git's errors sit across the top of the detail. */}
@@ -1477,7 +1538,15 @@ Rebase anyway?`,
             {detailError.kind === "unauthorized" ? <Button style={styles.barButton} onPress={() => runCommand("sign-in-github", contextRef.current)}>Sign In…</Button>
               : <Button style={styles.barButton} onPress={() => void pullsController.current?.refresh()}>Try Again</Button>}
           </StateBar> : null}
-          {root ? <View style={styles.detail}>{showsHistory || queueBranch ? <CommitDetails history={history} actions={historyActions} /> : stashEntry ? stashDetail : worktreeEntry || queueWorktree ? worktreeDetailPane : selectedPull ? pullDetail : changesDetail}</View>
+          {root ? <View style={styles.detail}>
+            <DiffDocumentCacheContext.Provider value={layout.documents}>
+              {/* Changes stays mounted (hidden) in other sections so the commit message draft and a running generation survive a switch. */}
+              <View style={[styles.root, kind !== "changes" && styles.hidden]}>
+                <LayoutHost plan={changesPlan} panels={changesPanels} onFocusPanel={focusPanel} />
+              </View>
+              {kind !== "changes" ? <LayoutHost plan={windowPlan(layout.settings, layout.base, kind, sectionConditions, has(sectionPanels))} panels={sectionPanels} onFocusPanel={focusPanel} /> : null}
+            </DiffDocumentCacheContext.Provider>
+          </View>
             : changes.loading ? <EmptyState title="Opening Repository…" />
             : <EmptyState symbol="folder" title="No Repository Open" message="Open a Git repository to see its changes and commit them.">
               <Button style={styles.open} onPress={() => void chooseRepository()}>Open Repository…</Button>
@@ -1490,7 +1559,7 @@ Rebase anyway?`,
             busy={creating || pulls.writing} onCancel={() => setCreateSheet(null)} onSubmit={input => void submitCreatePullRequest(input)} /> : null}
         </View>
       }
-    />
+    /> : null}
   </>);
 }
 
@@ -1738,13 +1807,13 @@ function ChangesList({ title, entries, filtered, selectedPath, onSelect, onConte
   action: string; disabled: boolean; onAction: (path: string) => void;
   secondaryAction?: string; secondaryDisabled?: boolean; onSecondaryAction?: () => void;
 }) {
-  return <View style={[styles.listSection, title === "Staged" && styles.separated]}>
+  return <View style={styles.listSection}>
     <View style={styles.heading}>
       <Text style={styles.headingLabel} accessibilityRole="header">{title} ({entries.length})</Text>
       {secondaryAction ? <Button style={styles.discard} disabled={secondaryDisabled} onPress={() => onSecondaryAction?.()}>{secondaryAction}</Button> : null}
       <Button style={styles.action} disabled={disabled || selectedPath === null} onPress={() => { if (selectedPath !== null) onAction(selectedPath); }}>{action}</Button>
     </View>
-    {entries.length ? <Sidebar style={styles.root} selectedId={selectedPath} onSelectionChange={event => onSelect(event.id)} defaultRowHeight={24}>
+    {entries.length ? <Sidebar style={styles.root} accessibilityLabel={`${title} files`} selectedId={selectedPath} onSelectionChange={event => onSelect(event.id)} defaultRowHeight={24}>
       {entries.map(entry => <SidebarItem key={entry.path} id={entry.path} onContextMenu={event => onContextMenu(entry.path, event.windowPosition)}><FileRow entry={entry} staged={title === "Staged"} /></SidebarItem>)}
     </Sidebar> : <View style={styles.emptyList}><Text style={styles.emptyListText}>{filtered ? "No matching files" : `No ${title.toLowerCase()} changes`}</Text></View>}
   </View>;
@@ -1754,8 +1823,8 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   content: { flex: 1, paddingTop: contentInset, backgroundColor: PlatformColor("windowBackgroundColor") },
   detail: { flex: 1, borderTopWidth: StyleSheet.hairlineWidth, borderColor: PlatformColor("separatorColor"), backgroundColor: PlatformColor("textBackgroundColor") },
-  listPane: { flex: 1, paddingTop: contentInset, backgroundColor: PlatformColor("controlBackgroundColor") },
   hidden: { display: "none" },
+  panel: { flexGrow: 1, flexShrink: 1, flexBasis: "auto", minHeight: 0, backgroundColor: PlatformColor("controlBackgroundColor") },
   open: { width: 150, height: 28 },
   listSection: { flex: 1 },
   separated: { borderTopWidth: StyleSheet.hairlineWidth, borderColor: PlatformColor("separatorColor") },

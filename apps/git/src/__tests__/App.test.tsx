@@ -65,6 +65,17 @@ jest.mock("@legendapp/spark/ui/sidebar", () => {
 jest.mock("@legendapp/spark/ui/split-view", () => ({
   SidebarSplitView: ({ sidebar, list, content }: any) => <>{sidebar}{list}{content}</>,
 }));
+// Settings and window state files, in memory (the layout tests cover their contents).
+jest.mock("@legendapp/spark/files", () => {
+  const files = new Map<string, string>();
+  return {
+    getDirectory: async () => "/data",
+    readText: async (path: string) => { if (!files.has(path)) throw Object.assign(new Error("missing"), { code: "E_NOT_FOUND" }); return files.get(path); },
+    writeText: async (path: string, text: string) => { files.set(path, text); },
+    mkdir: async () => {},
+    watch: async () => ({ remove: async () => {} }),
+  };
+});
 jest.mock("@legendapp/spark/windows", () => ({ setWindowOptions: jest.fn(async () => {}), addWindowListener: jest.fn(async () => ({ remove: jest.fn(async () => {}) })) }));
 jest.mock("../gitWindows", () => ({ ...jest.requireActual("../gitWindows"), openWorktreeWindow: jest.fn(async () => ({})) }));
 jest.mock("@legendapp/spark/windows/macos", () => ({
@@ -72,6 +83,8 @@ jest.mock("@legendapp/spark/windows/macos", () => ({
   setToolbarItemText: jest.fn(async () => {}),
 }));
 
+/** A Changes file list by title (the layout decides where it sits). */
+const filesList = (renderer: ReactTestRenderer, title: "Unstaged" | "Staged") => renderer.root.findAllByType(Sidebar).find(node => node.props.accessibilityLabel === `${title} files`)!;
 const lastMenu = () => jest.mocked(useMenu).mock.calls.at(-1)![0] as unknown as { items: any[]; onAction: (action: { itemId: string }) => void };
 const openMenu = () => lastMenu().items.flatMap(entry => entry.items ?? []).find(entry => entry.id === "open-repository");
 /** File ▸ Open Repository…, the way the menu bar runs it. */
@@ -119,13 +132,13 @@ it("opens a repository, selects a native file row, stages and unstages it, and r
   const text = () => renderer.root.findAllByType(Text).map(node => [node.props.children].flat().join("")).join("\n");
   expect(text()).toContain("Unstaged (1)");
   expect(text()).toContain("Staged (1)");
-  const select = async (section: number) => act(async () => { renderer.root.findAllByType(Sidebar)[section].props.onSelectionChange({ id: "both.txt" }); });
-  await select(1);
+  const select = async (title: "Unstaged" | "Staged") => act(async () => { filesList(renderer, title).props.onSelectionChange({ id: "both.txt" }); });
+  await select("Unstaged");
   git.status.mockResolvedValueOnce({ branch, entries: [{ ...entry, worktreeStatus: "." }] });
   await act(async () => { renderer.root.findAllByType(Button).find(button => button.props.children === "Stage")!.props.onPress(); });
   expect(git.stageFile).toHaveBeenCalledTimes(1);
   expect(text()).toContain("Unstaged (0)");
-  await select(1);
+  await select("Staged");
   git.status.mockResolvedValueOnce({ branch, entries: [{ ...entry, indexStatus: "." }] });
   await act(async () => { renderer.root.findAllByType(Button).find(button => button.props.children === "Unstage")!.props.onPress(); });
   expect(git.unstageFile).toHaveBeenCalledTimes(1);
@@ -133,7 +146,7 @@ it("opens a repository, selects a native file row, stages and unstages it, and r
   const button = (label: string) => renderer.root.findAllByType(Button).find(node => node.props.children === label)!;
 
   // Discard asks with a native warning sheet first; cancelling leaves the file alone.
-  await select(1);
+  await select("Unstaged");
   jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "cancel" });
   await act(async () => { button("Discard…").props.onPress(); });
   expect(git.discardFiles).not.toHaveBeenCalled();
@@ -355,13 +368,14 @@ it("switches sections from the sidebar, the toolbar segment and the View menu, k
   const menuItem = (id: string) => lastMenu().items.flatMap(entry => entry.items ?? []).find(entry => entry.id === id);
   const navigation = () => renderer.root.findAllByType(Sidebar)[0]!;
   const split = () => renderer.root.findByType(SidebarSplitView);
-  const unstagedRows = () => renderer.root.findAllByType(Sidebar)[1]!;
+  const unstagedRows = () => filesList(renderer, "Unstaged");
 
   // Toolbar: sidebar toggle and branch menu leading, segmented sections, Refresh, search; no Open or Restore.
   expect(toolbar().map(entry => entry.id)).toEqual(["toggle-sidebar", "branch", "section", "refresh", "search"]);
   expect(toolbarItem("branch")).toMatchObject({ type: "menu", label: "main", items: [{ id: "switch-branch", disabled: true }, { id: "new-branch", disabled: false }] });
   expect(toolbarItem("section")).toMatchObject({ type: "segmented", value: "changes" });
-  expect(split().props.list).toBeDefined();
+  // Panes come from the layout (SourceTree by default) inside the content slot; the split view has no list column.
+  expect(split().props.list).toBeUndefined();
 
   await act(async () => { unstagedRows().props.onSelectionChange({ id: "src/app.ts" }); });
   expect(unstagedRows().props.selectedId).toBe("src/app.ts");
@@ -1604,7 +1618,7 @@ it("merges a branch into the current one after a sheet, shows the stopped merge 
   expect(bar.findAllByType(Button)[1]!.props.disabled).toBe(true);
   expect(menuItem("continue-operation")).toMatchObject({ label: "Continue Merge", disabled: true });
   expect(menuItem("merge-ref")).toMatchObject({ disabled: true });
-  const unstagedList = () => renderer.root.findAllByType(Sidebar)[1]!;
+  const unstagedList = () => filesList(renderer, "Unstaged");
   expect(unstagedList().findAllByType(SidebarItem).map(item => item.props.id)).toEqual(["x.txt", "y.txt", "0-edit.txt"]);
   expect(inputs().map(input => input.props.value)).toEqual(["Merge branch 'feature'", ""]);
   // The toolbar's branch is still the current branch.
@@ -1746,7 +1760,7 @@ it("rebases the current branch after a sheet, shows a stopped rebase with its st
   expect(toolbarBranch()).toBe("topic");
   expect(inputs()[0]!.props.value).toBe("");
   // The conflict's header names the sides by branch: during a rebase, ours is the branch rebased onto.
-  await act(async () => { renderer.root.findAllByType(Sidebar)[1]!.props.onSelectionChange({ id: "a.txt" }); });
+  await act(async () => { filesList(renderer, "Unstaged").props.onSelectionChange({ id: "a.txt" }); });
   expect(renderer.root.findByType(DiffPane).findAllByType(Button).map(node => node.props.children)).toEqual(["Use “main”", "Use “topic”", "Use Both", "Mark Resolved"]);
   // Resolved, Continue runs `git rebase --continue`.
   git.status.mockResolvedValue({ branch: { ...branch, head: "(detached)" }, entries: [{ kind: "ordinary", path: "a.txt", indexStatus: "M", worktreeStatus: "." }] });
@@ -2254,7 +2268,7 @@ it("resolves conflicted files with the side named for the operation, or both, fr
   let renderer!: ReactTestRenderer;
   await act(async () => { renderer = create(<App />); });
   await act(async () => { openRepository(); });
-  const unstagedList = () => renderer.root.findAllByType(Sidebar)[1]!;
+  const unstagedList = () => filesList(renderer, "Unstaged");
   const select = (id: string) => act(async () => { unstagedList().props.onSelectionChange({ id }); });
   const headerButtons = () => renderer.root.findByType(DiffPane).findAllByType(Button);
   const headerLabels = () => headerButtons().map(node => node.props.children);
@@ -2346,7 +2360,7 @@ it("shows a conflicted file's regions with picks named for the operation, resolv
   const texts = () => pane().findAllByType(Text).map(node => node.props.children);
   const press = (label: string, nth = 0) => act(async () => { pane().findAllByType(Button).filter(node => node.props.children === label)[nth]!.props.onPress(); });
   const bar = () => renderer.root.findAllByType(StateBar)[0]!;
-  await act(async () => { renderer.root.findAllByType(Sidebar)[1]!.props.onSelectionChange({ id: "app.ts" }); });
+  await act(async () => { filesList(renderer, "Unstaged").props.onSelectionChange({ id: "app.ts" }); });
 
   // The file's picks stay in its header; each region has its own, and sections named for the sides (and the ancestor).
   expect(labels()).toEqual(["Use “main”", "Use “feature”", "Use Both", "Mark Resolved", "Use “main”", "Use “feature”", "Use Both", "Use “main”", "Use “feature”", "Use Both", "Revert", "Save"]);
@@ -2447,7 +2461,7 @@ it("edits a conflicted file's Result, keeps the draft through refreshes, asks be
   const states = () => ({ revert: !button("Revert").props.disabled, save: !button("Save").props.disabled });
   const texts = () => pane().findAllByType(Text).map(node => node.props.children);
   const type = (edit: { offset: number; removedLength: number; insertedText: string }) => act(async () => { editor().props.onChange(edit); });
-  const select = (id: string) => act(async () => { renderer.root.findAllByType(Sidebar)[1]!.props.onSelectionChange({ id }); });
+  const select = (id: string) => act(async () => { filesList(renderer, "Unstaged").props.onSelectionChange({ id }); });
   const refresh = () => act(async () => { lastMenu().onAction({ itemId: "refresh" }); });
   await select("app.ts");
 
@@ -2517,7 +2531,7 @@ it("edits a conflicted file's Result, keeps the draft through refreshes, asks be
   await select("notes.txt");
   await type({ offset: 0, removedLength: 0, insertedText: "y" });
   jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "discard" });
-  await act(async () => { renderer.root.findAllByType(Sidebar)[2]!.props.onSelectionChange({ id: "app.ts" }); });
+  await act(async () => { filesList(renderer, "Staged").props.onSelectionChange({ id: "app.ts" }); });
   expect(pane().props.patch).toMatchObject({ path: "app.ts", section: "staged" });
   expect(files["notes.txt"]).not.toContain("y");
   expect(git.saveConflictResult).toHaveBeenCalledTimes(2);

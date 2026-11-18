@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactElement, type ReactNode } from "react";
+import { useCallback, useContext, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type ReactElement, type ReactNode } from "react";
 import { FlatList, PlatformColor, Pressable, ScrollView, StyleSheet, Text, View, useColorScheme, type GestureResponderEvent } from "react-native";
 import type { ConflictRegion, ConflictRegionSide } from "@legend-apps/git-core";
-import { DiffNativeRow, DiffNativeRowConfig, diffUnifiedChangeBarWidth, diffUnifiedLineNumberWidth, diffUnifiedMarkerWidth, getDiffRowPalette, loadUnifiedDiff, type DiffDocument, type DiffRenderRow } from "@legend-apps/diff-parser";
+import { DiffNativeRow, DiffNativeRowConfig, diffUnifiedChangeBarWidth, diffUnifiedLineNumberWidth, diffUnifiedMarkerWidth, getDiffRowPalette, type DiffDocument, type DiffRenderRow } from "@legend-apps/diff-parser";
+import { createDiffDocumentCache, DiffDocumentCacheContext } from "./layout/diffDocuments";
 import { unifiedPatchHunkKeys, unifiedPatchLineKey } from "@legend-apps/diff-parser/src/unifiedPatch";
 import { Button } from "@legendapp/spark/ui";
 import { SFSymbol } from "@legendapp/spark/ui/symbol";
@@ -201,8 +202,10 @@ export function DiffPane({ patch, disabled, readOnly = false, accessory, onApply
 }) {
   const appearance = useColorScheme() === "dark" ? "dark" : "light";
   const [loaded, setLoaded] = useState<{ text: string; document: DiffDocument; rows: DiffRenderRow[] } | null>(null);
-  const document = useRef<DiffDocument | null>(null);
-  const replaceDocument = (next: DiffDocument | null) => { document.current?.releaseNativeResources(); document.current = next; };
+  // The window's documents, so a pane the layout moves reuses its document; a pane outside a window owns its own.
+  const shared = useContext(DiffDocumentCacheContext);
+  const [own] = useState(() => shared ? null : createDiffDocumentCache());
+  const documents = shared ?? own!;
   const [error, setError] = useState<string | null>(null);
   const [selection, setSelection] = useState<{ selected: ReadonlySet<string>; anchor: number | null }>({ selected: new Set(), anchor: null });
   const [cursor, setCursor] = useState<number | null>(null);
@@ -223,15 +226,14 @@ export function DiffPane({ patch, disabled, readOnly = false, accessory, onApply
     setRangeAnchor(null);
     lineChange.current?.(null);
     setError(null);
-    if (!patch.file?.hunks.length) { replaceDocument(null); setLoaded(null); return; }
-    loadUnifiedDiff(patch.text, patch.path, 10_000).then(result => {
-      if (cancelled) { result.document.releaseNativeResources(); return; }
-      replaceDocument(result.document);
-      setLoaded({ text: patch.text, document: result.document, rows: result.document.getPlainRows(0, result.document.rowCount) });
+    if (!patch.file?.hunks.length) { setLoaded(null); return; }
+    const { path, text } = patch;
+    documents.acquire(path, text, 10_000).then(result => {
+      if (!cancelled) setLoaded({ text, document: result.document, rows: result.document.getPlainRows(0, result.document.rowCount) });
     }, (reason: unknown) => { if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason)); });
-    return () => { cancelled = true; };
+    return () => { cancelled = true; documents.release(path, text); };
   }, [patch.text, patch.path, patch.section]); // eslint-disable-line react-hooks/exhaustive-deps -- patch.file is derived from patch.text
-  useEffect(() => () => { replaceDocument(null); lineChange.current?.(null); }, []);
+  useEffect(() => () => { lineChange.current?.(null); }, []);
 
   const items = useMemo(() => loaded?.text === patch.text ? diffPaneItems(loaded.rows) : [], [loaded, patch.text]);
   const range = useMemo(() => lineRange(items, rangeAnchor, cursor, patch), [items, rangeAnchor, cursor]); // eslint-disable-line react-hooks/exhaustive-deps -- patch follows items
@@ -240,7 +242,9 @@ export function DiffPane({ patch, disabled, readOnly = false, accessory, onApply
   const bounds = useMemo(() => rangeBounds(items, rangeAnchor, cursor), [items, rangeAnchor, cursor]);
   const inRange = (index: number) => !!bounds && index >= bounds.from && index <= bounds.to;
   const palette = getDiffRowPalette(appearance);
-  const configId = `git:${loaded?.document.documentId ?? 0}:unified`;
+  // Per pane: two panes can share one cached document, but each needs its own native config entry.
+  const paneId = useId();
+  const configId = `git:${paneId}:${loaded?.document.documentId ?? 0}:unified`;
   const foregroundColor = appearance === "dark" ? "#e6edf3" : "#1f2328";
   const mutedColor = appearance === "dark" ? "#8b949e" : "#6e7781";
   const selected = selection.selected;

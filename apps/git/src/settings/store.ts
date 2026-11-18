@@ -260,7 +260,9 @@ export function sparkSettingsIO(): SettingsIO {
     },
     write: (path, text) => files().writeText(path, text),
     mkdir: path => files().mkdir(path, { recursive: true }),
-    watch: (directory, listener) => files().watch(directory, listener),
+    // Recursive: Spark's plain directory watch is a vnode source that only sees entries added, removed or renamed, so it
+    // misses a file rewritten in place (`>` in a shell, many editors); the recursive one uses FSEvents file events.
+    watch: (directory, listener) => files().watch(directory, listener, { recursive: true }),
   };
 }
 

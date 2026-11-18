@@ -32,3 +32,24 @@ unknown keys are kept on save, and a file from a newer version is read but never
 bun run git:settings check <file...>   # issues in the app's format; exits 1 on errors
 bun run git:settings schema            # regenerate the JSON Schema (--check to compare)
 ```
+
+## Layouts
+
+Each window opens the settings store for its repository and renders the active layout
+(`src/layout/`): the sidebar sits in the native `SidebarSplitView` sidebar slot, and the
+selected section's tree (`views.changes`, `history`, `ref`, `stash`, `worktree`, `review`,
+`pullRequest`, else `default`) fills the content slot. Panels a section can't show are
+dropped and their splits fold away; `switch` nodes follow `fileSelected`,
+`commitSelected` and `operationInProgress`.
+
+Until Spark has a general split view (ask S1), nested splits are fixed panes: a child's
+`size` (at least `minSize`; in a column, taller when the panel's content needs it, as the
+composer does) in points along the split, the rest shared, no draggable
+dividers. Only the sidebar divider drags; its width and the collapsed sidebar are window
+state in `state/<window id>.json`, recorded from settled (`ready`) resize events, never
+from a drag in progress, and never in `settings.json`.
+
+View ▸ Layout picks a preset's or a saved layout, saves the current one under a name
+(Save Layout As…, written to `layout.layouts` in the user file), resets it, and moves the
+pane clicked last left/right/up/down (Move Pane). Panels keep no expensive state: a diff
+the layout moves reuses its document from the window's cache.
