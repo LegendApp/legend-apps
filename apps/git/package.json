@@ -13,7 +13,7 @@
     "@legend-apps/source-editor": "workspace:*",
     "@legend-apps/file-system-watcher": "workspace:*",
     "@legend-apps/syntax-parser": "workspace:*",
-    "zod": "^4.6.7",
+    "zod": "catalog:",
     "@legendapp/state": "catalog:",
     "@legend-apps/reorder-controls": "workspace:*",
     "@legend-apps/color-picker": "workspace:*",

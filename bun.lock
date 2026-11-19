@@ -68,6 +68,7 @@
         "tailwind-merge": "^3.0.2",
         "typegpu": "^0.12.9",
         "uniwind": "1.6.3",
+        "zod": "catalog:",
       },
       "devDependencies": {
         "@babel/core": "^7.29.0",
@@ -162,7 +163,7 @@
         "@legendapp/state": "catalog:",
         "react": "catalog:",
         "react-native": "catalog:",
-        "zod": "^4.6.7",
+        "zod": "catalog:",
       },
     },
     "apps/hello-world": {
@@ -1050,6 +1051,7 @@
     "@legendapp/state": "^3.0.0-beta.42",
     "react": "19.2.0",
     "react-native": "0.83.10",
+    "zod": "^4.6.7",
   },
   "packages": {
     "@ark/schema": ["@ark/schema@0.56.8", "", { "dependencies": { "@ark/util": "0.56.8" } }, "sha512-R05TOe85oQBGFFw2zKMuZpqkXibLKuC/aJt6VwFn5Cjc4x3NkWfhvGRpRDycNkj3ddcHnOPtIsmjVowJO9Yxdw=="],

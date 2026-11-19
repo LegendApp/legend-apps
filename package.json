@@ -150,7 +150,8 @@
     "@legendapp/list": "3.3.10-sparse-layout.a6f5ba13",
     "@legendapp/motion": "^2.5.3",
     "@legendapp/state": "^3.0.0-beta.42",
-    "@legendapp/spark": "0.0.4"
+    "@legendapp/spark": "0.0.4",
+    "zod": "^4.6.7"
   },
   "dependencies": {
     "@gorhom/portal": "^1.0.14",
@@ -215,7 +216,8 @@
     "sf-symbols-typescript": "^2.2.0",
     "tailwind-merge": "^3.0.2",
     "typegpu": "^0.12.9",
-    "uniwind": "1.6.3"
+    "uniwind": "1.6.3",
+    "zod": "catalog:"
   },
   "overrides": {
     "react": "19.2.0",
