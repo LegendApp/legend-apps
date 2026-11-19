@@ -8,7 +8,7 @@ import { SidebarSplitView } from "@legendapp/spark/ui/split-view";
 import { addWindowListener, setWindowOptions } from "@legendapp/spark/windows";
 import { addMacOSWindowListener, setToolbarItemText } from "@legendapp/spark/windows/macos";
 import { GitPullDivergedError, GitPushedCommitsError, GitPushRejectedError, GitServiceError, type GitNetworkOptions } from "@legend-apps/git-core";
-import { Switch, Text, TextInput } from "react-native";
+import { PlatformColor, Switch, Text, TextInput } from "react-native";
 import { useMenu } from "@legendapp/spark/menus";
 import { useRoutedHotkeys } from "@legendapp/spark/shortcuts/commands";
 import { runCommand } from "@legendapp/spark/processes";
@@ -715,12 +715,29 @@ it("lists Branches, Remotes and Tags in the sidebar, scopes History to a ref, an
   const menuItem = (id: string) => lastMenu().items.flatMap(entry => entry.items ?? []).find(entry => entry.id === id);
   const toolbarItem = (id: string) => (jest.mocked(setWindowOptions).mock.calls.at(-1)![1].macos!.toolbar!.items! as any[]).find(entry => entry.id === id);
 
-  // Group rows (not selectable), then branches with the current one marked by a trailing checkmark, remotes with their branches, tags.
+  const row = (id: string) => items().find(item => item.props.id === id)!;
+  const header = (id: string) => row(id).findByType(Button);
+  // The SourceTree preset's sections: Branches, then Tags and Remotes collapsed, each header with its count and a disclosure chevron.
+  expect(items().map(item => item.props.id)).toEqual(["repositories", "changes", "history",
+    "group:branches", "ref:refs/heads/feature/ünï", "ref:refs/heads/main", "ref:refs/heads/old", "group:tags", "group:remotes"]);
+  expect(header("group:tags").props).toMatchObject({ variant: "borderless", children: "Tags", accessibilityLabel: "Tags, 1, collapsed" });
+  expect(header("group:branches").props.accessibilityLabel).toBe("Branches, 3, expanded");
+  expect(row("group:tags").findAllByType("SFSymbol" as any).map(symbol => symbol.props.name)).toEqual(["chevron.right"]);
+  // Clicking a header expands its section (and collapses it again); the window remembers it.
+  await act(async () => { header("group:remotes").props.onPress(); });
+  await act(async () => { header("group:tags").props.onPress(); });
+  expect(row("group:tags").findAllByType("SFSymbol" as any).map(symbol => symbol.props.name)).toEqual(["chevron.down"]);
+  // Group rows (not selectable), then branches with the current one marked by a trailing checkmark, tags, remotes with their branches.
   expect(items().map(item => item.props.id)).toEqual(["repositories", "changes", "history",
     "group:branches", "ref:refs/heads/feature/ünï", "ref:refs/heads/main", "ref:refs/heads/old",
-    "group:remotes", "remote:origin", "ref:refs/remotes/origin/fix/x", "group:tags", "ref:refs/tags/v1.0"]);
-  expect(items().filter(item => item.props.selectable === false).map(item => item.props.id)).toEqual(["repositories", "group:branches", "group:remotes", "remote:origin", "group:tags"]);
-  const row = (id: string) => items().find(item => item.props.id === id)!;
+    "group:tags", "ref:refs/tags/v1.0", "group:remotes", "remote:origin", "ref:refs/remotes/origin/fix/x"]);
+  expect(items().filter(item => item.props.selectable === false).map(item => item.props.id)).toEqual(["repositories", "group:branches", "group:tags", "group:remotes", "remote:origin"]);
+  await act(async () => { header("group:branches").props.onPress(); });
+  expect(items().map(item => item.props.id).slice(3, 5)).toEqual(["group:branches", "group:tags"]);
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 350)); });
+  const saved = await (jest.requireMock("@legendapp/spark/files") as { readText: (path: string) => Promise<string> }).readText("/data/state/main.json");
+  expect(JSON.parse(saved).sections).toEqual({ remotes: true, tags: true, branches: false });
+  await act(async () => { header("group:branches").props.onPress(); });
   expect(row("ref:refs/heads/main").findAllByType("SFSymbol" as any).map(symbol => symbol.props.name)).toEqual(["arrow.triangle.branch", "checkmark"]);
   expect(row("ref:refs/heads/old").findAllByType("SFSymbol" as any).map(symbol => symbol.props.name)).toEqual(["arrow.triangle.branch"]);
   expect(row("ref:refs/remotes/origin/fix/x").findAllByType(Text).map(text => text.props.children)).toEqual(["fix/x"]);
@@ -831,6 +848,65 @@ it("lists Branches, Remotes and Tags in the sidebar, scopes History to a ref, an
   refs = { ...refs, branches: refs.branches.filter(entry => entry.name !== "older") };
   await act(async () => { listener({ type: "toolbarAction", windowId: "main", itemId: "refresh" }); });
   expect(sidebar().props.selectedId).toBe("history");
+  await act(async () => { renderer.unmount(); });
+  // The window state file is shared by the tests below.
+  await (jest.requireMock("@legendapp/spark/files") as { writeText(path: string, text: string): Promise<void> }).writeText("/data/state/main.json", "{}");
+});
+
+it("lays out the sidebar from settings: order, hidden sections, a large section collapsed, revealed by a selection, and restored per window", async () => {
+  jest.clearAllMocks();
+  jest.mocked(watchDirectories).mockReturnValue({ remove: jest.fn() });
+  const files = jest.requireMock("@legendapp/spark/files") as { writeText(path: string, text: string): Promise<void>; readText(path: string): Promise<string> };
+  await files.writeText("/data/settings.json", JSON.stringify({ version: 1, sidebar: { sections: [{ id: "workspace" }, { id: "tags" }, { id: "remotes", expanded: false }, { id: "branches", visible: false }], showCounts: true } }));
+  const oid = "a".repeat(40);
+  const tags = Array.from({ length: 25 }, (_, index) => ({ name: `v${index}`, ref: `refs/tags/v${index}`, oid }));
+  const git = { resolveRoot: jest.fn(async () => "/repo"), watchLocations: jest.fn(async () => ({ root: "/repo", gitDir: "/repo/.git", commonDir: "/repo/.git", ignoredPaths: [] })),
+    status: jest.fn(async () => ({ branch: { oid, head: "main", upstream: null, ahead: 0, behind: 0 }, entries: [] })), lastDiscard: jest.fn(async () => null), operationState: jest.fn(async () => null),
+    revParse: jest.fn(async () => oid), refDecorations: jest.fn(async () => new Map()), remoteUrl: jest.fn(async () => null), currentBranch: jest.fn(async () => "main"),
+    listRefs: jest.fn(async () => ({ branches: [{ name: "main", ref: "refs/heads/main", oid, current: true, upstream: null, time: 1 }],
+      remotes: [{ name: "origin", branches: [{ name: "origin/main", ref: "refs/remotes/origin/main", oid, remote: "origin", branch: "main" }] }], tags })),
+    listStashes: jest.fn(async () => []), listWorktrees: jest.fn(async () => []) };
+  jest.mocked(getGitService).mockReturnValue(git as unknown as GitService);
+  jest.mocked(openGitHistory).mockImplementation(async () => ({ head: { handle: 1, headOid: oid, unborn: false, detached: false }, page: jest.fn(async (offset: number) => ({ offset, commits: [], done: true })), close: jest.fn() }));
+  let renderer!: ReactTestRenderer;
+  try {
+    await act(async () => { renderer = create(<App />); });
+    jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
+    await act(async () => { openRepository(); });
+    const sidebar = () => renderer.root.findAllByType(Sidebar)[0]!;
+    const ids = () => sidebar().findAllByType(SidebarItem).map(item => item.props.id);
+    const header = (id: string) => sidebar().findAllByType(SidebarItem).find(item => item.props.id === id)!.findByType(Button);
+    // Tags first (25 of them, so collapsed), Remotes collapsed by the settings, no Branches.
+    expect(ids()).toEqual(["repositories", "changes", "history", "group:tags", "group:remotes"]);
+    expect(header("group:tags").props.accessibilityLabel).toBe("Tags, 25, collapsed");
+    // A tag selected from elsewhere (here the selection handler) opens its section.
+    await act(async () => { sidebar().props.onSelectionChange({ id: "ref:refs/tags/v3" }); });
+    expect(ids()).toContain("ref:refs/tags/v3");
+    expect(sidebar().props.selectedId).toBe("ref:refs/tags/v3");
+    // Collapsing the selected row's section keeps the selection without a row to show it (Spark needs a listed ID).
+    await act(async () => { header("group:tags").props.onPress(); });
+    expect(ids()).toEqual(["repositories", "changes", "history", "group:tags", "group:remotes"]);
+    expect(sidebar().props.selectedId).toBeNull();
+    await act(async () => { header("group:remotes").props.onPress(); });
+    await act(async () => { renderer.unmount(); });
+    // A new window restores what the user expanded and collapsed.
+    await act(async () => { renderer = create(<App />); });
+    jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
+    await act(async () => { openRepository(); });
+    expect(ids()).toEqual(["repositories", "changes", "history", "group:tags", "group:remotes", "remote:origin", "ref:refs/remotes/origin/main"]);
+  } finally {
+    await act(async () => { renderer?.unmount(); });
+    await files.writeText("/data/settings.json", JSON.stringify({ version: 1 }));
+    await files.writeText("/data/state/main.json", "{}");
+  }
+});
+
+it("puts the split view on the window's background, so the source list's glass shows the window and not the desktop", async () => {
+  jest.clearAllMocks();
+  let renderer!: ReactTestRenderer;
+  await act(async () => { renderer = create(<App />); });
+  const backdrop = renderer.root.findByType(SidebarSplitView).parent!;
+  expect(Object.assign({}, ...[backdrop.props.style].flat())).toMatchObject({ flex: 1, backgroundColor: PlatformColor("windowBackgroundColor") });
   await act(async () => { renderer.unmount(); });
 });
 
@@ -1235,7 +1311,8 @@ describe("worktrees", () => {
 
     worktrees = [main, detached, linked];
     await act(async () => { lastMenu().onAction({ itemId: "refresh" }); });
-    expect(items().map(item => item.props.id).slice(-4)).toEqual(["group:worktrees", "worktree:/repo", "worktree:/work/detached", `worktree:${linked.path}`]);
+    // Worktrees, then the Review Queue (last in the SourceTree preset) with the changed worktree.
+    expect(items().map(item => item.props.id).slice(-7)).toEqual(["group:worktrees", "worktree:/repo", "worktree:/work/detached", `worktree:${linked.path}`, "group:reviewQueue", "review-note", `review:worktree:${linked.path}`]);
     expect(row(`worktree:${linked.path}`).findAllByType("SFSymbol" as any).map(symbol => symbol.props.name)).toEqual(["folder"]);
     expect(texts(row(`worktree:${linked.path}`))).toEqual(["fëature ✓", "feature · 2"]);
     expect(texts(row("worktree:/work/detached"))).toEqual(["detached", "bbbbbbb"]);
@@ -1521,9 +1598,11 @@ it("lists the Review Queue, stages and commits in a queued worktree through its 
 
   // The dirty worktree, then the branch ahead of its upstream and the unpublished one; not the clean worktree, main or a branch level with main.
   const ids = items().map(item => item.props.id);
-  expect(ids.slice(ids.indexOf("history") + 1, ids.indexOf("history") + 5)).toEqual(["review", "review:worktree:/work/dirty", "review:branch:refs/heads/fresh", "review:branch:refs/heads/ahead"]);
-  expect(row("review").findAllByType("SFSymbol" as any).map(symbol => symbol.props.name)).toEqual(["tray.full"]);
-  expect(texts(row("review"))).toEqual(["Review Queue", "3"]);
+  // The SourceTree preset puts the queue last, under a header that says what it lists.
+  expect(ids.slice(ids.indexOf("group:reviewQueue"))).toEqual(["group:reviewQueue", "review-note", "review:worktree:/work/dirty", "review:branch:refs/heads/fresh", "review:branch:refs/heads/ahead"]);
+  expect(row("group:reviewQueue").findAllByType("SFSymbol" as any).map(symbol => symbol.props.name)).toEqual(["chevron.down"]);
+  expect(texts(row("group:reviewQueue"))).toEqual(["Review Queue", "3"]);
+  expect(texts(row("review-note"))).toEqual(["Uncommitted worktrees and unpushed branches"]);
   expect(texts(row("review:worktree:/work/dirty"))).toEqual(["dirty", "2 files"]);
   expect(texts(row("review:branch:refs/heads/ahead"))).toEqual(["ahead", "↑2"]);
   expect(texts(row("review:branch:refs/heads/fresh"))).toEqual(["fresh", "↑1"]);
@@ -1749,6 +1828,8 @@ it("merges a branch into the current one after a sheet, shows the stopped merge 
   git.merge.mockRejectedValueOnce(new Error("error: Your local changes to the following files would be overwritten by merge:\n\ta.txt\nPlease commit your changes or stash them before you merge.\nAborting"));
   jest.mocked(showMessage).mockResolvedValueOnce({ buttonId: "merge" });
   jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: false, itemId: "merge-ref" });
+  // Remotes starts collapsed in the SourceTree preset.
+  await act(async () => { row("group:remotes").findByType(Button).props.onPress(); });
   await act(async () => { row("ref:refs/remotes/origin/fix").props.onContextMenu({ windowPosition: { x: 1, y: 2 } }); });
   expect(menuLabels()).toEqual(["Check Out", "New Branch from “origin/fix”…", "-", "Merge “origin/fix” into “main”…", "Rebase “main” onto “origin/fix”…", "Rebase “main” Interactively onto “origin/fix”…", "-", "Copy Name"]);
   expect(jest.mocked(showMessage).mock.calls.at(-2)![0]).toMatchObject({ title: "Merge “origin/fix” into “main”?", message: expect.stringContaining("Git fast-forwards “main” to “origin/fix”") });
@@ -1936,7 +2017,7 @@ describe("pull requests", () => {
     const sidebar = () => renderer.root.findAllByType(Sidebar)[0]!;
     const ids = () => sidebar().findAllByType(SidebarItem).map(item => item.props.id);
     const menuItem = (id: string) => lastMenu().items.flatMap(entry => entry.items ?? []).find(entry => entry.id === id);
-    expect(ids().slice(-2)).toEqual(["group:pulls", "github-sign-in"]);
+    expect(ids().slice(-2)).toEqual(["group:pullRequests", "github-sign-in"]);
     expect(menuItem("sign-out-github")).toMatchObject({ disabled: true });
     expect(fetch).not.toHaveBeenCalled();
 
@@ -1947,7 +2028,7 @@ describe("pull requests", () => {
     expect(runCommand).toHaveBeenCalledWith(expect.objectContaining({ target: { type: "command", name: "gh" }, args: ["auth", "token", "--hostname", "github.com"] }));
     expect(showPrompt).toHaveBeenCalledWith(expect.objectContaining({ title: "Sign In to GitHub", secure: true }));
     expect(keychain.get("github.com.token")).toBe(token);
-    expect(ids().slice(-2)).toEqual(["group:pulls", "pr:4"]);
+    expect(ids().slice(-2)).toEqual(["group:pullRequests", "pr:4"]);
     expect(menuItem("sign-out-github")).toMatchObject({ label: "Sign Out of GitHub (ana)", disabled: false });
 
     await act(async () => { sidebar().props.onSelectionChange({ id: "pr:4" }); });
@@ -1976,7 +2057,7 @@ describe("pull requests", () => {
     // Sign Out deletes the token and clears the list; the selected PR gives way to Changes.
     await act(async () => { lastMenu().onAction({ itemId: "sign-out-github" }); });
     expect(keychain.has("github.com.token")).toBe(false);
-    expect(ids().slice(-2)).toEqual(["group:pulls", "github-sign-in"]);
+    expect(ids().slice(-2)).toEqual(["group:pullRequests", "github-sign-in"]);
     expect(sidebar().props.selectedId).toBe("changes");
     expect(renderer.root.findAllByType(StateBar)).toHaveLength(0);
     await act(async () => { renderer.unmount(); });

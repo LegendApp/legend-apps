@@ -57,3 +57,48 @@ it("runs one write at a time and re-reads the refs after a failed write", async 
   expect(git.listRefs).toHaveBeenCalledTimes(2);
   refs.dispose();
 });
+
+it("counts a large repository's worktrees a few at a time, publishes the counts together, and stops counting for a closed repository", async () => {
+  const worktrees = Array.from({ length: 30 }, (_, index) => ({ path: `/wt/${index}`, head: "a".repeat(40), branch: `b${index}`, bare: false, detached: false, locked: null, prunable: null }));
+  const pending: { path: string; signal: AbortSignal; resolve: (count: number) => void }[] = [];
+  let running = 0, most = 0;
+  const git = {
+    listRefs: jest.fn(async () => list("main")), listStashes: jest.fn(async () => []), listWorktrees: jest.fn(async () => worktrees),
+    worktreeChangeCount: jest.fn((path: string, { signal }: { signal: AbortSignal }) => new Promise<number>(resolve => {
+      running += 1; most = Math.max(most, running);
+      pending.push({ path, signal, resolve: count => { running -= 1; resolve(count); } });
+    })),
+  };
+  let state!: RefsState;
+  const refs = createGitRefs(next => { state = next; }, () => git as unknown as GitService);
+  refs.setRoot("/repo");
+  await new Promise(resolve => setTimeout(resolve, 0));
+  // The refs and worktrees are shown at once; the counts follow.
+  expect(state.worktrees).toHaveLength(30);
+  expect(state.worktrees!.every(entry => entry.changes === null)).toBe(true);
+  expect(pending).toHaveLength(4);
+  for (let done = 0; done < 20; done += 1) { pending.shift()!.resolve(done === 3 ? 7 : 0); await new Promise(resolve => setTimeout(resolve, 0)); }
+  expect(most).toBe(4);
+  expect(state.worktrees!.every(entry => entry.changes === null)).toBe(true);
+  // Opening another repository aborts the counts in flight and starts no more for the old one.
+  refs.setRoot(null);
+  expect(pending.every(entry => entry.signal.aborted)).toBe(true);
+  const started = git.worktreeChangeCount.mock.calls.length;
+  for (const entry of pending.splice(0)) entry.resolve(0);
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(git.worktreeChangeCount).toHaveBeenCalledTimes(started);
+  expect(state.worktrees).toBeNull();
+  refs.dispose();
+});
+
+it("publishes every worktree's count once all are read", async () => {
+  const worktrees = Array.from({ length: 9 }, (_, index) => ({ path: `/wt/${index}`, head: "a".repeat(40), branch: `b${index}`, bare: false, detached: false, locked: null, prunable: null }));
+  const git = { listRefs: jest.fn(async () => list("main")), listStashes: jest.fn(async () => []), listWorktrees: jest.fn(async () => worktrees),
+    worktreeChangeCount: jest.fn(async (path: string) => path === "/wt/5" ? 3 : 0) };
+  let state!: RefsState;
+  const refs = createGitRefs(next => { state = next; }, () => git as unknown as GitService);
+  refs.setRoot("/repo");
+  for (let tick = 0; tick < 10; tick += 1) await new Promise(resolve => setTimeout(resolve, 0));
+  expect(state.worktrees!.map(entry => entry.changes)).toEqual([0, 0, 0, 0, 0, 3, 0, 0, 0]);
+  refs.dispose();
+});

@@ -40,6 +40,23 @@ export const worktreeFolder = (main: string, branch: string) => `${main.replace(
 /** Local branches, most recently committed first, for the toolbar's branch menu. */
 export const recentBranches = (refs: GitRefList | null, count = 10) => [...refs?.branches ?? []].sort((a, b) => b.time - a.time).slice(0, count);
 
+/** How many worktrees' changes are counted at once. */
+const worktreeCountLimit = 4;
+
+/** `items.map(read)` with at most `limit` reads running; once `signal` aborts no more start (the rest are null). */
+async function mapLimit<T, R>(items: readonly T[], limit: number, signal: AbortSignal, read: (item: T) => Promise<R> | R): Promise<(R | null)[]> {
+  const results: (R | null)[] = items.map(() => null);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length && !signal.aborted) {
+      const index = next++;
+      results[index] = await read(items[index]!);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
 /**
  * Branches, remote branches, tags and stashes of one repository, and their writes. Reads happen on
  * `refresh`, which the window calls whenever Changes re-reads status (its watcher sees ref and HEAD
@@ -72,9 +89,10 @@ export function createGitRefs(onChange: (state: RefsState) => void, serviceFor: 
         }, () => {});
       } else publish({ outgoing: null });
       if (listed.length < 2) return;
-      // Counted after the refs land, so writes and refreshes don't wait for every worktree's status.
-      void Promise.all(listed.map(entry => entry.bare || entry.prunable !== null ? null
-        : git.worktreeChangeCount(entry.path, { signal: controller.signal }).catch(() => null))).then(counts => {
+      // Counted after the refs land, so writes and refreshes don't wait for every worktree's status, and a few at a time:
+      // a repository with dozens of worktrees would otherwise start a `git status` for each at once.
+      void mapLimit(listed, worktreeCountLimit, controller.signal, entry => entry.bare || entry.prunable !== null ? null
+        : git.worktreeChangeCount(entry.path, { signal: controller.signal }).catch(() => null)).then(counts => {
         if (current === run && active === controller && !closed) publish({ worktrees: listed.map((entry, index) => ({ ...entry, changes: counts[index] ?? null })) });
       });
     } catch (error) {

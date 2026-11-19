@@ -1564,7 +1564,7 @@
               },
               "expanded": {
                 "type": "boolean",
-                "description": "Starts expanded (default true)."
+                "description": "Starts expanded (default: true, but a section with more than 20 items starts collapsed). Clicking its header expands or collapses it, and the window remembers that."
               }
             },
             "required": [

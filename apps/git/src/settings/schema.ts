@@ -177,7 +177,7 @@ const sidebar = obj({
   sections: describe(z.array(z.looseObject({
     id: z.enum(sidebarSectionIds),
     visible: describe(z.boolean(), "Shown (default true).").optional(),
-    expanded: describe(z.boolean(), "Starts expanded (default true).").optional(),
+    expanded: describe(z.boolean(), "Starts expanded (default: true, but a section with more than 20 items starts collapsed). Clicking its header expands or collapses it, and the window remembers that.").optional(),
   })), "Sections in display order; a section left out is hidden."),
   showCounts: describe(z.boolean(), "Show item counts."),
 }, "The sidebar.");

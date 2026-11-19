@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { PlatformColor, StyleSheet, Text, View } from "react-native";
 import { watchDirectories } from "@legend-apps/file-system-watcher";
 import { GitBranchNotMergedError, GitLocalChangesError, GitPullDivergedError, GitPushedCommitsError, GitPushRejectedError, GitServiceError, GitStashDropError, type GitConflictFile, type GitInteractiveRebasePlan, type GitTodoEntry, type GitConflictSide, type GitRefList, type GitStash, type GitStatusEntry } from "@legend-apps/git-core";
@@ -53,6 +53,7 @@ import { createResultDraftStore, draftDirty, type ResultDraft } from "./resultDr
 import { SettingsContext } from "./settings/panelOptions";
 import { KeyBindingRouter } from "./KeyBindingRouter";
 import { undoSheet } from "./gitUndo";
+import { sectionOfRow, sidebarSections, type SidebarSectionId } from "./sidebarSections";
 
 const contentInset = 52;
 
@@ -115,9 +116,15 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
   const [focusedPanelId, setFocusedPanelId] = useState("diff");
   const focusedPanel = useRef(focusedPanelId);
   const layoutReady = layout.initialState !== undefined;
+  // Sidebar sections the user expanded or collapsed in this window (see sidebarSections).
+  const [expandedSections, setExpandedSections] = useState<Partial<Record<string, boolean>>>({});
   useEffect(() => {
-    if (layout.initialState) setSidebarCollapsed(layout.initialState.sidebarCollapsed ?? false);
+    if (layout.initialState) { setSidebarCollapsed(layout.initialState.sidebarCollapsed ?? false); setExpandedSections(layout.initialState.sections ?? {}); }
   }, [layout.initialState]);
+  const setSectionExpanded = (id: SidebarSectionId, expanded: boolean) => {
+    setExpandedSections(current => ({ ...current, [id]: expanded }));
+    layout.windowState?.setSectionExpanded(id, expanded);
+  };
   useEffect(() => { if (layoutReady) layout.windowState?.setSidebarCollapsed(sidebarCollapsed); }, [sidebarCollapsed, layoutReady, layout.windowState]);
   const operation = root ? changes.operation : null;
   // Git prepared a message (MERGE_MSG) that concludes the operation as one commit.
@@ -1471,11 +1478,51 @@ Rebase anyway?`,
     void historyController.current?.activate();
   }, [changesGraph, root]);
 
+  const sectionCounts = {
+    reviewQueue: queue.length, branches: refs.refs?.branches.length, remotes: refs.refs?.remotes.reduce((total, remote) => total + remote.branches.length, 0),
+    tags: refs.refs?.tags.length, stashes: refs.stashes?.length, worktrees: refs.worktrees?.length, pullRequests: pulls.pulls?.length,
+  };
+  const sidebarPlan = sidebarSections(layout.settings.sidebar, sectionCounts, expandedSections);
+  // A selection made elsewhere (View ▸ Review Queue, a checkout) shows its row: a collapsed section opens.
+  const selectedGroup = sectionOfRow(sidebarSection);
+  useEffect(() => {
+    if (root && selectedGroup && sidebarPlan.some(entry => entry.id === selectedGroup && !entry.expanded)) setSectionExpanded(selectedGroup, true);
+  }, [section]); // eslint-disable-line react-hooks/exhaustive-deps -- only a new selection reveals; collapsing the selected row's section keeps it collapsed
+  const showCounts = layout.settings.sidebar.showCounts;
+  const sidebarRows = (id: SidebarSectionId): ReactElement[] => {
+    switch (id) {
+      case "workspace": return [
+        <SidebarItem key="changes" id="changes"><SidebarRow symbol="square.and.pencil" label="Changes" count={showCounts ? changes.status?.entries.length : undefined} /></SidebarItem>,
+        <SidebarItem key="history" id="history"><SidebarRow symbol="clock" label="History" /></SidebarItem>,
+      ];
+      case "reviewQueue": return queueSidebarItems(queue, showQueueMenu);
+      case "branches": case "remotes": case "tags": return refSidebarItems(id, refs.refs, ref => showRefMenu(ref), gitHub.status === "signed-in" ? pulls.merged : {});
+      case "stashes": return stashSidebarItems(refs.stashes, showStashMenu);
+      case "worktrees": return worktreeSidebarItems(refs.worktrees, root, showWorktreeMenu);
+      case "pullRequests": return pullRequestSidebarItems(pulls, gitHub.status, showPullRequestMenu);
+    }
+  };
+  const sidebarItems = root ? sidebarPlan.flatMap(({ id, expanded }) => {
+    const rows = sidebarRows(id);
+    if (id === "workspace" || !rows.length) return rows;
+    return [
+      <SidebarItem key={`group:${id}`} id={`group:${id}`} selectable={false}>
+        <SectionHeader title={sectionTitles[id]} count={showCounts ? sectionCounts[id] : undefined} hint={id === "reviewQueue" ? queueNote : undefined}
+          expanded={expanded} onToggle={() => setSectionExpanded(id, !expanded)} />
+      </SidebarItem>,
+      ...expanded ? rows : [],
+    ];
+  }) : [];
+  // Spark requires the selected ID to be a row in the list; a row in a collapsed section has none.
+  const sidebarSelected = root && sidebarItems.some(item => (item.props as { id: string }).id === sidebarSection) ? sidebarSection : null;
+
   return (<SettingsContext.Provider value={settingsContext}>
     {windowId === mainWindowId ? <GitMenu menu={menu} /> : null}
     {Object.keys(routedKeys).length ? <KeyBindingRouter windowId={windowId} bindings={routedKeys} run={id => runCommand(id, contextRef.current)} /> : null}
     {/* Starts at the remembered sidebar width, so the split view waits for the window state (one small file). */}
-    {layoutReady ? <SidebarSplitView
+    {/* The window's own background behind the panes: the source list's glass material shows what is behind it, and
+        Spark's root material is clear, so without it the sidebar showed the desktop (white in a dark window). */}
+    {layoutReady ? <View style={styles.window}><SidebarSplitView
       appearance={layout.settings.appearance}
       style={styles.root}
       sidebarWidth={sidebarWidth}
@@ -1486,24 +1533,15 @@ Rebase anyway?`,
       onResize={event => layout.windowState?.onResize(event)}
       titleBar={{ content: { height: contentInset, material: "titlebar" } }}
       sidebar={
-        <Sidebar style={styles.root} selectedId={root ? sidebarSection : null} onSelectionChange={event => {
+        <Sidebar style={styles.root} selectedId={sidebarSelected} onSelectionChange={event => {
           if (event.id?.startsWith("recent:")) runCommand("open-recent", contextRef.current, event.id.slice(7));
           else if (event.id === "github-sign-in") runCommand("sign-in-github", contextRef.current);
-          else if (event.id === "review") runCommand("show-review", contextRef.current);
           else if (event.id === "changes" || event.id === "history" || event.id?.startsWith("ref:") || event.id?.startsWith("stash:") || event.id?.startsWith("worktree:") || event.id?.startsWith("review:") || event.id?.startsWith("pr:")) setSection(event.id as Section);
         }} contentInsetTop={58}>
           <SidebarItem id="repositories" selectable={false}>
             <Text style={styles.section}>{root?.split("/").pop() ?? (recents.length ? "Recent" : "Repositories")}</Text>
           </SidebarItem>
-          {root ? [
-            <SidebarItem key="changes" id="changes"><SidebarRow symbol="square.and.pencil" label="Changes" count={changes.status?.entries.length} /></SidebarItem>,
-            <SidebarItem key="history" id="history"><SidebarRow symbol="clock" label="History" /></SidebarItem>,
-            ...queueSidebarItems(queue, showQueueMenu),
-            ...refSidebarItems(refs.refs, ref => showRefMenu(ref), gitHub.status === "signed-in" ? pulls.merged : {}),
-            ...stashSidebarItems(refs.stashes, showStashMenu),
-            ...worktreeSidebarItems(refs.worktrees, root, showWorktreeMenu),
-            ...pullRequestSidebarItems(pulls, gitHub.status, showPullRequestMenu),
-          ] : recents.length ? recentLabels(recents).map((label, index) => <SidebarItem key={recents[index]} id={`recent:${recents[index]}`}>
+          {root ? sidebarItems : recents.length ? recentLabels(recents).map((label, index) => <SidebarItem key={recents[index]} id={`recent:${recents[index]}`}>
             <SidebarRow symbol="folder" label={label} />
           </SidebarItem>) :
             <SidebarItem id="empty" selectable={false}><Text style={styles.sidebarNote}>No repository open</Text></SidebarItem>}
@@ -1547,7 +1585,7 @@ Rebase anyway?`,
             busy={creating || pulls.writing} onCancel={() => setCreateSheet(null)} onSubmit={input => void submitCreatePullRequest(input)} /> : null}
         </View>
       }
-    /> : null}
+    /></View> : null}
   </SettingsContext.Provider>);
 }
 
@@ -1570,8 +1608,30 @@ function SidebarRow({ symbol, label, count, current, indent, detail }: { symbol:
   </View>;
 }
 
-/** Branches, Remotes (each remote, then its branches) and Tags, each under a group row; an empty section is left out. */
-function refSidebarItems(refs: GitRefList | null, onContextMenu: (event: { ref: string; position: { x: number; y: number } }) => void, merged: PullRequestsState["merged"]) {
+/** What the Review Queue lists, under its header. */
+const queueNote = "Uncommitted worktrees and unpushed branches";
+
+const sectionTitles: Record<Exclude<SidebarSectionId, "workspace">, string> = {
+  reviewQueue: "Review Queue", branches: "Branches", remotes: "Remotes", tags: "Tags", stashes: "Stashes", worktrees: "Worktrees", pullRequests: "Pull Requests",
+};
+
+/**
+ * A section's header: its title and count, and a disclosure chevron; clicking it expands or collapses the section. The
+ * source list's table keeps clicks from React views in its rows, so an invisible native button over the header takes them.
+ */
+function SectionHeader({ title, count, hint, expanded, onToggle }: { title: string; count?: number; hint?: string; expanded: boolean; onToggle: () => void }) {
+  const secondary = useSymbolColor("secondary");
+  return <View style={styles.sectionHeader}>
+    <Text style={[styles.sectionTitle, { color: secondary }]} numberOfLines={1} accessible={false}>{title}</Text>
+    {count ? <Text style={[styles.sectionCount, { color: secondary }]} accessible={false}>{count}</Text> : null}
+    <SFSymbol name={expanded ? "chevron.down" : "chevron.right"} color={secondary} size={10} />
+    <Button variant="borderless" style={styles.sectionToggle} onPress={onToggle}
+      accessibilityLabel={`${count ? `${title}, ${count}` : title}, ${expanded ? "expanded" : "collapsed"}${hint ? `. ${hint}` : ""}`}>{title}</Button>
+  </View>;
+}
+
+/** One ref section's rows: Branches, Remotes (each remote, then its branches) or Tags; none when it is empty. */
+function refSidebarItems(section: "branches" | "remotes" | "tags", refs: GitRefList | null, onContextMenu: (event: { ref: string; position: { x: number; y: number } }) => void, merged: PullRequestsState["merged"]) {
   if (!refs) return [];
   const row = (ref: string, symbol: string, label: string, options: { current?: boolean; indent?: boolean; detail?: string } = {}) =>
     <SidebarItem key={ref} id={`ref:${ref}`} onContextMenu={event => onContextMenu({ ref, position: event.windowPosition })}>
@@ -1579,47 +1639,36 @@ function refSidebarItems(refs: GitRefList | null, onContextMenu: (event: { ref: 
     </SidebarItem>;
   // Only while the branch is still at the tip that was checked.
   const mergedDetail = (branch: GitRefList["branches"][number]) => merged[branch.name]?.oid === branch.oid ? `Merged #${merged[branch.name]!.number}` : undefined;
-  const group = (id: string, title: string) => <SidebarItem key={id} id={id} selectable={false}><Text style={styles.section} accessibilityRole="header">{title}</Text></SidebarItem>;
-  const remotes = refs.remotes.filter(remote => remote.branches.length);
-  return [
-    ...refs.branches.length ? [group("group:branches", "Branches"), ...refs.branches.map(branch => row(branch.ref, "arrow.triangle.branch", branch.name, { current: branch.current, detail: mergedDetail(branch) }))] : [],
-    ...remotes.length ? [group("group:remotes", "Remotes"), ...remotes.flatMap(remote => [
-      <SidebarItem key={`remote:${remote.name}`} id={`remote:${remote.name}`} selectable={false}><SidebarRow symbol="network" label={remote.name} /></SidebarItem>,
-      ...remote.branches.map(branch => row(branch.ref, "arrow.triangle.branch", branch.branch, { indent: true })),
-    ])] : [],
-    ...refs.tags.length ? [group("group:tags", "Tags"), ...refs.tags.map(tag => row(tag.ref, "tag", tag.name))] : [],
-  ];
+  if (section === "branches") return refs.branches.map(branch => row(branch.ref, "arrow.triangle.branch", branch.name, { current: branch.current, detail: mergedDetail(branch) }));
+  if (section === "tags") return refs.tags.map(tag => row(tag.ref, "tag", tag.name));
+  return refs.remotes.filter(remote => remote.branches.length).flatMap(remote => [
+    <SidebarItem key={`remote:${remote.name}`} id={`remote:${remote.name}`} selectable={false}><SidebarRow symbol="network" label={remote.name} /></SidebarItem>,
+    ...remote.branches.map(branch => row(branch.ref, "arrow.triangle.branch", branch.branch, { indent: true })),
+  ]);
 }
 
-/** Stashes under a group row, newest first, with how long ago each was made; left out when there are none. */
+/** Stashes, newest first, with how long ago each was made. */
 function stashSidebarItems(stashes: GitStash[] | null, onContextMenu: (event: { oid: string; position: { x: number; y: number } }) => void) {
-  if (!stashes?.length) return [];
-  return [
-    <SidebarItem key="group:stashes" id="group:stashes" selectable={false}><Text style={styles.section} accessibilityRole="header">Stashes</Text></SidebarItem>,
-    ...stashes.map(stash => <SidebarItem key={stash.oid} id={`stash:${stash.oid}`} onContextMenu={event => onContextMenu({ oid: stash.oid, position: event.windowPosition })}>
+  return (stashes ?? []).map(stash => <SidebarItem key={stash.oid} id={`stash:${stash.oid}`} onContextMenu={event => onContextMenu({ oid: stash.oid, position: event.windowPosition })}>
       <SidebarRow symbol="archivebox" label={stashLabel(stash.message)} detail={stash.time ? sidebarDate(stash.time) : undefined} />
-    </SidebarItem>),
-  ];
+    </SidebarItem>);
 }
 
-/** Linked worktrees under a group row (left out when there is only the main one); this window's worktree has a checkmark. */
+/** Worktrees (none when there is only the main one); this window's worktree has a checkmark. */
 function worktreeSidebarItems(worktrees: WorktreeEntry[] | null, root: string | null, onContextMenu: (event: { path: string; position: { x: number; y: number } }) => void) {
   if (!worktrees || worktrees.length < 2) return [];
-  return [
-    <SidebarItem key="group:worktrees" id="group:worktrees" selectable={false}><Text style={styles.section} accessibilityRole="header">Worktrees</Text></SidebarItem>,
-    ...worktrees.map(worktree => <SidebarItem key={`worktree:${worktree.path}`} id={`worktree:${worktree.path}`} onContextMenu={event => onContextMenu({ path: worktree.path, position: event.windowPosition })}>
+  return worktrees.map(worktree => <SidebarItem key={`worktree:${worktree.path}`} id={`worktree:${worktree.path}`} onContextMenu={event => onContextMenu({ path: worktree.path, position: event.windowPosition })}>
       <SidebarRow symbol="folder" label={worktreeName(worktree.path)} detail={worktreeDetail(worktree)} current={worktree.path === root} />
-    </SidebarItem>),
-  ];
+    </SidebarItem>);
 }
 
-/** The Review Queue row (selecting it selects an entry), then one indented row per entry; left out when nothing is pending. */
+/** A note on what the queue is, then one row per entry; none when nothing is pending. */
 function queueSidebarItems(queue: readonly QueueEntry[], onContextMenu: (event: { entry: QueueEntry; position: { x: number; y: number } }) => void) {
   if (!queue.length) return [];
   return [
-    <SidebarItem key="review" id="review"><SidebarRow symbol="tray.full" label="Review Queue" count={queue.length} /></SidebarItem>,
+    <SidebarItem key="review-note" id="review-note" selectable={false} rowHeight={32}><Text style={styles.queueNote} numberOfLines={2}>{queueNote}</Text></SidebarItem>,
     ...queue.map(entry => <SidebarItem key={`review:${entry.id}`} id={`review:${entry.id}`} onContextMenu={event => onContextMenu({ entry, position: event.windowPosition })}>
-      <SidebarRow symbol={entry.kind === "worktree" ? "folder" : "arrow.triangle.branch"} label={entry.name} detail={queueDetail(entry)} indent />
+      <SidebarRow symbol={entry.kind === "worktree" ? "folder" : "arrow.triangle.branch"} label={entry.name} detail={queueDetail(entry)} />
     </SidebarItem>),
   ];
 }
@@ -1629,7 +1678,6 @@ function pullRequestSidebarItems(state: PullRequestsState, status: "loading" | "
   if (!state.repo || status === "loading") return [];
   const note = (text: string) => <SidebarItem key="pulls:note" id="pulls:note" selectable={false}><Text style={styles.sidebarNote}>{text}</Text></SidebarItem>;
   return [
-    <SidebarItem key="group:pulls" id="group:pulls" selectable={false}><Text style={styles.section} accessibilityRole="header">Pull Requests</Text></SidebarItem>,
     ...status === "signed-out" ? [<SidebarItem key="github-sign-in" id="github-sign-in"><SidebarRow symbol="person.crop.circle" label="Sign In to GitHub…" /></SidebarItem>]
       : state.pulls?.length ? state.pulls.map(pull => <SidebarItem key={`pr:${pull.number}`} id={`pr:${pull.number}`} rowHeight={40} onContextMenu={event => onContextMenu({ number: pull.number, position: event.windowPosition })}><PullRequestRow pull={pull} /></SidebarItem>)
       : [note(state.pulls ? "No open pull requests" : state.error && !state.loading ? "Couldn’t load pull requests" : "Loading…")],
@@ -1846,6 +1894,13 @@ const styles = StyleSheet.create({
   emptyList: { flex: 1, alignItems: "center", justifyContent: "center", paddingBottom: 24 },
   emptyListText: { fontSize: 12, color: PlatformColor("tertiaryLabelColor") },
   section: { paddingHorizontal: 10, paddingTop: 10, paddingBottom: 4, fontSize: 11, fontWeight: "700", color: PlatformColor("tertiaryLabelColor") },
+  sectionHeader: { height: 28, flexDirection: "row", alignItems: "flex-end", gap: 6, paddingHorizontal: 10, paddingBottom: 5 },
+  sectionTitle: { flex: 1, fontSize: 11, fontWeight: "700" },
+  sectionCount: { fontSize: 11, fontVariant: ["tabular-nums"] },
+  window: { flex: 1, backgroundColor: PlatformColor("windowBackgroundColor") },
+  // Past the header on every side: AppKit takes a borderless button's clicks only inside its inset bezel rect.
+  sectionToggle: { position: "absolute", left: -12, right: -12, top: -4, bottom: -4, width: undefined, height: undefined, opacity: 0 },
+  queueNote: { paddingHorizontal: 10, fontSize: 11, color: PlatformColor("secondaryLabelColor") },
   sidebarRow: { height: 28, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 8 },
   indented: { paddingLeft: 24 },
   sidebarIcon: { width: 18, height: 18, alignItems: "center", justifyContent: "center" },
