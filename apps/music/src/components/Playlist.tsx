@@ -11,7 +11,7 @@ import { type TrackData, TrackItem } from "./TrackItem";
 import { usePlaylistSelection } from "../hooks/usePlaylistSelection";
 import { showContextMenu } from "@legendapp/spark/context-menu";
 import { DragDropView, type DropEvent, type DragOverEvent } from "@legendapp/spark/drag-drop";
-import { MusicTrackDragSource, droppedMusicTracks, musicTrackMime, type MusicDragTrack } from "../utils/musicDrag";
+import { MusicTrackDragSource, musicTrackDragSourceRowStyle, droppedMusicTracks, musicTrackMime, type MusicDragTrack } from "../utils/musicDrag";
 import { stat } from "@legendapp/spark/files";
 import type { PlaylistAIContext } from "../systems/ai/playlistContext";
 import { isSupportedAudioFile, SUPPORTED_AUDIO_EXTENSIONS } from "../systems/audioFormats";
@@ -948,18 +948,18 @@ const QueuePlaylistRow = memo(function QueuePlaylistRow({ queueEntryId, index, i
     const queuedTrack = useValue(() => queue$.tracks[index].get());
     if (!queuedTrack || queuedTrack.queueEntryId !== queueEntryId) return null;
     const track = { ...queuedTrack, index, isMissing: Boolean(queuedTrack.isMissing || isMissing) };
-    const trackContent = <TrackItem {...itemProps} index={index} track={track} disableHover artistMaxWidth="50%" />;
     return <View>
         {Platform.OS === "macos" ? (
-            <MusicTrackDragSource tracks={[convertTrackToNativeDrag(track)]}
-                onDragStart={() => onNativeDragStart(queueEntryId)} className="w-full">
-                {trackContent}
-            </MusicTrackDragSource>
+            <TrackItem {...itemProps} index={index} track={track} disableHover artistMaxWidth="50%"
+                wrapContent={(content) => <MusicTrackDragSource tracks={[convertTrackToNativeDrag(track)]}
+                    onDragStart={() => onNativeDragStart(queueEntryId)} style={musicTrackDragSourceRowStyle}>
+                    {content}
+                </MusicTrackDragSource>} />
         ) : (
             <DraggableItem id={queueEntryId} zoneId={PLAYLIST_DRAG_ZONE_ID}
                 data={{ type: "playlist-track", queueEntryId } satisfies PlaylistDragData}
                 onDragStart={onReorderDragStart} className="w-full">
-                {trackContent}
+                <TrackItem {...itemProps} index={index} track={track} disableHover artistMaxWidth="50%" />
             </DraggableItem>
         )}
         <PlaylistDropZone position={index + 1} allowDrop={allowDrop} onDrop={onDrop} />

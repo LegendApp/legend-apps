@@ -23,7 +23,7 @@ import { Table, TableCell, type TableColumnSpec, TableHeader, TableRow } from ".
 import type { TrackData } from "../TrackItem";
 import { useListItemStyles } from "../../hooks/useListItemStyles";
 import { type MenuItem, showContextMenu } from "@legendapp/spark/context-menu";
-import { type MusicDragTrack, MusicTrackDragSource } from "../../utils/musicDrag";
+import { type MusicDragTrack, MusicTrackDragSource, musicTrackDragSourceRowStyle } from "../../utils/musicDrag";
 import { Icon } from "../../systems/Icon";
 import { libraryUI$ } from "../../systems/LibraryState";
 import { type LocalTrack, localMusicState$, saveLocalPlaylistTracks } from "../../systems/LocalMusicState";
@@ -541,15 +541,8 @@ function LibraryTrackRow({
         [index, onMenuAction, windowId],
     );
 
-    const row = (
-        <TableRow
-            className="w-full"
-            isSelected={isSelected}
-            isActive={isPlaying}
-            onClick={(event) => onClick(index, event)}
-            onDoubleClick={(event) => onDoubleClick(index, event)}
-            onRightClick={(event) => onRightClick(index, event)}
-        >
+    const cells = (
+        <>
             <TableCell column={numberColumn}>
                 {isPlaying ? (
                     <Icon name="play.fill" size={12} color={accentColor} />
@@ -585,6 +578,30 @@ function LibraryTrackRow({
             <TableCell column={durationColumn}>
                 <Text className={listItemStyles.getMetaClassName({ className: "text-xs" })}>{track.duration}</Text>
             </TableCell>
+        </>
+    );
+
+    // Spark's native drag source takes every click inside it, so the row and its actions button wrap it instead.
+    const row = (
+        <TableRow
+            className="w-full"
+            isSelected={isSelected}
+            isActive={isPlaying}
+            onClick={(event) => onClick(index, event)}
+            onDoubleClick={(event) => onDoubleClick(index, event)}
+            onRightClick={(event) => onRightClick(index, event)}
+        >
+            {Platform.OS === "macos" ? (
+                <MusicTrackDragSource
+                    tracks={dragData.tracks as MusicDragTrack[]}
+                    onDragStart={onNativeDragStart}
+                    style={musicTrackDragSourceRowStyle}
+                >
+                    {cells}
+                </MusicTrackDragSource>
+            ) : (
+                cells
+            )}
             <TableCell column={actionsColumn} className="pl-1 pr-1">
                 <Button
                     icon="ellipsis"
@@ -599,15 +616,7 @@ function LibraryTrackRow({
     );
 
     if (Platform.OS === "macos") {
-        return (
-            <MusicTrackDragSource
-                tracks={dragData.tracks as MusicDragTrack[]}
-                onDragStart={onNativeDragStart}
-                className="flex-1"
-            >
-                {row}
-            </MusicTrackDragSource>
-        );
+        return row;
     }
 
     if (isPlaylistEditable && playlistId && trackPath) {

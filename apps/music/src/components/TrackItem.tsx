@@ -1,5 +1,6 @@
 import type { Observable } from "@legendapp/state";
 import { useValue } from "@legendapp/state/react";
+import type { ReactNode } from "react";
 import { Text, View, type DimensionValue } from "react-native";
 import { Button } from "./Button";
 import { localPlayerState$ } from "./LocalAudioPlayer";
@@ -44,7 +45,11 @@ interface TrackItemProps {
     disableHover?: boolean;
     suppressActiveState?: boolean;
     artistMaxWidth?: DimensionValue;
+    /** Wraps the row content inside the clickable row, for a native drag source that takes every click inside it. */
+    wrapContent?: (content: ReactNode) => ReactNode;
 }
+
+const renderContent = (content: ReactNode) => content;
 
 export const TrackItem = ({
     track,
@@ -58,6 +63,7 @@ export const TrackItem = ({
     disableHover = false,
     suppressActiveState = false,
     artistMaxWidth,
+    wrapContent,
 }: TrackItemProps) => {
     perfCount("TrackItem.render");
     const listItemStyles = useListItemStyles();
@@ -169,43 +175,47 @@ export const TrackItem = ({
             onMouseDown={onMouseDown ? (event) => onMouseDown(index, event) : undefined}
         >
             {isPlaying ? <PlaybackIndicator /> : null}
-            {showIndex && (
-                <View className="min-w-7">
-                    {showDisplayIndex ? (
-                        <Text className={cn("tabular-nums text-xs", indexTone, isPlaying && "text-accent-primary")}>
-                            {trackIndex + 1}.
+            {(wrapContent ?? renderContent)(
+                <>
+                    {showIndex && (
+                        <View className="min-w-7">
+                            {showDisplayIndex ? (
+                                <Text className={cn("tabular-nums text-xs", indexTone, isPlaying && "text-accent-primary")}>
+                                    {trackIndex + 1}.
+                                </Text>
+                            ) : null}
+                        </View>
+                    )}
+                    {shouldClampArtist ? (
+                        <View className="flex-1 flex-row items-center">
+                            {artistText}
+                            {titleText}
+                        </View>
+                    ) : (
+                        <Text className={cn("flex-1 tabular-nums text-sm", primaryTone)} numberOfLines={1}>
+                            {artistText}
+                            {titleText}
                         </Text>
-                    ) : null}
-                </View>
-            )}
-            {shouldClampArtist ? (
-                <View className="flex-1 flex-row items-center">
-                    {artistText}
-                    {titleText}
-                </View>
-            ) : (
-                <Text className={cn("flex-1 tabular-nums text-sm", primaryTone)} numberOfLines={1}>
-                    {artistText}
-                    {titleText}
-                </Text>
-            )}
+                    )}
 
-            <ProviderBadge provider={track.provider} compact />
+                    <ProviderBadge provider={track.provider} compact />
 
-            <Text
-                className={cn(
-                    listItemStyles.getMetaClassName({
-                        className: cn(
-                            "text-xs ml-4",
-                            track.fromSuggestions ? listItemStyles.text.muted : "",
-                            durationTone,
-                        ),
-                    }),
-                    isPlaying && "text-accent-primary",
-                )}
-            >
-                {track.duration}
-            </Text>
+                    <Text
+                        className={cn(
+                            listItemStyles.getMetaClassName({
+                                className: cn(
+                                    "text-xs ml-4",
+                                    track.fromSuggestions ? listItemStyles.text.muted : "",
+                                    durationTone,
+                                ),
+                            }),
+                            isPlaying && "text-accent-primary",
+                        )}
+                    >
+                        {track.duration}
+                    </Text>
+                </>,
+            )}
         </Button>
     );
     // }
