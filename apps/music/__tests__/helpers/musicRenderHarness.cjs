@@ -1,5 +1,5 @@
 // Compile the real Music components; replace native surfaces and external commands with controlled boundaries.
-module.exports = function createMusicRenderHarness() {
+module.exports = function createMusicRenderHarness({ cacheListItems = false } = {}) {
   const repositoryRoot = require("node:path").resolve(__dirname, "../../../..");
   const fs = require("fs"),
     path = require("path"),
@@ -208,12 +208,16 @@ module.exports = function createMusicRenderHarness() {
       ProviderBadge: "badge"
     }
   });
+  // LegendList caches rendered content by item identity; moving a primitive key does not refresh its index.
+  function ListCell({ item, index, renderItem }) {
+    return React.useMemo(() => renderItem({ item, index }), [item]);
+  }
   const List = React.memo(props => {
     count("List");
     listData = props.data;
     return React.createElement(React.Fragment, null, props.data.slice(0, 20).map((item, index) => React.createElement(React.Fragment, {
       key: props.keyExtractor(item, index)
-    }, props.renderItem({
+    }, cacheListItems ? React.createElement(ListCell, { item, index, renderItem: props.renderItem }) : props.renderItem({
       item,
       index
     }))));

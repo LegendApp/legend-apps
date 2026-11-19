@@ -163,16 +163,6 @@ export function Playlist() {
         [queueTracks, hasLibraryTracks, existingTrackPathSet],
     );
 
-    const playlistEntryIds = useMemo(() => playlist.map((track) => track.queueEntryId), [playlist]);
-
-    const playlistTrackByEntryId = useMemo(() => {
-        const byEntryId = new Map<string, PlaylistTrackWithSuggestions>();
-        for (const track of playlist) {
-            byEntryId.set(track.queueEntryId, track);
-        }
-        return byEntryId;
-    }, [playlist]);
-
     const playlistContextMenuItems = useMemo(
         () =>
             buildTrackContextMenuItems({
@@ -838,16 +828,13 @@ export function Playlist() {
         return playlistStyle === "compact" ? 32 : 50;
     }, [playlistStyle]);
 
-    const keyExtractor = useCallback((queueEntryId: string, index: number) => {
-        return `queue-${queueEntryId || index}`;
+    const keyExtractor = useCallback((track: PlaylistTrackWithSuggestions) => {
+        return `queue-${track.queueEntryId}`;
     }, []);
 
     const renderPlaylistItem = useCallback(
-        ({ item: queueEntryId, index }: { item: string; index: number }) => {
-            const track = playlistTrackByEntryId.get(queueEntryId);
-            if (!track) {
-                return null;
-            }
+        ({ item: track, index }: { item: PlaylistTrackWithSuggestions; index: number }) => {
+            const queueEntryId = track.queueEntryId;
 
             return <QueuePlaylistRow queueEntryId={queueEntryId} index={index} isMissing={Boolean(track.isMissing)}
                 selectedIndices$={selectedIndices$} onClick={handleTrackClick} onDoubleClick={handleTrackDoubleClick}
@@ -864,7 +851,6 @@ export function Playlist() {
             handleTrackContextMenu,
             handleTrackDoubleClick,
             handleTrackMouseDown,
-            playlistTrackByEntryId,
             selectedIndices$,
         ],
     );
@@ -903,7 +889,7 @@ export function Playlist() {
                         )}
                         <LegendList
                             ref={listRef}
-                            data={playlistEntryIds}
+                            data={playlist}
                             style={{ flex: 1 }}
                             keyExtractor={keyExtractor}
                             contentContainerStyle={styles.container}
@@ -1034,15 +1020,15 @@ function convertNativeTracksToLocal(tracks: MusicDragTrack[] = []): LocalTrack[]
     }));
 }
 
-function convertTrackToNativeDrag(track: TrackData): MusicDragTrack {
+function convertTrackToNativeDrag(track: TrackData & { filePath: string; fileName: string }): MusicDragTrack {
     return {
         id: track.id,
         title: track.title,
         artist: track.artist,
         album: track.album,
         duration: track.duration,
-        filePath: undefined,
-        fileName: undefined,
+        filePath: track.filePath,
+        fileName: track.fileName,
         thumbnail: track.thumbnail,
         queueEntryId: track.queueEntryId,
     };

@@ -51,3 +51,31 @@ test("queue appends preserve visible rows while edits, reorder, and retained act
         log.mockRestore();
     }
 });
+
+
+test("every queue row remains visible after moving the first entry to the end", async () => {
+    const h = createHarness({ cacheListItems: true });
+    const { React, act, create, queue$, tracks, TrackItem } = h;
+    let tree;
+    try {
+        await act(() => { tree = create(React.createElement(h.getPlaylist())); });
+        await act(() => queue$.tracks.set([...tracks.slice(1), tracks[0]]));
+        expect(tree.root.findAllByType(TrackItem).map(row => row.props.track.queueEntryId))
+            .toEqual([...tracks.slice(1), tracks[0]].map(track => track.queueEntryId));
+    } finally {
+        if (tree) await act(() => tree.unmount());
+    }
+});
+
+
+test("queue drag payload keeps the track's path and filename", async () => {
+    const h = createHarness();
+    let tree;
+    try {
+        await h.act(() => { tree = h.create(h.React.createElement(h.getPlaylist())); });
+        expect(tree.root.findAllByType("track-drag")[0].props.tracks[0])
+            .toMatchObject({ filePath: h.tracks[0].filePath, fileName: h.tracks[0].fileName });
+    } finally {
+        if (tree) await h.act(() => tree.unmount());
+    }
+});
