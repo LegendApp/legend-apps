@@ -690,22 +690,18 @@
                 "fork": [
                   {
                     "id": "graph",
-                    "width": 90
+                    "width": 70
                   },
                   {
                     "id": "subject"
                   },
                   {
                     "id": "author",
-                    "width": 140
+                    "width": 110
                   },
                   {
                     "id": "date",
-                    "width": 120
-                  },
-                  {
-                    "id": "sha",
-                    "width": 64
+                    "width": 90
                   }
                 ],
                 "gitkraken": [

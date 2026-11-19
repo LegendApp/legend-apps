@@ -261,7 +261,8 @@ export function createGitSettingsStore({ io, directory, repositoryRoot = null }:
       if (layer.readOnly) throw new Error(layer.parseIssue ? `${layer.path} has an error (${layer.parseIssue.message}); fix the file first` : `${layer.path} was written by a newer Legend Git; it is read-only`);
       const start: SettingsDocument = layer.file ?? { $schema: schemaUrl, version: settingsVersion, ...id === "repo" ? { root: repositoryRoot } : {} };
       const file = applySparseEdit(start, path, value, below(id));
-      if (!layer.file && Object.keys(settingsPart(file)).length === 0) return;
+      // A new file holding nothing but its own bookkeeping is not written; `extends` (the preset) is a choice and is.
+      if (!layer.file && Object.keys(file).every(key => key === "$schema" || key === "version" || key === "root")) return;
       // A migrated file is written at the current version, after a backup the older app can still read.
       if (layer.diskVersion !== null && layer.diskVersion < settingsVersion && layer.text !== undefined) await io.write(`${layer.path}.bak`, layer.text);
       file.version = settingsVersion;
@@ -298,6 +299,15 @@ export function createGitSettingsStore({ io, directory, repositoryRoot = null }:
       await Promise.all(watchers.splice(0).map(watcher => watcher.remove()));
     },
   };
+}
+
+/**
+ * Settings ▸ Preset: `extends` in the layer, and a `layout.active` there that names a preset (View ▸ Layout) is dropped,
+ * so the window shows the chosen preset's layout. A saved layout of the user's stays active.
+ */
+export async function choosePreset(store: Pick<GitSettingsStore, "edit" | "layerFile">, layer: LayerId, id: PresetId) {
+  await store.edit(layer, ["extends"], id);
+  if (isPresetId(valueAt(store.layerFile(layer).file, ["layout", "active"]))) await store.edit(layer, ["layout", "active"], undefined);
 }
 
 /** Spark's file system, required on first use so code that never reads settings doesn't load the native module. */

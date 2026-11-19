@@ -64,6 +64,22 @@ describe("render plan", () => {
     expect(planPanels(windowPlan(settings("gitkraken"), "gitkraken", "changes", { fileSelected: true }, all))).toEqual(["diff", "unstaged", "staged", "composer"]);
   });
 
+  it("gives each preset a history arrangement of its own", () => {
+    const top = (preset: (typeof presetIds)[number], fileSelected = false) => {
+      const plan = windowPlan(settings(preset), preset, "history", { fileSelected }, all);
+      return plan.type === "split" ? `${plan.direction}:${planPanels(plan.children[0]!.plan).join(",")}` : plan.id;
+    };
+    // SourceTree: the commit list across the top. Fork: the commit list down the left, details, files and diff to its right.
+    expect(top("sourcetree")).toBe("column:commitList");
+    expect(top("fork")).toBe("row:commitList");
+    expect(planPanels(windowPlan(settings("fork"), "fork", "history", {}, all))).toEqual(["commitList", "commitDetails", "fileList", "diff"]);
+    // GitKraken: the graph fills the left until a file is opened, then the diff takes its place.
+    expect(top("gitkraken")).toBe("row:commitList");
+    expect(top("gitkraken", true)).toBe("row:diff");
+    expect(new Set(presetIds.map(preset => JSON.stringify(settings(preset).toolbar.items))).size).toBe(presetIds.length);
+    expect(new Set(presetIds.map(preset => JSON.stringify(settings(preset).sidebar.sections))).size).toBe(presetIds.length);
+  });
+
   it("keeps sizes as fixed panes and lets the last sized pane flex", () => {
     const plan = windowPlan(settings("sourcetree"), "sourcetree", "history", {}, all) as Extract<RenderPlan, { type: "split" }>;
     expect(plan).toMatchObject({ type: "split", direction: "column", children: [{ size: 340, minSize: 160, plan: { id: "commitList" } }, { plan: { type: "split", direction: "row" } }] });

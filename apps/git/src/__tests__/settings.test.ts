@@ -9,7 +9,7 @@ import { migrateSettings, migrations, type Migrations } from "../settings/migrat
 import { activeLayout, presetFiles, presetLayout, presetSettings, presetView, validatedPreset, viewFor } from "../settings/presets";
 import { presetIds, viewKinds, type LayoutNode } from "../settings/schema";
 import { sha1 } from "../settings/sha1";
-import { applySparseEdit, createGitSettingsStore, type SettingsIO } from "../settings/store";
+import { applySparseEdit, choosePreset, createGitSettingsStore, type SettingsIO } from "../settings/store";
 import { layoutProblem, validateSettingsFile } from "../settings/validate";
 
 jest.mock("@legend-apps/diff-parser", () => ({}));
@@ -139,7 +139,7 @@ describe("presets", () => {
   it("SourceTree is the default and Fork and GitKraken differ from it only where their files say", () => {
     expect(presetSettings("sourcetree").layout.active).toBe("sourcetree");
     expect(presetSettings("fork").density).toBe("compact");
-    expect(presetSettings("fork").sidebar).toEqual(presetSettings("sourcetree").sidebar);
+    expect(presetSettings("fork").sidebar.sections.slice(0, 3).map(section => section.id)).toEqual(["workspace", "branches", "remotes"]);
     expect(presetSettings("gitkraken").panels.diff.mode).toBe("sideBySide");
     expect(presetSettings("gitkraken").panels.commitList.graph.lineWidth).toBe(3);
   });
@@ -220,6 +220,32 @@ describe("layers", () => {
     // Resetting a key in a layer that has no file yet writes nothing.
     await store.edit("user", ["density"], "regular");
     expect(memory.files.has(userPath)).toBe(false);
+  });
+
+  it("writes a preset choice into a layer that has no file yet, and the window switches to it", async () => {
+    const memory = memoryIO();
+    const store = createGitSettingsStore({ io: memory.io, directory: dir });
+    await store.ready;
+    await store.edit("user", ["extends"], "fork");
+    expect(JSON.parse(memory.files.get(userPath)!)).toMatchObject({ version: 1, extends: "fork" });
+    expect(store.base$.peek()).toBe("fork");
+    expect(activeLayout(store.settings$.peek(), store.base$.peek())).toBe(presetLayout("fork"));
+    await store.edit("user", ["extends"], "gitkraken");
+    expect(store.base$.peek()).toBe("gitkraken");
+    expect(store.settings$.peek().layout.active).toBe("gitkraken");
+  });
+
+  it("choosing a preset drops a layout.active that pins another preset, and keeps a saved layout", async () => {
+    const memory = memoryIO({ [userPath]: json({ version: 1, layout: { active: "sourcetree" } }) });
+    const store = createGitSettingsStore({ io: memory.io, directory: dir });
+    await store.ready;
+    await choosePreset(store, "user", "gitkraken");
+    expect(JSON.parse(memory.files.get(userPath)!)).toEqual({ version: 1, extends: "gitkraken" });
+    expect(activeLayout(store.settings$.peek(), store.base$.peek())).toBe(presetLayout("gitkraken"));
+    const mine = presetLayout("fork");
+    await store.edit("user", ["layout"], { active: "mine", layouts: { mine } });
+    await choosePreset(store, "user", "sourcetree");
+    expect(store.settings$.peek().layout.active).toBe("mine");
   });
 
   it("compares a repository edit with the user layer below it", () => {
