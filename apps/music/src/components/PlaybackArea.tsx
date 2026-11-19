@@ -39,8 +39,9 @@ export function PlaybackArea({
     const handleSlidingEnd = useCallback(() => setIsScrubbing(false), []);
     const overlayModeEnabled = overlayMode?.enabled ?? false;
     const playbackControlsEnabled = useValue(settings$.ui.playbackControlsEnabled) ?? true;
-    const showPlaybackControls = playbackControlsEnabled && !overlayModeEnabled;
-    const showTimeline = !overlayModeEnabled;
+    const expanded = !overlayModeEnabled || overlayMode?.showControls;
+    const showPlaybackControls = playbackControlsEnabled && expanded;
+    const showTimeline = expanded;
     const timelineDisabled = !currentTrack;
 
     // const hoverContentVisible = isHovered && overlayControlsVisible;
