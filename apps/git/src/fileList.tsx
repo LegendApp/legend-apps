@@ -48,7 +48,7 @@ export function useFileList<T extends { path: string }>(entries: readonly T[], f
 /** A tree list's folder row: not selectable. */
 export function folderItem(row: { id: string; folder: string }, rowHeight: number) {
   return <SidebarItem key={row.id} id={row.id} selectable={false} rowHeight={rowHeight}>
-    <View style={styles.folder} accessible accessibilityRole="header" accessibilityLabel={`Folder ${row.folder}`}>
+    <View style={[styles.folder, { height: rowHeight }]} accessible accessibilityRole="header" accessibilityLabel={`Folder ${row.folder}`}>
       <SFSymbol name="folder" size={12} color="#8E8E93" />
       <Text style={styles.folderName} numberOfLines={1} ellipsizeMode="head">{row.folder}</Text>
     </View>
@@ -56,6 +56,6 @@ export function folderItem(row: { id: string; folder: string }, rowHeight: numbe
 }
 
 const styles = StyleSheet.create({
-  folder: { flex: 1, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 6 },
+  folder: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 6 },
   folderName: { flex: 1, fontSize: 12, fontWeight: "500", color: PlatformColor("secondaryLabelColor") },
 });

@@ -6,7 +6,7 @@ import type { GitStatusEntry } from "@legend-apps/git-core";
 import { diffConfigProps, sideBySideLine, withContextLines } from "../diffOptions";
 import { FileRow } from "../FileRow";
 import { fileListRows } from "../fileList";
-import { applyColumnMenu, columnMenuItems, formatCommitDate, graphColumns, HistoryList, laneColor, visibleColumns, visibleRefs } from "../HistoryView";
+import { applyColumnMenu, columnMenuItems, CommitFiles, dividerTarget, formatCommitDate, graphColumns, HistoryList, laneColor, resizeColumn, visibleColumns, visibleRefs } from "../HistoryView";
 import { diffMenu, runDiffAction } from "../layout/diffMenu";
 import { LayoutHost } from "../layout/LayoutHost";
 import { capabilityIssues } from "../settings/capabilities";
@@ -115,6 +115,17 @@ describe("commit list options", () => {
     expect(visibleColumns([{ id: "graph" }, { id: "subject", visible: false }]).map(column => column.id)).toEqual(["graph", "subject"]);
   });
 
+  it("resizes a column by its divider: left of the subject the column before, right of it the column after", () => {
+    expect(resizeColumn(columns, "date", 181.6)).toEqual(columns.map(column => column.id === "date" ? { ...column, width: 182 } : column));
+    expect(resizeColumn(columns, "sha", 2)!.find(column => column.id === "sha")!.width).toBe(24);
+    expect(resizeColumn([{ id: "subject" }], "refs", 100)).toEqual([{ id: "subject" }, { id: "refs", width: 100 }]);
+    const shown = visibleColumns(columns);
+    expect(shown.map(column => column.id)).toEqual(["graph", "subject", "date", "author", "sha"]);
+    expect([0, 1, 2, 3, 4].map(index => dividerTarget(shown, index))).toEqual([
+      { id: "graph", sign: 1 }, { id: "date", sign: -1 }, { id: "author", sign: -1 }, { id: "sha", sign: -1 }, null,
+    ]);
+  });
+
   it("filters refs, formats dates, and folds lanes past the cap into the overflow color", () => {
     const refs = new Map([["a", [{ kind: "branch" as const, name: "main" }, { kind: "remote" as const, name: "origin/main" }, { kind: "tag" as const, name: "v1" }]]]);
     const options = { refs: "inline" as const, showRemoteRefs: true, showTags: true };
@@ -188,6 +199,49 @@ describe("narrow subscriptions", () => {
     return { store, renders, renderer };
   }
 
+  it("drags a column divider: rows follow while dragging and the width is saved once at the end", async () => {
+    const { store } = memoryStore();
+    await store.ready;
+    const saved: unknown[] = [];
+    const resizeActions = new Proxy({}, { get: (_, key) => key === "columnResize" ? (next: unknown) => saved.push(next) : () => {} }) as HistoryActions;
+    let renderer!: ReturnType<typeof create>;
+    await act(async () => {
+      renderer = create(<SettingsContext.Provider value={{ settings$: store.settings$, store }}><HistoryList history={history} actions={resizeActions} /></SettingsContext.Provider>);
+    });
+    const dividers = renderer.root.findAll(node => (node.type as unknown) === "View" && node.props.accessibilityLabel === "Resize column");
+    // SourceTree: Graph | Description | Date | Author | Commit; the divider after Description sizes Date (140 pt).
+    expect(dividers).toHaveLength(4);
+    expect(dividers[1]!.props.style).toMatchObject({ cursor: "col-resize" });
+    const dateWidth = () => Object.assign({}, ...[renderer.root.findAll(node => (node.type as unknown) === "Text" && typeof node.props.children === "string" && /\d{4}|ago|Nov|20\d\d/.test(node.props.children))[0]!.props.style].flat(Infinity).filter(Boolean)).width;
+    expect(dateWidth()).toBe(140);
+    const event = (pageX: number) => ({ nativeEvent: { pageX } });
+    await act(async () => { dividers[1]!.props.onResponderGrant(event(500)); });
+    await act(async () => { dividers[1]!.props.onResponderMove(event(460)); });
+    expect(dateWidth()).toBe(180);
+    expect(saved).toEqual([]);
+    await act(async () => { dividers[1]!.props.onResponderRelease(event(450)); });
+    expect(saved).toHaveLength(1);
+    expect((saved[0] as { id: string; width?: number }[]).find(column => column.id === "date")!.width).toBe(190);
+    renderer.unmount();
+  });
+
+  it("centers each changed file of a commit vertically in its row", async () => {
+    const { store } = memoryStore();
+    await store.ready;
+    const file = { path: "src/a.ts", text: "", file: { oldPath: "src/a.ts", newPath: "src/a.ts", hunks: [] } } as never;
+    const details = { oid: "c3", commit: { oid: "c3", message: "x", parents: [], author: { name: "A", email: "a@x", time: 0 }, committer: { name: "A", email: "a@x", time: 0 } } as never, files: [file], selectedPath: null, loading: false, error: null };
+    let renderer!: ReturnType<typeof create>;
+    await act(async () => {
+      renderer = create(<SettingsContext.Provider value={{ settings$: store.settings$, store }}><CommitFiles history={{ ...history, selectedOid: "c3", details }} actions={actions} /></SettingsContext.Provider>);
+    });
+    const item = renderer.root.findAll(node => (node.type as unknown) === "SidebarItem")[0]!;
+    const row = item.children[0] as unknown as { type: unknown; props: { style: unknown } };
+    expect(row.type).toBe("View");
+    // A Sidebar row's React content is laid out from the cell's top, so the row must take the row height to center.
+    expect(Object.assign({}, ...[row.props.style].flat(Infinity).filter(Boolean))).toMatchObject({ height: 24, alignItems: "center" });
+    renderer.unmount();
+  });
+
   it("a diff option change renders no commit list row and no file row", async () => {
     const { store, renders, renderer } = await mount();
     await act(async () => { await store.edit("user", ["panels", "diff", "mode"], "sideBySide"); });
@@ -236,9 +290,9 @@ describe("per-instance options", () => {
     await store.ready;
     const seen: Record<string, string> = {};
     function Probe({ id }: { id: string }) { seen[id] = usePanelOptions("fileList").style; return null; }
-    const plan = { type: "split" as const, direction: "row" as const, children: [
-      { plan: { type: "panel" as const, id: "files", panel: "fileList" as const, options: { style: "tree" } } },
-      { plan: { type: "panel" as const, id: "staged", panel: "staged" as const } },
+    const plan = { type: "split" as const, direction: "row" as const, sizeKey: "default", children: [
+      { plan: { type: "panel" as const, id: "files", panel: "fileList" as const, options: { style: "tree" } }, index: 0 },
+      { plan: { type: "panel" as const, id: "staged", panel: "staged" as const }, index: 1 },
     ] };
     await act(async () => {
       create(<SettingsContext.Provider value={{ settings$: store.settings$, store }}>

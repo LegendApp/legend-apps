@@ -2,10 +2,11 @@ import type { MenuItem } from "@legendapp/spark/menus";
 import { activeLayout, isPresetId, presetFiles, viewFor } from "../settings/presets";
 import type { GitSettings, LayoutNode, PresetId, ViewKind } from "../settings/schema";
 import type { GitSettingsStore } from "../settings/store";
-import { activeLayoutName, layoutChoices, layoutSnapshot, movePane, type MoveDirection } from "./plan";
+import { activeLayoutName, layoutChoices, layoutSnapshot, movePane, viewKey, type MoveDirection } from "./plan";
+import type { PaneSizeWriter } from "./paneSizes";
 import type { WindowStateStore } from "./windowState";
 
-type LayoutState = { settings: GitSettings; base: PresetId; store: GitSettingsStore | null; windowState: WindowStateStore | null };
+type LayoutState = { settings: GitSettings; base: PresetId; store: GitSettingsStore | null; windowState: WindowStateStore | null; paneSizes?: Pick<PaneSizeWriter, "cancel"> };
 
 const directions: { id: MoveDirection; label: string }[] = [{ id: "left", label: "Left" }, { id: "right", label: "Right" }, { id: "up", label: "Up" }, { id: "down", label: "Down" }];
 export const panelTitles: Record<string, string> = {
@@ -13,11 +14,6 @@ export const panelTitles: Record<string, string> = {
   composer: "Commit Message", diff: "Diff", prDetails: "Pull Request", empty: "Empty Pane",
 };
 const layoutTitle = (name: string) => isPresetId(name) ? String(presetFiles[name].name ?? name) : name;
-
-/** The views key a view kind's tree comes from: its own, else the layout's default. */
-function viewKey(settings: GitSettings, base: PresetId, kind: ViewKind): ViewKind | "default" {
-  return activeLayout(settings, base).views[kind] ? kind : "default";
-}
 
 /** Move Pane's result for the focused pane, or null when it can't move that way. */
 export function movedView(state: Pick<LayoutState, "settings" | "base">, kind: ViewKind, focused: string, direction: MoveDirection): LayoutNode | null {
@@ -61,6 +57,8 @@ export async function runLayoutAction(itemId: string, { windowId, layout, kind, 
       if (name) await saveLayoutAs(store, settings, base, name, windowState?.get() ?? {});
     } else if (itemId === "layout:reset") {
       windowState?.reset();
+      layout.paneSizes?.cancel();
+      await store.edit("user", ["layout", "sizes", active], undefined);
       // A preset's layout drops the user's edits to it; a saved layout stays saved and the window goes back to the base preset.
       if (isPresetId(active)) await store.edit("user", ["layout", "layouts", active], undefined);
       else await store.edit("user", ["layout", "active"], undefined);
@@ -84,5 +82,8 @@ export async function runLayoutAction(itemId: string, { windowId, layout, kind, 
 /** Save Layout As…: the active layout with the window's current sizes, as `layouts.<name>` in the user file, made active. */
 export async function saveLayoutAs(store: Pick<GitSettingsStore, "edit">, settings: GitSettings, base: PresetId, name: string, state: { sidebarWidth?: number; sidebarCollapsed?: boolean }) {
   await store.edit("user", ["layout", "layouts", name], layoutSnapshot(settings, base, state));
+  // The new layout starts at the sizes the panes have now.
+  const sizes = settings.layout.sizes?.[activeLayoutName(settings, base)];
+  if (sizes && name !== activeLayoutName(settings, base)) await store.edit("user", ["layout", "sizes", name], sizes);
   await store.edit("user", ["layout", "active"], name);
 }

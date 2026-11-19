@@ -1,5 +1,5 @@
-import { memo, useCallback, useMemo, type ReactNode } from "react";
-import { PlatformColor, Pressable, ScrollView, StyleSheet, Text, View, type GestureResponderEvent } from "react-native";
+import { memo, useCallback, useMemo, useRef, useState, type ReactNode } from "react";
+import { PlatformColor, Pressable, ScrollView, StyleSheet, Text, View, type GestureResponderEvent, type ViewStyle } from "react-native";
 
 type MouseDetails = { button?: number; ctrlKey?: boolean; metaKey?: boolean; pageX?: number; pageY?: number };
 import { LegendList } from "@legendapp/list/react-native";
@@ -104,6 +104,8 @@ export type HistoryActions = {
   closeFileHistory(): void;
   /** Right-click on the column titles: the column menu for these (effective) columns, in window coordinates. */
   columnMenu?(columns: PanelOptions["commitList"]["columns"], position: { x: number; y: number }): void;
+  /** A column divider drag ended: the columns with that column at its new width (`resizeColumn`), to save. */
+  columnResize?(columns: PanelOptions["commitList"]["columns"]): void;
   /** Command-click: compares the selected commit with this one. */
   compare(oid: string): void;
   swapCompare(): void;
@@ -117,6 +119,7 @@ export type HistoryActions = {
 export type BlameTarget = DiffLineTarget & { source: string };
 
 type RowCommit = Pick<GitHistoryCommit, "oid" | "summary" | "authorName" | "time"> & Partial<Pick<GitHistoryCommit, "lane" | "color" | "edges" | "parents">> & { path?: string };
+const commitKey = (commit: RowCommit) => commit.oid;
 
 const refOrder = { branch: 0, remote: 1, tag: 2 } as const;
 const refSymbols = { branch: "arrow.triangle.branch", remote: "cloud", tag: "tag" } as const;
@@ -247,16 +250,64 @@ export function applyColumnMenu(columns: CommitListOptions["columns"], itemId: s
   });
 }
 
-/** The column titles; right-click opens the column menu (`actions.columnMenu`), which edits the user settings. */
-function ColumnHeader({ layout, columns, onMenu }: { layout: RowLayout; columns: CommitListOptions["columns"]; onMenu?: HistoryActions["columnMenu"] }) {
-  const width = (id: ColumnId, own: number | undefined) => own ?? (id === "graph" ? layout.graphColumns * layout.graph.laneWidth : defaultWidths[id]);
+const minColumnWidth = 24;
+// react-native-macos draws NSCursor.resizeLeftRightCursor for it; React Native's types list only "auto" and "pointer".
+const resizeCursor = "col-resize" as unknown as ViewStyle["cursor"];
+const columnGap = 8;
+
+/** The columns with `id` at `width` points (clamped to 24–2000); a column the list doesn't name is added. */
+export function resizeColumn(columns: CommitListOptions["columns"], id: ColumnId, width: number): CommitListOptions["columns"] {
+  const clamped = Math.round(Math.min(2000, Math.max(minColumnWidth, width)));
+  return columns.some(column => column.id === id) ? columns.map(column => column.id === id ? { ...column, width: clamped } : column) : [...columns, { id, width: clamped }];
+}
+
+/**
+ * The column the divider after shown column `index` resizes, as Finder's list does: left of the flexible subject the
+ * column before the divider (dragging right widens it), right of it the column after (dragging left widens it).
+ */
+export function dividerTarget(shown: readonly { id: ColumnId; width?: number }[], index: number): { id: ColumnId; sign: 1 | -1 } | null {
+  if (index < 0 || index + 1 >= shown.length) return null;
+  const flexible = shown.findIndex(column => column.id === "subject" && column.width === undefined);
+  return flexible < 0 || index < flexible ? { id: shown[index]!.id, sign: 1 } : { id: shown[index + 1]!.id, sign: -1 };
+}
+
+/** A draggable column divider with the resize cursor; reports the width while dragging and once at the end. */
+function ColumnDivider({ width, sign, onDrag, onEnd }: { width: number; sign: 1 | -1; onDrag: (width: number) => void; onEnd: (width: number) => void }) {
+  const start = useRef<{ x: number; width: number; last: number } | null>(null);
+  const next = (event: GestureResponderEvent) => start.current ? start.current.width + sign * (event.nativeEvent.pageX - start.current.x) : width;
+  return <View style={styles.divider} accessibilityLabel="Resize column"
+    onStartShouldSetResponder={() => true}
+    onResponderTerminationRequest={() => false}
+    onResponderGrant={event => { start.current = { x: event.nativeEvent.pageX, width, last: width }; }}
+    onResponderMove={event => { if (start.current) { start.current.last = next(event); onDrag(start.current.last); } }}
+    onResponderRelease={event => { const end = start.current ? next(event) : width; start.current = null; onEnd(end); }}
+    onResponderTerminate={() => { const end = start.current?.last ?? width; start.current = null; onEnd(end); }}>
+    <View style={styles.dividerLine} />
+  </View>;
+}
+
+/**
+ * The column titles. Dragging a divider resizes a column (`dividerTarget`) live through `onResize` and saves it with
+ * `actions.columnResize`; right-click opens the column menu (`actions.columnMenu`). Both edit the user settings.
+ */
+function ColumnHeader({ layout, columns, actions, onResize }: { layout: RowLayout; columns: CommitListOptions["columns"]; actions: HistoryActions; onResize: (live: { id: ColumnId; width: number } | null) => void }) {
+  const width = (id: ColumnId, own: number | undefined) => own ?? (id === "graph" ? layout.graphColumns * layout.graph.laneWidth : defaultWidths[id]) ?? 0;
+  const shown = layout.columns.filter(({ id }) => id !== "graph" || layout.graphColumns);
   return <Pressable style={styles.columnHeader} accessibilityRole="header" accessibilityLabel="Columns"
     onTouchEnd={(event: GestureResponderEvent) => {
       const mouse = event.nativeEvent as MouseDetails;
-      if (mouse.button === 2 || mouse.ctrlKey) onMenu?.(columns, { x: mouse.pageX ?? 0, y: mouse.pageY ?? 0 });
+      if (mouse.button === 2 || mouse.ctrlKey) actions.columnMenu?.(columns, { x: mouse.pageX ?? 0, y: mouse.pageY ?? 0 });
     }}>
-    {layout.columns.map(({ id, width: own }) => id === "graph" && !layout.graphColumns ? null
-      : <Text key={id} style={[styles.columnTitle, id === "subject" && own === undefined ? styles.flexible : { width: width(id, own) }]} numberOfLines={1}>{columnTitles[id]}</Text>)}
+    {shown.map(({ id, width: own }, index) => {
+      const target = dividerTarget(shown, index);
+      const resized = target && shown.find(column => column.id === target.id)!;
+      return <View key={id} style={[styles.columnTitleCell, id === "subject" && own === undefined ? styles.flexible : { width: width(id, own) }]}>
+        <Text style={styles.columnTitle} numberOfLines={1}>{columnTitles[id]}</Text>
+        {target && resized ? <ColumnDivider width={width(target.id, resized.width)} sign={target.sign}
+          onDrag={value => onResize({ id: target.id, width: value })}
+          onEnd={value => { onResize(null); actions.columnResize?.(resizeColumn(columns, target.id, value)); }} /> : null}
+      </View>;
+    })}
   </Pressable>;
 }
 
@@ -276,10 +327,13 @@ export function HistoryList({ history, actions, memory }: { history: HistoryStat
   const graph = useMemo(() => graphStyle(options.graph, rowHeight, palette), [options.graph, rowHeight, palette]);
   const shownRefs = useMemo(() => visibleRefs(refs, options), [refs, options.refs, options.showRemoteRefs, options.showTags]); // eslint-disable-line react-hooks/exhaustive-deps -- only these options filter
   const filtering = !!(search ?? file ?? range);
+  // A column divider being dragged: rows follow it before the width is saved.
+  const [resizing, setResizing] = useState<{ id: ColumnId; width: number } | null>(null);
+  const shownColumns = resizing ? resizeColumn(options.columns, resizing.id, resizing.width) : options.columns;
   const layout = useMemo<RowLayout>(() => ({
-    columns: visibleColumns(options.columns), graph, graphColumns: filtering ? 0 : columns,
+    columns: visibleColumns(shownColumns), graph, graphColumns: filtering ? 0 : columns,
     refs: options.refs, tinted: options.refStyle === "tinted", refColors, dateFormat: options.dateFormat,
-  }), [options.columns, graph, filtering, columns, options.refs, options.refStyle, refColors, options.dateFormat]);
+  }), [shownColumns, graph, filtering, columns, options.refs, options.refStyle, refColors, options.dateFormat]);
   // A new object whenever selection, refs or the row layout change, so recycled rows redraw.
   const extraData = useMemo(() => ({ selectedOid, shownRefs, currentBranch, layout, compare }), [selectedOid, shownRefs, currentBranch, layout, compare]);
 
@@ -306,7 +360,7 @@ export function HistoryList({ history, actions, memory }: { history: HistoryStat
       <Button style={styles.showAll} onPress={() => actions.closeFileHistory()}>Show All</Button>
     </View> : null}
     {(filter ?? history).error ? <Text accessibilityRole="alert" style={styles.error}>{(filter ?? history).error}</Text> : null}
-    <ColumnHeader layout={layout} columns={options.columns} onMenu={actions.columnMenu} />
+    <ColumnHeader layout={layout} columns={options.columns} actions={actions} onResize={setResizing} />
     {search?.loading && !search.commits.length ? <EmptyState title="Searching…" />
       : search && !search.commits.length ? search.error ? null : <EmptyState title="No Results" message="No commit matches. Free words search messages, authors, SHAs and branch names; author:, path:, before: and other qualifiers narrow it." />
       : file?.loading ? <EmptyState title="Loading File History…" />
@@ -317,7 +371,7 @@ export function HistoryList({ history, actions, memory }: { history: HistoryStat
         // Density re-keys the list once: rows have fixed heights, so the list never measures (spec §7 item 6).
         key={`${listId ?? ""}:${rowHeight}`}
         data={filter ? filter.commits : commits}
-        keyExtractor={item => item.oid}
+        keyExtractor={commitKey}
         estimatedItemSize={rowHeight}
         getFixedItemSize={() => rowHeight}
         extraData={extraData}
@@ -358,27 +412,25 @@ export function CommitInfo({ history, actions }: { history: HistoryState; action
   const sameCommitter = commit.committer.name === commit.author.name && commit.committer.email === commit.author.email && commit.committer.time === commit.author.time;
   const date = (seconds: number) => new Date(seconds * 1000).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 
-  return <View style={styles.details}>
-    <View style={styles.header}>
-      <View style={styles.headerTitle}>
-        <Text style={styles.subject} selectable>{commit.message.split("\n")[0]}</Text>
-        <Text style={styles.oid} selectable>{commit.oid}</Text>
-      </View>
+  // SourceTree's metadata pane: the whole message and the metadata scroll together and fill the pane, however narrow.
+  return <ScrollView style={styles.details} contentContainerStyle={styles.meta2}>
+    <Text style={styles.subject} selectable>{commit.message.split("\n")[0]}</Text>
+    <Field label="Author" value={`${commit.author.name} <${commit.author.email}>`} />
+    <Field label="Date" value={date(commit.author.time)} />
+    {sameCommitter ? null : <Field label="Committer" value={`${commit.committer.name} <${commit.committer.email}>  ${date(commit.committer.time)}`} />}
+    <Field label="Commit" value={commit.oid} mono />
+    <View style={styles.field}>
+      <Text style={styles.fieldLabel}>{commit.parents.length > 1 ? "Parents" : "Parent"}</Text>
+      {commit.parents.length ? commit.parents.map(parent => <Pressable key={parent} accessibilityRole="link" accessibilityLabel={`Parent ${shortOid(parent)}`} onPress={() => actions.select(parent)}>
+        <Text style={styles.link}>{shortOid(parent)}</Text>
+      </Pressable>) : <Text style={styles.fieldValue}>None (root commit)</Text>}
+    </View>
+    <View style={styles.metaActions}>
       <Button style={styles.action} onPress={() => actions.copySha(commit.oid)}>Copy SHA</Button>
       {commitGitHubUrl(history, commit.oid) ? <Button style={styles.wideAction} onPress={() => actions.openOnGitHub(commit.oid)}>Open on GitHub</Button> : null}
     </View>
-    <ScrollView style={styles.fill} contentContainerStyle={styles.meta2}>
-      <Field label="Author" value={`${commit.author.name} <${commit.author.email}>  ${date(commit.author.time)}`} />
-      {sameCommitter ? null : <Field label="Committer" value={`${commit.committer.name} <${commit.committer.email}>  ${date(commit.committer.time)}`} />}
-      <View style={styles.field}>
-        <Text style={styles.fieldLabel}>{commit.parents.length > 1 ? "Parents" : "Parent"}</Text>
-        {commit.parents.length ? commit.parents.map(parent => <Pressable key={parent} accessibilityRole="link" accessibilityLabel={`Parent ${shortOid(parent)}`} onPress={() => actions.select(parent)}>
-          <Text style={styles.link}>{shortOid(parent)}</Text>
-        </Pressable>) : <Text style={styles.fieldValue}>None (root commit)</Text>}
-      </View>
-      {body ? <Text style={styles.body} selectable>{body}</Text> : null}
-    </ScrollView>
-  </View>;
+    {body ? <Text style={styles.body} selectable>{body}</Text> : null}
+  </ScrollView>;
 }
 
 /** The fileList panel in History: the selected commit's files, or the files two compared commits differ in. */
@@ -402,7 +454,9 @@ function FileListBody({ files, selectedPath, heading, actions }: { files: Commit
         const renamed = file.oldPath && file.newPath && file.oldPath !== file.newPath;
         const label = renamed ? `${file.oldPath} → ${file.newPath}` : list.showFolder ? row.id : pathParts(row.id).name;
         return <SidebarItem key={row.id} id={row.id} onContextMenu={event => actions.fileContextMenu(row.id, event.windowPosition)}>
-          <Text style={[styles.file, row.indent && styles.fileIndent]} numberOfLines={1}>{label}</Text>
+          <View style={[styles.fileRow, { height: list.rowHeight }, row.indent && styles.fileIndent]}>
+            <Text style={styles.file} numberOfLines={1}>{label}</Text>
+          </View>
         </SidebarItem>;
       })}
     </Sidebar> : null}
@@ -438,10 +492,10 @@ function commitLabel(history: HistoryState, oid: string) {
 const listedSummary = (history: HistoryState, oid: string) =>
   (history.search?.commits.find(commit => commit.oid === oid) ?? history.file?.commits.find(commit => commit.oid === oid) ?? history.range?.commits.find(commit => commit.oid === oid) ?? history.commits.find(commit => commit.oid === oid))?.summary;
 
-function Field({ label, value }: { label: string; value: string }) {
+function Field({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return <View style={styles.field}>
     <Text style={styles.fieldLabel}>{label}</Text>
-    <Text style={styles.fieldValue} selectable numberOfLines={1}>{value}</Text>
+    <Text style={[styles.fieldValue, mono && styles.mono]} selectable numberOfLines={1} ellipsizeMode="middle">{value}</Text>
   </View>;
 }
 
@@ -457,7 +511,11 @@ const styles = StyleSheet.create({
   flexible: { flex: 1 },
   secondary: { fontSize: 12, color: PlatformColor("secondaryLabelColor") },
   columnHeader: { flexDirection: "row", alignItems: "center", gap: 8, height: 22, paddingHorizontal: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: PlatformColor("separatorColor") },
+  columnTitleCell: { alignSelf: "stretch", justifyContent: "center" },
   columnTitle: { fontSize: 11, fontWeight: "500", color: PlatformColor("secondaryLabelColor") },
+  // Centered in the gap after a title; wider than the line so it is easy to grab.
+  divider: { position: "absolute", top: 0, bottom: 0, right: -(columnGap / 2) - 4, width: 8, alignItems: "center", justifyContent: "center", cursor: resizeCursor, zIndex: 1 },
+  dividerLine: { width: StyleSheet.hairlineWidth, height: 14, backgroundColor: PlatformColor("separatorColor") },
   graph: {},
   line: { position: "absolute" },
   bend: { position: "absolute" },
@@ -481,18 +539,21 @@ const styles = StyleSheet.create({
   currentRef: { fontWeight: "600", color: PlatformColor("labelColor") },
   header: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: PlatformColor("separatorColor") },
   headerTitle: { flex: 1, gap: 2 },
-  subject: { fontSize: 14, fontWeight: "600", color: PlatformColor("labelColor") },
-  oid: { fontSize: 11, fontFamily: "Menlo", color: PlatformColor("secondaryLabelColor") },
+  subject: { fontSize: 14, fontWeight: "600", color: PlatformColor("labelColor"), marginBottom: 4 },
   compareLine: { fontSize: 12, color: PlatformColor("secondaryLabelColor") },
   action: { width: 96, height: 28 },
   wideAction: { width: 128, height: 28 },
-  meta2: { paddingHorizontal: 16, paddingVertical: 8, gap: 4 },
+  meta2: { paddingHorizontal: 12, paddingVertical: 10, gap: 4 },
+  metaActions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 6 },
+  mono: { fontFamily: "Menlo", fontSize: 11 },
   field: { flexDirection: "row", alignItems: "center", gap: 8 },
-  fieldLabel: { width: 72, fontSize: 12, color: PlatformColor("secondaryLabelColor") },
+  fieldLabel: { width: 64, fontSize: 12, color: PlatformColor("secondaryLabelColor") },
   fieldValue: { flex: 1, fontSize: 12, color: PlatformColor("labelColor") },
   link: { fontSize: 12, fontFamily: "Menlo", color: PlatformColor("linkColor") },
-  body: { marginTop: 6, fontSize: 12, color: PlatformColor("labelColor") },
+  body: { marginTop: 8, paddingTop: 8, borderTopWidth: StyleSheet.hairlineWidth, borderColor: PlatformColor("separatorColor"), fontSize: 12, color: PlatformColor("labelColor") },
   filesHeading: { paddingHorizontal: 16, paddingVertical: 6, fontSize: 12, fontWeight: "600", color: PlatformColor("secondaryLabelColor") },
-  file: { flex: 1, paddingHorizontal: 8, fontSize: 12, color: PlatformColor("labelColor") },
+  // A row's content is laid out from the top of the native cell, so it takes the row's height to center.
+  fileRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 8 },
+  file: { flex: 1, fontSize: 12, color: PlatformColor("labelColor") },
   fileIndent: { paddingLeft: 24 },
 });

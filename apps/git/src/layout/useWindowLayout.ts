@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { observable, type Observable } from "@legendapp/state";
 import { presetSettings } from "../settings/presets";
 import { defaultPreset, type GitSettings, type PresetId } from "../settings/schema";
 import { acquireGitSettings, sparkSettingsIO, type GitSettingsStore } from "../settings/store";
 import { createDiffDocumentCache } from "./diffDocuments";
+import { createPaneSizeWriter, type PaneSizeWriter } from "./paneSizes";
 import { createWindowStateStore, type WindowState, type WindowStateStore } from "./windowState";
 
 export type WindowLayout = {
@@ -19,6 +20,8 @@ export type WindowLayout = {
   documents: ReturnType<typeof createDiffDocumentCache>;
   /** What a panel instance keeps across remounts (its scroll offset), by instance id. */
   memory(id: string): { key?: string; scrollOffset: number };
+  /** Saves dragged pane sizes to the user settings file (`layout.sizes`). */
+  paneSizes: PaneSizeWriter;
 };
 
 const dataDirectory = async () => (require("@legendapp/spark/files") as typeof import("@legendapp/spark/files")).getDirectory("data");
@@ -37,6 +40,11 @@ export function useWindowLayout(windowId: string, root: string | null): WindowLa
     const byId = new Map<string, { key?: string; scrollOffset: number }>();
     return (id: string) => { let entry = byId.get(id); if (!entry) byId.set(id, entry = { scrollOffset: 0 }); return entry; };
   });
+
+  const latest = useRef({ settings, store });
+  latest.current = { settings, store };
+  const [paneSizes] = useState(() => createPaneSizeWriter({ store: () => latest.current.store, current: () => latest.current.settings }));
+  useEffect(() => () => void paneSizes.flush().catch(console.error), [paneSizes]);
 
   useEffect(() => {
     let disposed = false, opened: WindowStateStore | null = null;
@@ -74,5 +82,5 @@ export function useWindowLayout(windowId: string, root: string | null): WindowLa
     };
   }, [root]);
 
-  return { ...settings, settings$: store?.settings$ ?? initial$, store, windowState: windowState.store, initialState: windowState.initial, documents, memory };
+  return { ...settings, settings$: store?.settings$ ?? initial$, store, windowState: windowState.store, initialState: windowState.initial, documents, memory, paneSizes };
 }

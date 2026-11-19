@@ -10,7 +10,7 @@ import { LayoutHost, type PanelRenderers } from "./layout/LayoutHost";
 import { DiffDocumentCacheContext } from "./layout/diffDocuments";
 import { layoutMenu, runLayoutAction } from "./layout/layoutMenu";
 import { diffMenu, runDiffAction } from "./layout/diffMenu";
-import { planPanels, viewKindFor, windowPlan, type LayoutConditions } from "./layout/plan";
+import { activePaneSizes, planPanels, viewKindFor, windowPlan, type LayoutConditions } from "./layout/plan";
 import { useWindowLayout } from "./layout/useWindowLayout";
 import type { PanelId } from "./settings/schema";
 import { activeLayout } from "./settings/presets";
@@ -1110,6 +1110,7 @@ Rebase anyway?`,
         if (!result.canceled && store) return store.edit("user", ["panels", "commitList", "columns"], applyColumnMenu(columns, result.itemId));
       }).catch(console.error);
     },
+    columnResize: columns => { void layoutRef.current.store?.edit("user", ["panels", "commitList", "columns"], columns).catch(console.error); },
     closeFileHistory: () => { runCommand("show-all-history", contextRef.current); },
     compare: oid => void historyController.current?.compare(oid),
     swapCompare: () => void historyController.current?.swapCompare(),
@@ -1457,7 +1458,7 @@ Rebase anyway?`,
   const activeSidebar = activeLayout(layout.settings, layout.base).sidebar;
   // Spark throws when the width is below the minimum; a remembered width or a settings file can be.
   const sidebarMinWidth = activeSidebar?.minWidth ?? 180;
-  const sidebarWidth = Math.max(layout.initialState?.sidebarWidth ?? activeSidebar?.width ?? 220, sidebarMinWidth);
+  const sidebarWidth = Math.max(activePaneSizes(layout.settings, layout.base).sidebar?.[0] ?? layout.initialState?.sidebarWidth ?? activeSidebar?.width ?? 220, sidebarMinWidth);
   const settingsContext = useMemo(() => ({ settings$: layout.settings$, store: layout.store }), [layout.settings$, layout.store]);
   const changesPlan = windowPlan(layout.settings, layout.base, "changes", changesConditions, has(changesPanels));
   // A layout that shows the graph in Changes (GitKraken) needs HEAD's log loaded, as History does.
@@ -1520,15 +1521,20 @@ Rebase anyway?`,
       contentMinWidth={480}
       sidebarCollapsed={sidebarCollapsed}
       onSidebarCollapsedChange={setSidebarCollapsed}
-      onResize={event => layout.windowState?.onResize(event)}
+      onResize={event => {
+        layout.windowState?.onResize(event);
+        // Only the width a drag ends at; a collapsed sidebar reports 0.
+        if (event.phase === "ready" && event.sidebarWidth > 0 && Math.round(event.sidebarWidth) !== sidebarWidth) layout.paneSizes.onPaneResize("sidebar", [event.sidebarWidth]);
+      }}
       titleBar={{ content: { height: contentInset, material: "titlebar" } }}
       sidebar={
         <Sidebar style={styles.root} selectedId={sidebarSelected} onSelectionChange={event => {
           if (event.id?.startsWith("recent:")) runCommand("open-recent", contextRef.current, event.id.slice(7));
           else if (event.id === "github-sign-in") runCommand("sign-in-github", contextRef.current);
           else if (event.id === "changes" || event.id === "history" || event.id?.startsWith("ref:") || event.id?.startsWith("stash:") || event.id?.startsWith("worktree:") || event.id?.startsWith("review:") || event.id?.startsWith("pr:")) setSection(event.id as Section);
-        }} contentInsetTop={58}>
-          <SidebarItem id="repositories" selectable={false}>
+        }} contentInsetTop={contentInset}>
+          {/* Starts right under the title bar, at the same height with or without a repository (as Diff's sidebar). */}
+          <SidebarItem id="repositories" selectable={false} rowHeight={24}>
             <Text style={styles.section}>{root?.split("/").pop() ?? (recents.length ? "Recent" : "Repositories")}</Text>
           </SidebarItem>
           {root ? sidebarItems : recents.length ? recentLabels(recents).map((label, index) => <SidebarItem key={recents[index]} id={`recent:${recents[index]}`}>
@@ -1558,9 +1564,9 @@ Rebase anyway?`,
             <DiffDocumentCacheContext.Provider value={layout.documents}>
               {/* Changes stays mounted (hidden) in other sections so the commit message draft and a running generation survive a switch. */}
               <View style={[styles.root, kind !== "changes" && styles.hidden]}>
-                <LayoutHost plan={changesPlan} panels={changesPanels} onFocusPanel={focusPanel} />
+                <LayoutHost plan={changesPlan} panels={changesPanels} onFocusPanel={focusPanel} onPaneResize={layout.paneSizes.onPaneResize} />
               </View>
-              {kind !== "changes" ? <LayoutHost plan={windowPlan(layout.settings, layout.base, kind, sectionConditions, has(sectionPanels))} panels={sectionPanels} onFocusPanel={focusPanel} /> : null}
+              {kind !== "changes" ? <LayoutHost plan={windowPlan(layout.settings, layout.base, kind, sectionConditions, has(sectionPanels))} panels={sectionPanels} onFocusPanel={focusPanel} onPaneResize={layout.paneSizes.onPaneResize} /> : null}
             </DiffDocumentCacheContext.Provider>
           </View>
             : changes.loading ? <EmptyState title="Opening Repository…" />
@@ -1713,7 +1719,7 @@ function PullRequestFiles({ pull, state, filter, onSelect, review }: { pull: Git
         const count = comments.get(file.path) ?? 0;
         const commentsLabel = count === 1 ? "1 comment" : `${count} comments`;
         return <SidebarItem key={file.path} id={file.path}>
-          <View style={[styles.fileRow, row.indent && styles.fileIndent]} accessible accessibilityLabel={`${name}${folder ? `, ${folder}` : ""}, ${file.additions} added, ${file.deletions} removed${count ? `, ${commentsLabel}` : ""}`}>
+          <View style={[styles.fileRow, { height: list.rowHeight }, row.indent && styles.fileIndent]} accessible accessibilityLabel={`${name}${folder ? `, ${folder}` : ""}, ${file.additions} added, ${file.deletions} removed${count ? `, ${commentsLabel}` : ""}`}>
             <Text style={styles.fileName} numberOfLines={1}>{name}</Text>
             <Text style={styles.fileFolder} numberOfLines={1} ellipsizeMode="head">{list.showFolder ? folder : ""}</Text>
             {count ? <Text style={styles.count}>{commentsLabel}</Text> : null}
@@ -1754,7 +1760,7 @@ function StashFiles({ stash, preview, filter, onSelect }: { stash: GitStash; pre
         if (row.type === "folder") return folderItem(row, list.rowHeight);
         const { name, folder } = pathParts(row.id);
         return <SidebarItem key={row.id} id={row.id}>
-          <View style={[styles.fileRow, row.indent && styles.fileIndent]} accessible accessibilityLabel={folder ? `${name}, ${folder}` : name}>
+          <View style={[styles.fileRow, { height: list.rowHeight }, row.indent && styles.fileIndent]} accessible accessibilityLabel={folder ? `${name}, ${folder}` : name}>
             <Text style={styles.fileName} numberOfLines={1}>{name}</Text>
             {folder && list.showFolder ? <Text style={styles.fileFolder} numberOfLines={1} ellipsizeMode="head">{folder}</Text> : null}
           </View>
@@ -1876,14 +1882,15 @@ const styles = StyleSheet.create({
   openPull: { width: 120, height: 24 },
   stashButtons: { flexDirection: "row", gap: 8 },
   openWindow: { width: 150, height: 24 },
-  fileRow: { flex: 1, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 6 },
+  // A Sidebar row's content is laid out from the top of the native cell: rows take the row height to center.
+  fileRow: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 6 },
   fileIndent: { paddingLeft: 22 },
   fileName: { flexShrink: 0, maxWidth: "70%", fontSize: 13, color: PlatformColor("labelColor") },
   fileFolder: { flex: 1, fontSize: 11, color: PlatformColor("secondaryLabelColor") },
   discard: { width: 80, height: 24 },
   emptyList: { flex: 1, alignItems: "center", justifyContent: "center", paddingBottom: 24 },
   emptyListText: { fontSize: 12, color: PlatformColor("tertiaryLabelColor") },
-  section: { paddingHorizontal: 10, paddingTop: 10, paddingBottom: 4, fontSize: 11, fontWeight: "700", color: PlatformColor("tertiaryLabelColor") },
+  section: { paddingHorizontal: 10, paddingTop: 6, fontSize: 11, fontWeight: "700", color: PlatformColor("tertiaryLabelColor") },
   sectionHeader: { height: 28, flexDirection: "row", alignItems: "flex-end", gap: 6, paddingHorizontal: 10, paddingBottom: 5 },
   sectionTitle: { flex: 1, fontSize: 11, fontWeight: "700" },
   sectionCount: { fontSize: 11, fontVariant: ["tabular-nums"] },

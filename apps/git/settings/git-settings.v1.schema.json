@@ -575,6 +575,28 @@
             "description": "A named window layout."
           },
           "description": "Named layouts; the presets' layouts are named after them."
+        },
+        "sizes": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 10000
+              }
+            },
+            "description": "Sizes by pane path: `sidebar` is [width]; a split is its view key and child indices (`default`, `default.1`, `changes.0.0`; a switch adds `case<n>` or `otherwise`), with one size in points per pane along the split axis. A pane without a `size` in the layout keeps sharing the rest."
+          },
+          "description": "Pane sizes the user dragged, by layout name (a preset or a saved layout). Reset Layout clears the active layout's."
         }
       },
       "additionalProperties": {},

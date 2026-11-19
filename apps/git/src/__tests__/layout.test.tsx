@@ -7,6 +7,8 @@ import { createDiffDocumentCache, DiffDocumentCacheContext } from "../layout/dif
 import { layoutMenu, saveLayoutAs } from "../layout/layoutMenu";
 import { movePane, planPanels, renderPlan, viewKindFor, windowPlan, type RenderPlan } from "../layout/plan";
 import { createWindowStateStore } from "../layout/windowState";
+import { createPaneSizeWriter } from "../layout/paneSizes";
+import { runLayoutAction } from "../layout/layoutMenu";
 import { presetSettings, presetView } from "../settings/presets";
 import { presetIds, viewKinds, type LayoutNode } from "../settings/schema";
 import { createGitSettingsStore, sparkSettingsIO, type SettingsIO } from "../settings/store";
@@ -85,7 +87,10 @@ describe("render plan", () => {
     expect(plan).toMatchObject({ type: "split", direction: "column", children: [{ size: 340, minSize: 160, plan: { id: "commitList" } }, { plan: { type: "split", direction: "row" } }] });
     const stash = windowPlan(settings("sourcetree"), "sourcetree", "stash", {}, panel => panel === "fileList" || panel === "diff");
     // The stash has no commit list or details: the splits that held only them fold away.
-    expect(stash).toEqual({ type: "split", direction: "row", children: [{ plan: { type: "panel", id: "fileList", panel: "fileList" }, size: 300, minSize: 200 }, { plan: { type: "panel", id: "diff", panel: "diff" } }] });
+    expect(stash).toEqual({ type: "split", direction: "row", sizeKey: "default.1", children: [
+      { plan: { type: "panel", id: "fileList", panel: "fileList" }, index: 0, size: 320, minSize: 240 },
+      { plan: { type: "panel", id: "diff", panel: "diff" }, index: 1, minSize: 400 },
+    ] });
   });
 
   it("falls back to files beside the diff, then to a blank pane, when a view has nothing to show", () => {
@@ -113,6 +118,77 @@ describe("render plan", () => {
   it("maps sidebar sections to view kinds", () => {
     expect(["changes", "history", "ref:refs/heads/main", "stash:abc", "worktree:/x", "review", "review:branch:x", "pr:12"].map(viewKindFor))
       .toEqual(["changes", "history", "ref", "stash", "worktree", "review", "review", "pullRequest"]);
+  });
+});
+
+describe("pane sizes", () => {
+  const sourcetree = settings("sourcetree");
+  const withSizes = (sizes: Record<string, number[]>) => ({ ...sourcetree, layout: { ...sourcetree.layout, sizes: { sourcetree: sizes } } });
+  type Split = Extract<RenderPlan, { type: "split" }>;
+
+  it("puts SourceTree's commit details below the files, filling the left column beside the diff", () => {
+    const plan = windowPlan(sourcetree, "sourcetree", "history", {}, all) as Split;
+    const row = plan.children[1]!.plan as Split;
+    expect(row).toMatchObject({ direction: "row", sizeKey: "default.1", children: [{ size: 320, plan: { type: "split", direction: "column" } }, { plan: { id: "diff" } }] });
+    const left = row.children[0]!.plan as Split;
+    expect(left.sizeKey).toBe("default.1.0");
+    expect(left.children.map(child => [child.plan.type === "panel" && child.plan.id, child.size])).toEqual([["fileList", 240], ["commitDetails", undefined]]);
+  });
+
+  it("reads saved sizes by split path for the panes the layout sizes, leaving flexible panes flexible", () => {
+    const plan = windowPlan(withSizes({ default: [420, 900], "default.1": [280.5, 700], "default.1.0": [180, 400] }), "sourcetree", "history", {}, all) as Split;
+    expect(plan.children.map(child => child.size)).toEqual([420, undefined]);
+    const row = plan.children[1]!.plan as Split;
+    expect(row.children.map(child => child.size)).toEqual([280.5, undefined]);
+    expect((row.children[0]!.plan as Split).children.map(child => child.size)).toEqual([180, undefined]);
+    // A pane the view can't show keeps its size slot: the stash's files take the left column's saved width.
+    const stash = windowPlan(withSizes({ "default.1": [260, 700] }), "sourcetree", "stash", {}, panel => panel === "fileList" || panel === "diff") as Split;
+    expect(stash.children.map(child => [child.index, child.size])).toEqual([[0, 260], [1, undefined]]);
+    // Another layout's sizes don't apply.
+    const fork = { ...sourcetree, layout: { ...sourcetree.layout, active: "fork", sizes: { sourcetree: { default: [10, 10] } } } };
+    expect(JSON.stringify(windowPlan(fork, "sourcetree", "history", {}, all))).not.toContain("\"size\":10");
+  });
+
+  it("validates layout.sizes in a settings file", async () => {
+    const { io } = memoryIO({ "/data/settings.json": JSON.stringify({ version: 1, layout: { sizes: { sourcetree: { sidebar: [260], default: [400, 300] } } } }) });
+    const store = createGitSettingsStore({ io, directory: "/data" });
+    await store.ready;
+    expect(store.settings$.peek().layout.sizes).toEqual({ sourcetree: { sidebar: [260], default: [400, 300] } });
+    expect(store.issues$.peek()).toEqual([]);
+    await store.close();
+  });
+});
+
+describe("onPaneResize", () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+  const settle = async () => { for (let i = 0; i < 10; i++) await Promise.resolve(); };
+
+  it("writes the active layout's sizes to the user settings file, debounced and rounded", async () => {
+    const { io, files } = memoryIO();
+    const store = createGitSettingsStore({ io, directory: "/data" });
+    await store.ready;
+    const writer = createPaneSizeWriter({ store: () => store, current: () => ({ settings: store.settings$.peek(), base: store.base$.peek() }) });
+    writer.onPaneResize("default.1", [300, 800]);
+    writer.onPaneResize("default.1", [310.6, 789.4]);
+    writer.onPaneResize("sidebar", [251.2]);
+    writer.onPaneResize("default", [Number.NaN, 2]); // ignored
+    expect(files.size).toBe(0);
+    jest.advanceTimersByTime(300);
+    await settle();
+    expect(JSON.parse(files.get("/data/settings.json")!).layout).toEqual({ sizes: { sourcetree: { "default.1": [311, 789], sidebar: [251] } } });
+    expect(store.settings$.peek().layout.sizes?.sourcetree).toEqual({ "default.1": [311, 789], sidebar: [251] });
+    // The window reads them back: the plan uses the saved width.
+    const plan = windowPlan(store.settings$.peek(), "sourcetree", "history", {}, all) as Extract<RenderPlan, { type: "split" }>;
+    expect((plan.children[1]!.plan as Extract<RenderPlan, { type: "split" }>).children[0]!.size).toBe(311);
+
+    // Reset Layout clears them, along with any pending resize.
+    writer.onPaneResize("default.1", [500, 500]);
+    await runLayoutAction("layout:reset", { windowId: "main", layout: { settings: store.settings$.peek(), base: "sourcetree", store, windowState: null, paneSizes: writer }, kind: "history", focused: "diff" });
+    jest.advanceTimersByTime(1000);
+    await settle();
+    expect(store.settings$.peek().layout.sizes?.sourcetree).toBeUndefined();
+    await store.close();
   });
 });
 

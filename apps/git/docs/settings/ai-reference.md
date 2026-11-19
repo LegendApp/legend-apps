@@ -65,6 +65,7 @@ Top-level keys: `version` (required), `extends`, `appearance`, `density`, `theme
 - `theme.dark.refs.head`: string (default "#32D74B")
 - `layout.active`: string (default "sourcetree")
 - `layout.layouts`: map of map of any
+- `layout.sizes`: map of map of array of number 0–10000
 - `panels.commitList.density`: `"compact"` \| `"regular"` \| `"comfortable"`
 - `panels.commitList.columns`: array of map of any (default [{"id":"graph"},{"id":"subject"},{"id":"author","width":160},{"id":"date","width":140},{"id":"sha","width":72}])
 - `panels.commitList.graph.style`: `"compact"` \| `"wide"` (default "wide")

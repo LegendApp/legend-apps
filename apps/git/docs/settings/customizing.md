@@ -18,8 +18,9 @@ Every Settings pane opened from a repository window has an *Apply To* popup: **A
 **This Repository** edits layer 4. Keys the repository overrides show **Reset to All Repositories**.
 
 Objects merge key by key; arrays (toolbar items, columns, menu entries, lane colors, sidebar sections) and layout trees
-replace whole. Divider positions, collapsed panes and window frames are window state, kept per window and never
-shared.
+replace whole. Dragged pane sizes and the sidebar width are saved in your settings file under `layout.sizes`, per
+layout (View ▸ Layout ▸ Reset Layout clears them); collapsed panes and window frames are window state, kept per window
+and never shared.
 
 ## Settings window
 

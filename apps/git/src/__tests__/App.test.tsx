@@ -902,6 +902,41 @@ it("lays out the sidebar from settings: order, hidden sections, a large section 
   }
 });
 
+it("starts the sidebar at the width saved in the settings file and saves a dragged width there", async () => {
+  jest.clearAllMocks();
+  const files = jest.requireMock("@legendapp/spark/files") as { writeText(path: string, text: string): Promise<void>; readText(path: string): Promise<string> };
+  await files.writeText("/data/settings.json", JSON.stringify({ version: 1, layout: { sizes: { sourcetree: { sidebar: [264] } } } }));
+  let renderer!: ReactTestRenderer;
+  try {
+    await act(async () => { renderer = create(<App />); });
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+    const split = () => renderer.root.findByType(SidebarSplitView);
+    expect(split().props.sidebarWidth).toBe(264);
+    await act(async () => {
+      split().props.onResize({ phase: "provisional", sidebarWidth: 300 });
+      split().props.onResize({ phase: "ready", sidebarWidth: 287.6 });
+      await new Promise(resolve => setTimeout(resolve, 400));
+    });
+    expect(JSON.parse(await files.readText("/data/settings.json")).layout.sizes.sourcetree.sidebar).toEqual([288]);
+    expect(split().props.sidebarWidth).toBe(288);
+  } finally {
+    await act(async () => { renderer?.unmount(); });
+    await files.writeText("/data/settings.json", JSON.stringify({ version: 1 }));
+    await files.writeText("/data/state/main.json", "{}");
+  }
+});
+
+it("starts the sidebar right under the title bar, at the same inset with and without a repository", async () => {
+  jest.clearAllMocks();
+  let renderer!: ReactTestRenderer;
+  await act(async () => { renderer = create(<App />); });
+  const split = renderer.root.findByType(SidebarSplitView);
+  const sidebar = renderer.root.findAllByType(Sidebar)[0]!;
+  expect(sidebar.props.contentInsetTop).toBe(split.props.titleBar.content.height);
+  expect(renderer.root.findAllByType(SidebarItem).find(item => item.props.id === "repositories")!.props.rowHeight).toBe(24);
+  await act(async () => { renderer.unmount(); });
+});
+
 it("puts the split view on the window's background, so the source list's glass shows the window and not the desktop", async () => {
   jest.clearAllMocks();
   let renderer!: ReactTestRenderer;

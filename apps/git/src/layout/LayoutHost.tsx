@@ -2,6 +2,7 @@ import { Fragment, type ReactNode } from "react";
 import { PlatformColor, StyleSheet, View } from "react-native";
 import { PanelInstanceProvider } from "../settings/panelOptions";
 import type { PanelId } from "../settings/schema";
+import type { PaneResize } from "./paneSizes";
 import { planPanels, type RenderPlan } from "./plan";
 
 /** Renders one panel instance; `id` is its instance id (the panel id unless the layout names it). */
@@ -10,14 +11,16 @@ export type PanelRenderers = Partial<Record<PanelId, PanelRenderer>>;
 
 /**
  * Lays out a render plan (spec §5.4). Until Spark has a general SplitView (ask S1) nested splits are fixed-size flex
- * panes: a pane with a `size` gets that many points along the axis (at least `minSize`; in a column, more when its
- * content is taller), the others share the rest; no divider is draggable. Panes are keyed by panel instance id, so a layout edit that keeps a panel keeps it mounted.
+ * panes: a pane with a `size` (the layout's, or the one saved in `layout.sizes`) gets that many points along the axis
+ * (at least `minSize`; in a column, more when its content is taller), the others share the rest; no divider is
+ * draggable yet. When Spark's SplitView replaces the flex split, its resize calls `onPaneResize(plan.sizeKey, sizes)`,
+ * which saves them. Panes are keyed by panel instance id, so a layout edit that keeps a panel keeps it mounted.
  */
-export function LayoutHost({ plan, panels, onFocusPanel }: { plan: RenderPlan; panels: PanelRenderers; onFocusPanel?: (id: string) => void }) {
-  return <PlanNode plan={plan} panels={panels} onFocusPanel={onFocusPanel} />;
+export function LayoutHost({ plan, panels, onFocusPanel, onPaneResize }: { plan: RenderPlan; panels: PanelRenderers; onFocusPanel?: (id: string) => void; onPaneResize?: PaneResize }) {
+  return <PlanNode plan={plan} panels={panels} onFocusPanel={onFocusPanel} onPaneResize={onPaneResize} />;
 }
 
-function PlanNode({ plan, panels, onFocusPanel }: { plan: RenderPlan; panels: PanelRenderers; onFocusPanel?: (id: string) => void }): ReactNode {
+function PlanNode({ plan, panels, onFocusPanel, onPaneResize }: { plan: RenderPlan; panels: PanelRenderers; onFocusPanel?: (id: string) => void; onPaneResize?: PaneResize }): ReactNode {
   if (plan.type === "panel") {
     return <View style={styles.fill} testID={`panel:${plan.id}`}
       // Capture without claiming the responder: the pane under the pointer becomes the focused pane for Move Pane.
@@ -28,7 +31,7 @@ function PlanNode({ plan, panels, onFocusPanel }: { plan: RenderPlan; panels: Pa
     </View>;
   }
   const row = plan.direction === "row";
-  return <View style={[styles.fill, row ? styles.row : styles.column]}>
+  return <View style={[styles.fill, row ? styles.row : styles.column]} testID={`split:${plan.sizeKey}`}>
     {plan.children.map((child, index) => {
       // A split is keyed by the panels it holds, so moving it among its siblings keeps everything inside mounted.
       const key = child.plan.type === "panel" ? child.plan.id : `split:${planPanels(child.plan).join("|")}`;
@@ -40,7 +43,7 @@ function PlanNode({ plan, panels, onFocusPanel }: { plan: RenderPlan; panels: Pa
       return <Fragment key={key}>
         {index > 0 ? <View style={row ? styles.dividerVertical : styles.dividerHorizontal} /> : null}
         <View style={[style, styles.clip]}>
-          <PlanNode plan={child.plan} panels={panels} onFocusPanel={onFocusPanel} />
+          <PlanNode plan={child.plan} panels={panels} onFocusPanel={onFocusPanel} onPaneResize={onPaneResize} />
         </View>
       </Fragment>;
     })}

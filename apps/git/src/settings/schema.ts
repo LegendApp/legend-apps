@@ -103,6 +103,10 @@ export const layoutDefinition = obj({
   }, "One tree per kind of sidebar selection; a missing or null kind uses `default`."),
 }, "A named window layout.");
 
+/** Written when a divider is dragged; a layout tree's own `size` values are the defaults. */
+export const paneSizes = describe(z.record(z.string(), z.array(size)),
+  "Sizes by pane path: `sidebar` is [width]; a split is its view key and child indices (`default`, `default.1`, `changes.0.0`; a switch adds `case<n>` or `otherwise`), with one size in points per pane along the split axis. A pane without a `size` in the layout keeps sharing the rest.");
+
 // ── Panels ─────────────────────────────────────────────────────────────────────
 
 const fileListOptions = obj({
@@ -228,6 +232,7 @@ export const gitSettingsSchema = obj({
   layout: obj({
     active: describe(z.string().min(1), "A name in `layouts` or a preset id."),
     layouts: describe(z.record(z.string(), layoutDefinition), "Named layouts; the presets' layouts are named after them."),
+    sizes: describe(z.record(z.string(), paneSizes), "Pane sizes the user dragged, by layout name (a preset or a saved layout). Reset Layout clears the active layout's.").optional(),
   }, "Window layout."),
   panels: obj(panelSchemas, "Options per panel."),
   sidebar,

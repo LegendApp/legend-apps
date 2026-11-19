@@ -2,7 +2,7 @@
   "$schema": "https://legend.so/git/git-settings.v1.schema.json",
   "version": 1,
   "name": "SourceTree",
-  "description": "SourceTree's organization: a wide commit table over files and diff; staged over unstaged beside the diff with the composer below; big labeled toolbar buttons.",
+  "description": "SourceTree's organization: a wide commit table over the files with the commit's details below them, beside the diff; staged over unstaged beside the diff with the composer below; big labeled toolbar buttons.",
   "density": "regular",
   "layout": {
     "active": "sourcetree",
@@ -31,34 +31,36 @@
                   "children": [
                     {
                       "node": {
-                        "type": "panel",
-                        "panel": "fileList"
-                      },
-                      "size": 300,
-                      "minSize": 200
-                    },
-                    {
-                      "node": {
                         "type": "split",
                         "direction": "column",
                         "children": [
                           {
                             "node": {
                               "type": "panel",
-                              "panel": "commitDetails"
+                              "panel": "fileList"
                             },
-                            "size": 110,
-                            "collapsible": true
+                            "size": 240,
+                            "minSize": 120
                           },
                           {
                             "node": {
                               "type": "panel",
-                              "panel": "diff"
+                              "panel": "commitDetails"
                             },
-                            "minSize": 240
+                            "minSize": 120,
+                            "collapsible": true
                           }
                         ]
-                      }
+                      },
+                      "size": 320,
+                      "minSize": 240
+                    },
+                    {
+                      "node": {
+                        "type": "panel",
+                        "panel": "diff"
+                      },
+                      "minSize": 400
                     }
                   ]
                 }

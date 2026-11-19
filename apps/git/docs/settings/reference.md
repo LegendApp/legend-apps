@@ -145,6 +145,7 @@ Window layout.
 |---|---|---|---|---|
 | `layout.active` | string | `"sourcetree"` |  |  |  | A name in `layouts` or a preset id. |
 | `layout.layouts` | map of map of any |  |  |  |  | Named layouts; the presets' layouts are named after them. |
+| `layout.sizes` | map of map of array of number 0–10000 |  |  |  |  | Pane sizes the user dragged, by layout name (a preset or a saved layout). Reset Layout clears the active layout's. |
 
 ### `panels`
 

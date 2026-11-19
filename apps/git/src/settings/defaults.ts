@@ -27,7 +27,7 @@ export const defaultSettings: GitSettings = {
       refs: { localBranch: "#0A84FF", remoteBranch: "#98989D", tag: "#FF9F0A", head: "#32D74B" },
     },
   },
-  layout: { active: "sourcetree", layouts: {} },
+  layout: { active: "sourcetree", layouts: {}, sizes: {} },
   panels: {
     commitList: {
       columns: [{ id: "graph" }, { id: "subject" }, { id: "author", width: 160 }, { id: "date", width: 140 }, { id: "sha", width: 72 }],
