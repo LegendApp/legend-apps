@@ -1,11 +1,16 @@
+import { SplitView } from "@legendapp/spark/ui/split-view";
 import type { ReactNode } from "react";
-import { Fragment, useMemo } from "react";
-import { View } from "react-native";
+import { Fragment, useMemo, useState } from "react";
+import { Platform, View } from "react-native";
 
 import { MusicSplitView } from "../components/MusicSplitView";
 import { Panel, PanelGroup, ResizeHandle } from "../components/ResizablePanels";
+import { settings$ } from "../systems/Settings";
 import { getMusicLayoutLeafDefinition } from "./MusicLayoutRegistry";
-import type { MusicLayoutNode } from "./MusicLayoutState";
+import type { MusicLayoutDirection, MusicLayoutNode } from "./MusicLayoutState";
+
+const MIN_PANE_SIZE = 80;
+const DEFAULT_PANE_SIZE = 200;
 
 export interface MusicLayoutRenderContext {
     benchmarkElapsedSeconds?: number;
@@ -38,6 +43,17 @@ function getPanelId(parentPath: string, child: MusicLayoutNode, index: number): 
     return `${parentPath}.${index}.${childId}`;
 }
 
+function getSplitPaneIds(path: string, children: MusicLayoutNode[], direction: MusicLayoutDirection) {
+    if (direction === "vertical") return children.map((child, index) => getPanelId(path, child, index));
+
+    // Keep the settings paths from the chain of horizontal sidebar splits.
+    const last = children.length - 1;
+    return children.map((child, index) => {
+        const groupPath = path + ".rest".repeat(Math.min(index, last - 1));
+        return getPanelId(groupPath, child, index === last ? 1 : 0);
+    });
+}
+
 function renderChildren(children: MusicLayoutNode[] | undefined, context: MusicLayoutRenderContext, path: string) {
     return children?.map((child, index) => (
         <RenderNode
@@ -61,6 +77,35 @@ function HorizontalSplit({ context, node, path }: RenderNodeProps) {
     />;
 }
 
+function NativeLayoutSplit({ nodes, context, direction, paneIds }: {
+    nodes: MusicLayoutNode[];
+    context: MusicLayoutRenderContext;
+    direction: MusicLayoutDirection;
+    paneIds: string[];
+}) {
+    const [initialSizes] = useState(() => paneIds.slice(0, -1).map(id => {
+        const savedSize = settings$.state.panels[id].peek();
+        return Number.isFinite(savedSize) ? Math.max(MIN_PANE_SIZE, savedSize) : DEFAULT_PANE_SIZE;
+    }));
+
+    return (
+        <SplitView
+            orientation={direction}
+            style={{ flex: 1, minWidth: 0, minHeight: 0 }}
+            panes={paneIds.map((id, index) => ({
+                id,
+                minSize: MIN_PANE_SIZE,
+                initialSize: initialSizes[index],
+                content: <RenderNode context={context} node={nodes[index]} path={id} />,
+            }))}
+            onResize={sizes => {
+                if (sizes.length !== paneIds.length || sizes.some(size => !Number.isFinite(size) || size < MIN_PANE_SIZE)) return;
+                settings$.state.panels.assign(Object.fromEntries(paneIds.slice(0, -1).map((id, index) => [id, sizes[index]])));
+            }}
+        />
+    );
+}
+
 function RenderNode({ context, node, path }: RenderNodeProps) {
     if (node.type === "stack") {
         const isHorizontal = node.direction === "horizontal";
@@ -72,8 +117,21 @@ function RenderNode({ context, node, path }: RenderNodeProps) {
     }
 
     if (node.type === "split") {
-        if (node.direction === "horizontal") return <HorizontalSplit context={context} node={node} path={path} />;
         const children = node.children ?? [];
+        if (Platform.OS === "macos") {
+            if (children.length < 2) return <>{renderChildren(children, context, path)}</>;
+            const paneIds = getSplitPaneIds(path, children, node.direction);
+            return (
+                <NativeLayoutSplit
+                    key={JSON.stringify([node.direction, paneIds])}
+                    nodes={children}
+                    context={context}
+                    direction={node.direction}
+                    paneIds={paneIds}
+                />
+            );
+        }
+        if (node.direction === "horizontal") return <HorizontalSplit context={context} node={node} path={path} />;
         return (
             <PanelGroup direction={node.direction} className="flex-1 min-h-0 min-w-0">
                 {children.map((child, index) => {
@@ -81,7 +139,7 @@ function RenderNode({ context, node, path }: RenderNodeProps) {
                     const isLast = index === children.length - 1;
                     return (
                         <Fragment key={getNodeKey(child, index)}>
-                            <Panel id={panelId} minSize={80} defaultSize={200} order={index} flex={isLast}>
+                            <Panel id={panelId} minSize={MIN_PANE_SIZE} defaultSize={DEFAULT_PANE_SIZE} order={index} flex={isLast}>
                                 <RenderNode context={context} node={child} path={panelId} />
                             </Panel>
                             {!isLast ? <ResizeHandle panelId={panelId} /> : null}
