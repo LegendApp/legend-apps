@@ -58,7 +58,7 @@ module.exports = function createMusicRenderHarness() {
       "react-native": native,
       "@legendapp/spark/windows": { useWindowId: () => "main" },
       "../utils/musicDrag": { MusicTrackDragSource: "track-drag" },
-      "../../utils/musicDrag": { MusicTrackDragSource: "track-drag", droppedMusicTracks: event => JSON.parse(event.data?.["application/x-legend-music-tracks"] ?? "[]") },
+      "../../utils/musicDrag": { MusicTrackDragSource: "track-drag", droppedMusicTracks: event => JSON.parse(event.data?.["application/x-legend-music-tracks"] ?? "[]"), libraryTrackToMusicDrag: track => require("../../src/utils/musicDrag").libraryTrackToMusicDrag(track) },
       "@legendapp/state": state,
       "@legendapp/state/react": stateReact,
       "@legendapp/spark/ui/classnames": {

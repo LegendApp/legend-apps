@@ -23,7 +23,7 @@ import { Table, TableCell, type TableColumnSpec, TableHeader, TableRow } from ".
 import type { TrackData } from "../TrackItem";
 import { useListItemStyles } from "../../hooks/useListItemStyles";
 import { type MenuItem, showContextMenu } from "@legendapp/spark/context-menu";
-import { type MusicDragTrack, MusicTrackDragSource, musicTrackDragSourceRowStyle } from "../../utils/musicDrag";
+import { libraryTrackToMusicDrag, MusicTrackDragSource, musicTrackDragSourceRowStyle } from "../../utils/musicDrag";
 import { Icon } from "../../systems/Icon";
 import { libraryUI$ } from "../../systems/LibraryState";
 import { type LocalTrack, localMusicState$, saveLocalPlaylistTracks } from "../../systems/LocalMusicState";
@@ -593,7 +593,7 @@ function LibraryTrackRow({
         >
             {Platform.OS === "macos" ? (
                 <MusicTrackDragSource
-                    tracks={dragData.tracks as MusicDragTrack[]}
+                    tracks={dragData.tracks.map(libraryTrackToMusicDrag)}
                     onDragStart={onNativeDragStart}
                     style={musicTrackDragSourceRowStyle}
                 >

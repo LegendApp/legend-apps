@@ -1,8 +1,12 @@
 import { DragDropView, type DragPayload, type DropEvent, type DragDropViewProps } from "@legendapp/spark/drag-drop";
 import { useRef } from "react";
 import type { TrackData } from "../components/TrackItem";
+import type { LocalTrack } from "../systems/LocalMusicState";
 export const musicTrackMime = "application/x-legend-music-tracks";
 export type MusicDragTrack = Pick<TrackData, "id" | "title" | "artist" | "album" | "duration" | "thumbnail"> & { filePath?: string; fileName?: string; queueEntryId?: string };
+export function libraryTrackToMusicDrag({ id, title, artist, album, duration, thumbnail, filePath, fileName }: LocalTrack): MusicDragTrack {
+  return { id, title, artist, album, duration, thumbnail, filePath, fileName };
+}
 export function musicTrackPayload(tracks: readonly MusicDragTrack[]): DragPayload {
   return { data: { [musicTrackMime]: JSON.stringify(tracks) } };
 }
