@@ -8,7 +8,6 @@ import { MusicLayoutRenderer } from "../layout/MusicLayoutRenderer";
 import { mainLayout$, normalizeMusicLayoutFile } from "../layout/MusicLayoutState";
 import { SUPPORT_ACCOUNTS } from "../systems/constants";
 import { useOnHotkeys } from "../systems/keyboard/Keyboard";
-import { KeyCodes } from "../systems/keyboard/KeyboardManager";
 import { perfCount, perfLog } from "@legend-apps/runtime-utils";
 import { preloadPersistence } from "../utils/preloadPersistence";
 
@@ -19,17 +18,15 @@ type MainContainerProps = {
     benchmarkElapsedSeconds?: number;
 };
 
-function handleConfigurableMediaHotkey(
-    context: HotkeyHandlerContext,
-    nativeMediaKey: number,
-    action: () => void,
-) {
-    const isNativeMediaKey = context.binding === ({ [KeyCodes.KEY_MEDIA_PLAY_PAUSE]: "MediaPlayPause", [KeyCodes.KEY_MEDIA_NEXT]: "MediaNextTrack", [KeyCodes.KEY_MEDIA_PREVIOUS]: "MediaPreviousTrack" }[nativeMediaKey]);
-    if (!isNativeMediaKey) {
+// Hardware media keys already reach the player through the native remote-command path.
+const nativeMediaKeyBindings = new Set(["MediaPlayPause", "MediaNext", "MediaPrevious"]);
+
+function unlessNativeMediaKey(action: () => void) {
+    return (context: HotkeyHandlerContext) => {
+        if (nativeMediaKeyBindings.has(context.binding)) return false;
         action();
         return true;
-    }
-    return false;
+    };
 }
 
 export function MainContainer({ benchmarkElapsedSeconds }: MainContainerProps) {
@@ -39,21 +36,9 @@ export function MainContainer({ benchmarkElapsedSeconds }: MainContainerProps) {
     const layout = useMemo(() => normalizeMusicLayoutFile(layoutFile), [layoutFile]);
 
     useOnHotkeys({
-        PlayPause: (context) => handleConfigurableMediaHotkey(
-            context,
-            KeyCodes.KEY_MEDIA_PLAY_PAUSE,
-            () => void localAudioControls.togglePlayPause(),
-        ),
-        NextTrack: (context) => handleConfigurableMediaHotkey(
-            context,
-            KeyCodes.KEY_MEDIA_NEXT,
-            localAudioControls.playNext,
-        ),
-        PreviousTrack: (context) => handleConfigurableMediaHotkey(
-            context,
-            KeyCodes.KEY_MEDIA_PREVIOUS,
-            localAudioControls.playPrevious,
-        ),
+        PlayPause: unlessNativeMediaKey(() => void localAudioControls.togglePlayPause()),
+        NextTrack: unlessNativeMediaKey(localAudioControls.playNext),
+        PreviousTrack: unlessNativeMediaKey(localAudioControls.playPrevious),
         ToggleShuffle: localAudioControls.toggleShuffle,
         ToggleRepeatMode: localAudioControls.cycleRepeatMode,
     });
