@@ -273,9 +273,9 @@ export function MarkdownE2EEditorSmoke({
 
   return (
     <View style={styles.root}>
-      <Text style={styles.status}>
-        {statusText}
-      </Text>
+      <View accessible accessibilityRole="text" accessibilityLabel={statusText}>
+        <Text style={styles.status}>{statusText}</Text>
+      </View>
       {variant === "largeDocument" && <View>
         <Pressable accessibilityRole="button" onPress={() => commandsRef.current?.focusFirstBlock()}><Text>Jump to document start</Text></Pressable>
         <Pressable accessibilityRole="button" onPress={() => commandsRef.current?.focusLastBlock()}><Text>Jump to document end</Text></Pressable>
