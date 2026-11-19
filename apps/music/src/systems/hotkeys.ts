@@ -128,15 +128,35 @@ for (const [name, code] of Object.entries(KeyCodes)) {
     if (label && !legacyKeyCodeNames.has(code)) legacyKeyCodeNames.set(code, label);
 }
 
-// Builds before the Spark accelerator API saved bindings as "+"-joined key codes, such as "524288+1" for Alt+S.
-function fromLegacyKeyCodes(binding: unknown) {
+// The original app saved its key labels, such as "⌥+S" or "Next Track".
+const legacyKeyTexts: Record<string, string> = {
+    "←": "Left",
+    "↑": "Up",
+    "→": "Right",
+    "↓": "Down",
+    "↩": "Enter",
+    "⇥": "Tab",
+    "⌃": "Ctrl",
+    "⌘": "Cmd",
+    "⌥": "Alt",
+    "⇧": "Shift",
+    "⌫": "Backspace",
+    "⌦": "Delete",
+    Esc: "Escape",
+    "Next Track": "MediaNext",
+    "Play/Pause": "MediaPlayPause",
+    "Previous Track": "MediaPrevious",
+};
+
+// Older builds saved bindings as "+"-joined key codes, such as "524288+1" for Alt+S, or as key labels.
+function fromLegacyBinding(binding: unknown) {
     const tokens = String(binding).split("+");
-    const names = tokens.map((token) => (/^\d+$/.test(token) ? legacyKeyCodeNames.get(Number(token)) : undefined));
+    const names = tokens.map((token) => (/^\d+$/.test(token) ? legacyKeyCodeNames.get(Number(token)) : legacyKeyTexts[token] ?? token));
     return names.every(Boolean) ? names.join("+") : binding;
 }
 
 function loadBindings(stored: unknown, definition: HotkeyDefinition<string>) {
-    for (const candidate of [stored, Array.isArray(stored) ? stored.map(fromLegacyKeyCodes) : stored]) {
+    for (const candidate of [stored, Array.isArray(stored) ? stored.map(fromLegacyBinding) : stored]) {
         try {
             return normalizeHotkeyBindings(candidate as readonly string[]);
         } catch {}
@@ -144,8 +164,19 @@ function loadBindings(stored: unknown, definition: HotkeyDefinition<string>) {
     return getDefaultHotkeyBindings(definition);
 }
 
+// The original app saved one flat binding per command, with Space as a separate PlayPauseSpace command.
+function fromLegacyFlatFile(file: Record<string, unknown>) {
+    const stored: Record<string, unknown[]> = {};
+    for (const [id, binding] of Object.entries(file)) {
+        const target = id === "PlayPauseSpace" ? "PlayPause" : id;
+        if (binding !== "" && binding != null) (stored[target] ??= []).push(binding);
+    }
+    return stored;
+}
+
 export function loadMusicHotkeyFile(value: unknown) {
-    const stored = (value as { bindings?: Record<string, unknown> } | undefined)?.bindings ?? {};
+    const file = value as { bindings?: Record<string, unknown> } | undefined;
+    const stored = file?.bindings ?? (file && typeof file === "object" && !("version" in file) ? fromLegacyFlatFile(file) : {});
     const bindings = Object.fromEntries(
         musicHotkeyDefinitions.map((definition) => [
             definition.id,

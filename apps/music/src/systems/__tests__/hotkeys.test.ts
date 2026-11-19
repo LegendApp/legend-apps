@@ -20,4 +20,30 @@ describe("loadMusicHotkeyFile", () => {
         expect(file.bindings.Search).toEqual(["Cmd+K"]);
         expect(file.bindings.ToggleLibrary).toEqual(["L"]);
     });
+
+    it("migrates the original app's flat hotkeys file, merging PlayPauseSpace into PlayPause", () => {
+        const file = loadMusicHotkeyFile({
+            Search: "K",
+            ToggleLibrary: 37,
+            ToggleVisualizer: "V",
+            PlayPause: "Play/Pause",
+            PlayPauseSpace: "Space",
+            NextTrack: "Next Track",
+            PreviousTrack: "Previous Track",
+            ToggleShuffle: "⌘+⇧+S",
+            ToggleRepeatMode: "⌥+R",
+            Up: "↑",
+            Delete: "⌫",
+        });
+
+        expect(file.bindings).toEqual({
+            Search: ["K"],
+            ToggleLibrary: ["L"],
+            PlayPause: ["MediaPlayPause", "Space"],
+            NextTrack: ["MediaNext"],
+            PreviousTrack: ["MediaPrevious"],
+            ToggleShuffle: ["Cmd+Shift+S"],
+            ToggleRepeatMode: ["Alt+R"],
+        });
+    });
 });
