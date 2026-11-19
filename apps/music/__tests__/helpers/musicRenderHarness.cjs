@@ -1,5 +1,5 @@
 // Compile the real Music components; replace native surfaces and external commands with controlled boundaries.
-module.exports = function createMusicRenderHarness({ cacheListItems = false } = {}) {
+module.exports = function createMusicRenderHarness({ cacheListItems = false, trackDragSource = "track-drag" } = {}) {
   const repositoryRoot = require("node:path").resolve(__dirname, "../../../..");
   const fs = require("fs"),
     path = require("path"),
@@ -57,8 +57,8 @@ module.exports = function createMusicRenderHarness({ cacheListItems = false } = 
       "react": React,
       "react-native": native,
       "@legendapp/spark/windows": { useWindowId: () => "main" },
-      "../utils/musicDrag": { MusicTrackDragSource: "track-drag" },
-      "../../utils/musicDrag": { MusicTrackDragSource: "track-drag", droppedMusicTracks: event => JSON.parse(event.data?.["application/x-legend-music-tracks"] ?? "[]"), libraryTrackToMusicDrag: track => require("../../src/utils/musicDrag").libraryTrackToMusicDrag(track) },
+      "../utils/musicDrag": { MusicTrackDragSource: trackDragSource },
+      "../../utils/musicDrag": { MusicTrackDragSource: trackDragSource, droppedMusicTracks: event => JSON.parse(event.data?.["application/x-legend-music-tracks"] ?? "[]"), libraryTrackToMusicDrag: track => require("../../src/utils/musicDrag").libraryTrackToMusicDrag(track) },
       "@legendapp/state": state,
       "@legendapp/state/react": stateReact,
       "@legendapp/spark/ui/classnames": {
@@ -111,7 +111,7 @@ module.exports = function createMusicRenderHarness({ cacheListItems = false } = 
   const selectedIndices$ = state.observable(new Set());
   const selection = {
     selectedIndices$,
-    handleTrackClick: noop,
+    handleTrackClick: jest.fn(),
     syncSelectionAfterReorder: noop,
     clearSelection: noop
   };
@@ -471,6 +471,7 @@ module.exports = function createMusicRenderHarness({ cacheListItems = false } = 
     providerLibrary$,
     providerPlaylists,
     actions,
+    selectTrack: selection.handleTrackClick,
     menus,
     menuResponses,
     getCounts: () => ({

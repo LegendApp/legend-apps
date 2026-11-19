@@ -581,7 +581,6 @@ function LibraryTrackRow({
         </>
     );
 
-    // Spark's native drag source takes every click inside it, so the row and its actions button wrap it instead.
     const row = (
         <TableRow
             className="w-full"
