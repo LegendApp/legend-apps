@@ -16,3 +16,15 @@ test("forwards the drag-start callback to Spark and leaves touches alone", async
     expect(view.props.onTouchMove).toBeUndefined();
     await act(() => tree.unmount());
 });
+
+test("requests a snapshot preview of the dragged track row", async () => {
+    let tree;
+    await act(() => {
+        tree = create(<MusicTrackDragSource tracks={[{ id: "a", title: "A" }]} />);
+    });
+    try {
+        expect(tree.root.findByType(DragDropView).props.dragPreview).toBe("snapshot");
+    } finally {
+        await act(() => tree.unmount());
+    }
+});
