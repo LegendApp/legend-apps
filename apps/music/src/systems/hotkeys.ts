@@ -1,5 +1,7 @@
 import {
     getDefaultHotkeyBindings,
+    hotkeyFileVersion,
+    normalizeHotkeyBindings,
     normalizeHotkeyFile,
     serializeHotkeyFile,
     type HotkeyDefinition,
@@ -9,6 +11,7 @@ import { createObservableFile } from "@legend-apps/storage";
 import { createStorage } from "@legend-apps/storage";
 import { batch, syncState } from "@legendapp/state";
 import { useValue } from "@legendapp/state/react";
+import { KeyCodes } from "./keyboard/KeyboardManager";
 
 
 
@@ -91,9 +94,70 @@ export const allMusicHotkeyDefinitions = [
 export type HotkeyName = (typeof musicHotkeyDefinitions)[number]["id"];
 export type MusicHotkeyBindingName = (typeof allMusicHotkeyDefinitions)[number]["id"];
 
+const legacyKeyNames: Record<string, string> = {
+    COMMA: ",",
+    DELETE: "Backspace",
+    EQUALS: "=",
+    ESCAPE: "Escape",
+    FORWARD_DELETE: "Delete",
+    LEFT_BRACKET: "[",
+    MEDIA_NEXT: "MediaNext",
+    MEDIA_PLAY_PAUSE: "MediaPlayPause",
+    MEDIA_PREVIOUS: "MediaPrevious",
+    MINUS: "-",
+    PAGE_DOWN: "PageDown",
+    PAGE_UP: "PageUp",
+    PERIOD: ".",
+    RETURN: "Enter",
+    RIGHT_BRACKET: "]",
+    SLASH: "/",
+};
+const legacyModifierNames: Record<string, string> = {
+    COMMAND: "Cmd",
+    CONTROL: "Ctrl",
+    FUNCTION: "Fn",
+    OPTION: "Alt",
+    SHIFT: "Shift",
+};
+const legacyKeyCodeNames = new Map<number, string>();
+for (const [name, code] of Object.entries(KeyCodes)) {
+    const key = name.replace(/^(KEY|MODIFIER)_/, "");
+    const label = name.startsWith("MODIFIER_")
+        ? legacyModifierNames[key]
+        : legacyKeyNames[key] ?? key.charAt(0) + key.slice(1).toLowerCase();
+    if (label && !legacyKeyCodeNames.has(code)) legacyKeyCodeNames.set(code, label);
+}
+
+// Builds before the Spark accelerator API saved bindings as "+"-joined key codes, such as "524288+1" for Alt+S.
+function fromLegacyKeyCodes(binding: unknown) {
+    const tokens = String(binding).split("+");
+    const names = tokens.map((token) => (/^\d+$/.test(token) ? legacyKeyCodeNames.get(Number(token)) : undefined));
+    return names.every(Boolean) ? names.join("+") : binding;
+}
+
+function loadBindings(stored: unknown, definition: HotkeyDefinition<string>) {
+    for (const candidate of [stored, Array.isArray(stored) ? stored.map(fromLegacyKeyCodes) : stored]) {
+        try {
+            return normalizeHotkeyBindings(candidate as readonly string[]);
+        } catch {}
+    }
+    return getDefaultHotkeyBindings(definition);
+}
+
+export function loadMusicHotkeyFile(value: unknown) {
+    const stored = (value as { bindings?: Record<string, unknown> } | undefined)?.bindings ?? {};
+    const bindings = Object.fromEntries(
+        musicHotkeyDefinitions.map((definition) => [
+            definition.id,
+            definition.id in stored ? loadBindings(stored[definition.id], definition) : undefined,
+        ]),
+    );
+    return normalizeHotkeyFile({ version: hotkeyFileVersion, bindings }, musicHotkeyDefinitions);
+}
+
 const musicHotkeyFile$ = createObservableFile({
     initialValue: normalizeHotkeyFile(undefined, musicHotkeyDefinitions),
-    transform: { load: value => normalizeHotkeyFile(value, musicHotkeyDefinitions), save: value => serializeHotkeyFile(value, musicHotkeyDefinitions) },
+    transform: { load: loadMusicHotkeyFile, save: value => serializeHotkeyFile(value, musicHotkeyDefinitions) },
     filename: "hotkeys",
 });
 
