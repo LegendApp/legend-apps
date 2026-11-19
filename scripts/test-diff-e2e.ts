@@ -3,9 +3,10 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { rootDir } from "./lib/apps";
+import { agentDevice, check, defaultAgentSession, retryOnRunnerBusy, runStep, startDetachedMetro } from "./lib/e2eSession";
 
 const scenario = process.env.DIFF_E2E_SCENARIO ?? "local-folder-smoke";
-const session = process.env.AGENT_DEVICE_SESSION ?? "diff-e2e";
+const session = defaultAgentSession("diff-e2e");
 const artifactsDir = path.join(rootDir, ".artifacts", "diff-e2e");
 const fixtureDir = path.join(artifactsDir, "fixtures", scenario);
 const stepsFileByScenario: Record<string, string> = {
@@ -72,52 +73,14 @@ function createFixtureRepo() {
 fs.mkdirSync(artifactsDir, { recursive: true });
 createFixtureRepo();
 
-run("bun", [
-  "run",
-  "diff",
-  skipBuild ? "open" : "run",
-  "macos",
-  "--",
-  "--diff-folder",
-  fixtureDir,
-]);
-
-run("agent-device", [
-  "--session",
-  session,
-  "--platform",
-  "macos",
-  "--session-lock",
-  "reject",
-  "open",
-  "so.legend.diff.macos",
-  "--surface",
-  "app",
-  "--no-record",
-], {
-  env: {
-    AGENT_DEVICE_PLATFORM: "macos",
-    AGENT_DEVICE_SESSION: session,
-    AGENT_DEVICE_SESSION_LOCK: "reject",
-  },
-});
-
-run("agent-device", [
-  "--session",
-  session,
-  "--platform",
-  "macos",
-  "--session-lock",
-  "reject",
-  "batch",
-  "--steps-file",
-  stepsFile,
-  "--on-error",
-  "stop",
-], {
-  env: {
-    AGENT_DEVICE_PLATFORM: "macos",
-    AGENT_DEVICE_SESSION: session,
-    AGENT_DEVICE_SESSION_LOCK: "reject",
-  },
-});
+const agent = agentDevice(session);
+if (!skipBuild) check(await runStep("bun", ["run", "diff", "build", "macos", "--dev"]));
+const port = await startDetachedMetro("diff", path.join(artifactsDir, `metro-${session}.log`));
+const openApp = async () => check(await runStep("bun", ["scripts/open-app.ts", "diff", "macos", "--port", String(port), "--", "--diff-folder", fixtureDir]));
+await openApp();
+const openAndRunSteps = async () => {
+  const opened = await agent.run(["open", "so.legend.diff.macos", "--surface", "app", "--no-record"]);
+  return opened.status === 0 ? agent.run(["batch", "--steps-file", stepsFile, "--on-error", "stop"]) : opened;
+};
+// Closing the session quits the app, so the retry reopens it on the fixture.
+check(await retryOnRunnerBusy(openAndRunSteps, async () => { await agent.close(); await openApp(); }));

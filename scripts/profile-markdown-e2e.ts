@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { rootDir } from "./lib/apps";
+import { agentDevice, check, defaultAgentSession, runStep, startDetachedMetro } from "./lib/e2eSession";
 
 type AgentDeviceStep = {
   command?: string;
@@ -17,7 +18,7 @@ function printUsage() {
     "  MARKDOWN_PROFILE_SCENARIO       Scenario to profile; defaults to editor-navigation-smoke.",
     "  MARKDOWN_E2E_BLOCK_COUNT        Block count passed to Markdown E2E; defaults to 5000.",
     "  MARKDOWN_PROFILE_SKIP_BUILD=1   Reuse the existing dev build instead of rebuilding.",
-    "  AGENT_DEVICE_SESSION            Agent-device session name; defaults to markdown-perf.",
+    "  AGENT_DEVICE_SESSION            Agent-device session name; defaults to <JOB_NAME>-markdown-perf or markdown-perf-pid<pid>.",
     "",
     "Artifacts are written under .artifacts/markdown-e2e/profiles/.",
   ].join("\n"));
@@ -31,7 +32,7 @@ if (process.argv.includes("--help") || process.argv.includes("-h")) {
 const scenario = process.env.MARKDOWN_PROFILE_SCENARIO ?? process.env.MARKDOWN_E2E_SCENARIO ?? "editor-navigation-smoke";
 const seed = process.env.MARKDOWN_E2E_SEED ?? "12345";
 const blockCount = process.env.MARKDOWN_E2E_BLOCK_COUNT ?? "5000";
-const session = process.env.AGENT_DEVICE_SESSION ?? "markdown-perf";
+const session = defaultAgentSession("markdown-perf");
 const artifactsDir = path.join(rootDir, ".artifacts", "markdown-e2e");
 const profileDir = path.join(artifactsDir, "profiles", `${scenario}-${new Date().toISOString().replace(/[:.]/g, "-")}`);
 const stepsFileByScenario: Record<string, string> = {
@@ -96,22 +97,22 @@ async function main() {
   fs.mkdirSync(profileDir, { recursive: true });
   writeProfileSteps();
 
-  const launchArgs = [
-    "--",
-    `--markdown-e2e=${scenario}`,
-    `--markdown-e2e-seed=${seed}`,
-    `--markdown-e2e-block-count=${blockCount}`,
-  ];
-
+  agentDevice(session);
   let profileStarted = false;
   try {
-    run("bun", [
-      "run",
+    if (!skipBuild) check(await runStep("bun", ["run", "markdown", "build", "macos", "--dev"]));
+    const port = await startDetachedMetro("markdown", path.join(profileDir, "metro.log"));
+    check(await runStep("bun", [
+      "scripts/open-app.ts",
       "markdown",
-      skipBuild ? "open" : "run",
       "macos",
-      ...launchArgs,
-    ]);
+      "--port",
+      String(port),
+      "--",
+      `--markdown-e2e=${scenario}`,
+      `--markdown-e2e-seed=${seed}`,
+      `--markdown-e2e-block-count=${blockCount}`,
+    ]));
 
     runAgent(["open", "so.legend.markdown.macos", "--surface", "app", "--no-record"]);
     runAgent(["perf", "metrics", "--json"], { capturePath: path.join(profileDir, "metrics-before.json") });
