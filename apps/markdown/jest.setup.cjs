@@ -22,6 +22,7 @@ jest.mock("@legendapp/spark/menus", () => ({
 }));
 
 // Mock Fabric hosts, not their JS wrappers or the design-system controls.
+jest.mock("@legendapp/spark-ui/src/radio-group/RadioGroupNativeComponent", () => "SparkRadioGroup");
 jest.mock("@legendapp/spark-ui/src/native-select/NativeSelectNativeComponent", () => "NativeSelect");
 jest.mock("@legendapp/spark-ui/src/native-select/NativeSegmentedControlNativeComponent", () => "NativeSegmentedControl");
 
