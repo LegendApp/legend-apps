@@ -1,7 +1,7 @@
 import { useValue } from "@legendapp/state/react";
 import { Text, View } from "react-native";
 
-import { Panel, PanelGroup, ResizeHandle } from "./ResizablePanels";
+import { MusicSplitView } from "./MusicSplitView";
 import { settings$ } from "../systems/Settings";
 import { perfCount } from "@legend-apps/runtime-utils";
 import { MediaLibrarySidebar } from "./MediaLibrary/Sidebar";
@@ -14,24 +14,7 @@ export function MediaLibraryView() {
     return (
         <View className="flex-1 min-w-[360px] min-h-0 bg-black/5 border-l border-white/10">
             <View className="flex-1">
-                <PanelGroup direction="horizontal">
-                    <Panel
-                        id="sidebar"
-                        minSize={80}
-                        maxSize={300}
-                        defaultSize={200}
-                        order={0}
-                        className="border-r border-white/10"
-                    >
-                        <MediaLibrarySidebar />
-                    </Panel>
-
-                    <ResizeHandle panelId="sidebar" />
-
-                    <Panel id="tracklist" minSize={80} defaultSize={200} order={1} flex>
-                        <TrackList />
-                    </Panel>
-                </PanelGroup>
+                <MusicSplitView id="sidebar" sidebar={<MediaLibrarySidebar />} content={<TrackList />} />
             </View>
             {showHints ? (
                 <View className="border-t border-white/15 bg-black/20 px-3 py-2">
