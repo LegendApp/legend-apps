@@ -92,6 +92,13 @@ export function seek(seconds: number) {
   return NativeAudioPlayer.seek(seconds).then((json) => parseJson<AudioPlayerResult>(json, { success: false }));
 }
 
+/** Sets the visible progress interval in seconds. The default is one second. */
+export function setProgressUpdateInterval(seconds: number): void {
+  if (Platform.OS === "macos" || Platform.OS === "ios") {
+    NativeAudioPlayer.setProgressUpdateInterval(seconds);
+  }
+}
+
 export function setVolume(volume: number) {
   if (Platform.OS !== "macos" && Platform.OS !== "ios") {
     return unsupportedResult();
@@ -137,6 +144,7 @@ export const audioPlayer = {
   pause,
   play,
   seek,
+  setProgressUpdateInterval,
   setVolume,
   stop,
   updateNowPlayingInfo,

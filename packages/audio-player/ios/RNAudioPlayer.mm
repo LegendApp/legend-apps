@@ -31,6 +31,7 @@ static NSDictionary *RNAudioPlayerJSONObjectFromString(NSString *json)
 @property (atomic, assign) BOOL progressEventsEnabled;
 @property (atomic, assign) NSTimeInterval lastProgressDurationSent;
 @property (atomic, assign) BOOL isWindowOccluded;
+@property (atomic, assign) NSTimeInterval visibleProgressUpdateInterval;
 #if TARGET_OS_OSX
 @property (nonatomic, weak, nullable) NSWindow *observedWindow;
 #endif
@@ -55,6 +56,7 @@ RCT_EXPORT_MODULE(NativeAudioPlayer)
     _nowPlayingInfo = [NSMutableDictionary dictionary];
     _progressEventsEnabled = YES;
     _lastProgressDurationSent = -1;
+    _visibleProgressUpdateInterval = RNAudioPlayerProgressIntervalVisibleSeconds;
     [self setupPlayerObservers];
     [self setupRemoteCommands];
     [self setupOcclusionObservers];
@@ -131,7 +133,7 @@ RCT_EXPORT_MODULE(NativeAudioPlayer)
 
 - (NSTimeInterval)progressUpdateInterval
 {
-  return self.isWindowOccluded ? RNAudioPlayerProgressIntervalOccludedSeconds : RNAudioPlayerProgressIntervalVisibleSeconds;
+  return self.isWindowOccluded ? RNAudioPlayerProgressIntervalOccludedSeconds : self.visibleProgressUpdateInterval;
 }
 
 - (void)emitEventWithName:(NSString *)name body:(id)body
@@ -500,6 +502,25 @@ RCT_EXPORT_MODULE(NativeAudioPlayer)
       [self updateNowPlayingElapsedTime:self.currentTime];
       resolve(RNAudioPlayerJSONString(@{@"success": @(finished)}));
     }];
+  });
+}
+
+- (void)setProgressUpdateInterval:(double)seconds
+{
+  if (!isfinite(seconds) || seconds <= 0) {
+    return;
+  }
+  CMTime interval = CMTimeMakeWithSeconds(seconds, NSEC_PER_SEC);
+  if (!CMTIME_IS_NUMERIC(interval) || interval.value <= 0) {
+    return;
+  }
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if (self.visibleProgressUpdateInterval != seconds) {
+      self.visibleProgressUpdateInterval = seconds;
+      if (self.timeObserver && !self.isWindowOccluded) {
+        [self addTimeObserver];
+      }
+    }
   });
 }
 

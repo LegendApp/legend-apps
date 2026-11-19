@@ -7,6 +7,7 @@ export interface Spec extends TurboModule {
   pause(): Promise<string>;
   stop(): Promise<string>;
   seek(seconds: number): Promise<string>;
+  setProgressUpdateInterval(seconds: number): void;
   setVolume(volume: number): Promise<string>;
   getCurrentState(): Promise<string>;
   updateNowPlayingInfo(infoJson: string): void;
