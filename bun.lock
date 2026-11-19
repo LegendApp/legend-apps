@@ -150,6 +150,7 @@
       "version": "0.0.1",
       "dependencies": {
         "@legend-apps/color-picker": "workspace:*",
+        "@legend-apps/design-system": "workspace:*",
         "@legend-apps/diff-parser": "workspace:*",
         "@legend-apps/file-system-watcher": "workspace:*",
         "@legend-apps/git-core": "workspace:*",

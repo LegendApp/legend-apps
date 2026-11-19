@@ -1,7 +1,8 @@
 import { observable } from "@legendapp/state";
 import { useValue } from "@legendapp/state/react";
 import { Button, Select, SegmentedControl, TextInput } from "@legendapp/spark/ui";
-import { SettingsPage, SettingsRow, SettingsSection, SettingsWindow, type SettingsWindowPage } from "@legendapp/spark/settings/window";
+import { SettingsCard, SettingsRow, SettingsSection, VirtualizedSettingsWindow, type SettingsWindowPage } from "@legendapp/spark/settings/window";
+import { SwitchControl } from "@legend-apps/design-system";
 import { DragDropProvider, DraggableItem, DroppableZone } from "@legend-apps/reorder-controls";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { PlatformColor, StyleSheet, Text, View } from "react-native";
@@ -14,8 +15,8 @@ import { buildAIReferenceDoc } from "./docs";
 import { buildSettingsJsonSchema, formatJsonSchema } from "./jsonSchema";
 import { deepEqual } from "./merge";
 import { activeLayout } from "./presets";
-import { panelIds, presetIds, toolbarWidgets, viewKinds, type GitSettings, type LayoutNode, type MenuEntry, type PanelId } from "./schema";
-import { acquireGitSettings, valueAt, type GitSettingsStore, type LayerId } from "./store";
+import { fileOnlyKeys, panelIds, presetIds, toolbarWidgets, viewKinds, type GitSettings, type LayoutNode, type MenuEntry, type PanelId, type PresetId } from "./schema";
+import { acquireGitSettings, choosePreset, type GitSettingsStore, type LayerId } from "./store";
 import { applyImport, checkImport, exportParts, exportPartTitles, exportSettings, importSettings, undoImport, type ExportPart, type ImportUndo } from "./sharing";
 import { examplePrompts, generateSettingsPatch } from "./customizeAI";
 import { resolveColor, type Appearance } from "./theme";
@@ -55,17 +56,15 @@ function Choice({ title, description, value, options, onChange }: { title: strin
 }
 
 function Toggle({ title, description, value, onChange }: { title: string; description?: string; value: boolean; onChange(value: boolean): void }) {
-  // Spark has no native checkbox or switch yet (ask A9); a two-segment control is the native stand-in.
-  return <SettingsRow align="center" title={title} description={description} control={<SegmentedControl accessibilityLabel={title} options={onOff} value={value ? "on" : "off"} onValueChange={next => onChange(next === "on")} />} />;
+  return <SettingsRow align="center" title={title} description={description} control={<SwitchControl accessibilityLabel={title} checked={value} onChange={onChange} />} />;
 }
-const onOff = [{ label: "Off", value: "off" }, { label: "On", value: "on" }];
 
-/** The scope popup and, for keys this repository overrides, Reset to All Repositories (spec §6). */
-function ScopeRow({ keys }: { keys: readonly (readonly string[])[] }) {
+/** The scope popup (every setting below writes to that layer) and Reset to All Repositories for what this repository overrides (spec §6). */
+function ScopeRow() {
   const { root, scope, setScope, store } = usePane();
   const repoFile = useValue(() => store.layers$.repo.get()?.file ?? null);
   if (!root) return null;
-  const overridden = keys.filter(path => valueAt(repoFile, path) !== undefined);
+  const overridden = Object.keys(repoFile ?? {}).filter(key => !(fileOnlyKeys as readonly string[]).includes(key) || key === "extends").map(key => [key]);
   return <SettingsSection first title={null}>
     <SettingsRow align="center" title="Apply To" description={scope === "repo" ? root : "Every repository without its own value."} control={<View style={styles.inline}>
       <Select accessibilityLabel="Apply To" options={[{ label: "All Repositories", value: "user" }, { label: "This Repository", value: "repo" }]} value={scope} onValueChange={value => setScope(value as LayerId)} style={styles.select} />
@@ -73,9 +72,6 @@ function ScopeRow({ keys }: { keys: readonly (readonly string[])[] }) {
     </View>} />
   </SettingsSection>;
 }
-
-/** The first section after the scope popup gets the section gap; without a repository it is the page's first. */
-const useLead = () => !usePane().root;
 
 function ReadOnlyNote() {
   const { store, scope } = usePane();
@@ -98,7 +94,6 @@ function useAllIssues(): SettingsIssue[] {
 let lastUndo: ImportUndo | null = null;
 
 function GeneralPage() {
-  const lead = useLead();
   const pane = usePane();
   const { settings, store, scope, set, windowId } = pane;
   const issues = useAllIssues();
@@ -144,11 +139,12 @@ function GeneralPage() {
     runCommand({ target: { type: "command", name: "open" }, args: store.layerFile(scope).text === undefined ? [path.slice(0, path.lastIndexOf("/"))] : ["-R", "--", path], timeoutMs: 10_000 }).catch(console.error);
   }
 
-  return <SettingsPage>
-    <ScopeRow keys={[["extends"], ["appearance"], ["density"]]} />
+  return <>
+    <ScopeRow />
     <ReadOnlyNote />
-    <SettingsSection first={lead} title="Look">
-      <Choice title="Preset" description="The base every other setting starts from." value={extendsValue} options={presetIds.map(id => ({ label: layoutTitle(id), value: id }))} onChange={value => set(["extends"], value)} />
+    <SettingsSection first={!pane.root} title="Look">
+      <Choice title="Preset" description="The base every other setting starts from: layout, toolbar, sidebar, panels and theme." value={extendsValue} options={presetIds.map(id => ({ label: layoutTitle(id), value: id }))}
+        onChange={value => { choosePreset(store, scope, value as PresetId).catch(report(windowId, "Couldn’t Change the Preset")); }} />
       <Choice title="Appearance" value={settings.appearance} options={[{ label: "System", value: "system" }, { label: "Light", value: "light" }, { label: "Dark", value: "dark" }]} onChange={value => set(["appearance"], value)} />
       <Choice title="Density" description="Row heights in lists and the diff." value={settings.density} options={[{ label: "Compact", value: "compact" }, { label: "Regular", value: "regular" }, { label: "Comfortable", value: "comfortable" }]} onChange={value => set(["density"], value)} />
     </SettingsSection>
@@ -162,16 +158,10 @@ function GeneralPage() {
       <SettingsRow align="center" title="Reveal Settings File" description={store.paths[scope] ?? undefined} control={<Button onPress={reveal}>Show in Finder</Button>} />
     </SettingsSection>
     <SettingsSection title="Issues" description={issues.length ? "Problems in your settings files, and settings shown differently until macOS pieces land. Nothing here stops the app." : "No issues."}>
-      {issues.length ? <View style={styles.table}>
-        {issues.map((issue, index) => <View key={index} style={styles.tableRow}>
-          <Text style={[styles.cellLevel, issue.level === "error" ? styles.error : issue.level === "warning" ? styles.warningText : styles.secondary]}>{issue.level}</Text>
-          <Text style={styles.cellPath} selectable>{issue.path || "(file)"}</Text>
-          <Text style={styles.cellMessage} selectable>{issue.message}</Text>
-          <Text style={styles.cellFile}>{issue.file.split("/").pop()}</Text>
-        </View>)}
-      </View> : null}
+      {issues.length ? issues.map((issue, index) => <SettingsRow key={index} title={issue.path || "(file)"} description={`${issue.message} (${issue.file.split("/").pop()})`}
+        control={<Text style={issue.level === "error" ? styles.error : issue.level === "warning" ? styles.warningText : styles.secondary}>{titleCase(issue.level)}</Text>} />) : null}
     </SettingsSection>
-  </SettingsPage>;
+  </>;
 }
 
 // ── Layout ───────────────────────────────────────────────────────────────────
@@ -186,7 +176,6 @@ function Schematic({ node }: { node: LayoutNode }): ReactNode {
 }
 
 function LayoutPage() {
-  const lead = useLead();
   const { settings, store, set, windowId } = usePane();
   const base = useValue(store.base$);
   const layout = activeLayout(settings, base);
@@ -196,10 +185,8 @@ function LayoutPage() {
     const name = result.canceled ? "" : result.value.trim();
     if (name) await saveLayoutAs(store, settings, base, name, {});
   }
-  return <SettingsPage>
-    <ScopeRow keys={[["layout"]]} />
-    <ReadOnlyNote />
-    <SettingsSection first={lead} title="Layout" description="Divider positions are window state, kept per window; View ▸ Layout moves panes.">
+  return <>
+    <SettingsSection first title="Layout" description="Divider positions are window state, kept per window; View ▸ Layout moves panes.">
       <Choice title="Active Layout" value={settings.layout.active} options={names.map(name => ({ label: layoutTitle(name), value: name }))} onChange={value => set(["layout", "active"], value)} />
       <SettingsRow align="center" title="Save Layout As…" description="Copies the active layout into a named layout you can edit." control={<View style={styles.inline}>
         <Button onPress={() => { saveAs().catch(report(windowId, "Couldn’t Save the Layout")); }}>Save Layout As…</Button>
@@ -209,7 +196,7 @@ function LayoutPage() {
     {(["default", ...viewKinds] as const).filter(kind => kind === "default" || layout.views[kind]).map(kind => <SettingsSection key={kind} title={kind === "default" ? "Default View" : `${titleCase(kind)} View`}>
       <View style={styles.schematic}><Schematic node={(layout.views as Record<string, LayoutNode>)[kind]!} /></View>
     </SettingsSection>)}
-  </SettingsPage>;
+  </>;
 }
 
 // ── Panels (generated from the schema) ───────────────────────────────────────
@@ -241,16 +228,13 @@ function OptionRows({ path, node, value }: { path: string[]; node: JsonNode; val
 }
 
 function PanelsPage() {
-  const lead = useLead();
   const { settings } = usePane();
   const shown = panelIds.filter(id => id !== "empty");
-  return <SettingsPage>
-    <ScopeRow keys={[["panels"]]} />
-    <ReadOnlyNote />
-    {shown.map((panel, index) => <SettingsSection key={panel} first={index === 0 && lead} title={panelTitles[panel] ?? panel} description={panelSchemas()[panel]?.description}>
+  return <>
+    {shown.map((panel, index) => <SettingsSection key={panel} first={index === 0} title={panelTitles[panel] ?? panel} description={panelSchemas()[panel]?.description}>
       <OptionRows path={["panels", panel]} node={panelSchemas()[panel]!} value={settings.panels[panel as PanelId] as Record<string, unknown>} />
     </SettingsSection>)}
-  </SettingsPage>;
+  </>;
 }
 
 // ── Theme ────────────────────────────────────────────────────────────────────
@@ -280,7 +264,6 @@ function ColorRow({ title, path, value, appearance, onRemove }: { title: string;
 const fontFamilies = ["system-mono", "Menlo", "SF Mono", "Monaco", "Courier New", "JetBrains Mono", "Fira Code"];
 
 function ThemePage() {
-  const lead = useLead();
   const { settings, set } = usePane();
   const [appearance, setAppearance] = useState<Appearance>("light");
   const tokens = settings.theme[appearance];
@@ -288,10 +271,8 @@ function ThemePage() {
   const group = (key: "status" | "diff" | "refs") => Object.entries(tokens[key] as Record<string, string>).map(([name, value]) =>
     <ColorRow key={name} title={titleCase(name)} path={[...base, key, name]} value={value} appearance={appearance} />);
   const lanes = tokens.lanes;
-  return <SettingsPage>
-    <ScopeRow keys={[["theme"]]} />
-    <ReadOnlyNote />
-    <SettingsSection first={lead} title="Code Font" description="The UI font always follows macOS.">
+  return <>
+    <SettingsSection first title="Code Font" description="The UI font always follows macOS.">
       <Choice title="Font" value={settings.theme.fonts.code} options={[...new Set([...fontFamilies, settings.theme.fonts.code])].map(name => ({ label: name === "system-mono" ? "System Monospaced" : name, value: name }))} onChange={value => set(["theme", "fonts", "code"], value)} />
       <Choice title="Size" value={String(settings.theme.fonts.codeSize)} options={Array.from({ length: 13 }, (_, index) => String(index + 9)).map(size => ({ label: `${size} pt`, value: size }))} onChange={value => set(["theme", "fonts", "codeSize"], Number(value))} />
     </SettingsSection>
@@ -309,7 +290,7 @@ function ThemePage() {
       {lanes.map((value, index) => <ColorRow key={index} title={index === lanes.length - 1 ? "Overflow" : `Lane ${index + 1}`} path={[...base, "lanes"]} value={value} appearance={appearance}
         onRemove={lanes.length > 3 && index < lanes.length - 1 ? () => set([...base, "lanes"], lanes.filter((_, at) => at !== index)) : undefined} />)}
     </SettingsSection>
-  </SettingsPage>;
+  </>;
 }
 
 // ── Toolbar and context menus (list editors) ─────────────────────────────────
@@ -330,13 +311,13 @@ function ListEditor<Entry>({ zone, current, available, describe, onChange }: { z
   };
   return <DragDropProvider>
     <View style={styles.lists}>
-      <View style={styles.list}>
+      <SettingsCard className="flex-1 min-w-0 p-2">
         <Text style={styles.listTitle}>Available</Text>
         {available.map(entry => { const item = describe(entry); return <DraggableItem key={item.key} id={`${zone}-available-${item.key}`} zoneId={zone} dragOverlayMode="local" data={{ from: "available", entry } satisfies Drag}>
           <View style={styles.listRow}><Text style={styles.rowLabel} numberOfLines={1}>{item.label}</Text><Button variant="borderless" style={styles.rowButton} onPress={() => insert(entry, current.length)}>Add</Button></View>
         </DraggableItem>; })}
-      </View>
-      <View style={styles.list}>
+      </SettingsCard>
+      <SettingsCard className="flex-1 min-w-0 p-2">
         <Text style={styles.listTitle}>Current</Text>
         {current.map((entry, index) => { const item = describe(entry); return <DroppableZone key={`${index}-${item.key}`} allowDrop={() => true} onDrop={dropAt(index)}>
           <DraggableItem id={`${zone}-current-${index}-${item.key}`} zoneId={zone} dragOverlayMode="local" data={{ from: "current", index } satisfies Drag}>
@@ -349,7 +330,7 @@ function ListEditor<Entry>({ zone, current, available, describe, onChange }: { z
           </DraggableItem>
         </DroppableZone>; })}
         <DroppableZone allowDrop={() => true} onDrop={dropAt(current.length)}><View style={styles.dropEnd}><Text style={styles.secondary}>Drop here to add at the end</Text></View></DroppableZone>
-      </View>
+      </SettingsCard>
     </View>
   </DragDropProvider>;
 }
@@ -358,40 +339,34 @@ type ToolbarEntry = GitSettings["toolbar"]["items"][number];
 const toolbarKey = (entry: ToolbarEntry) => typeof entry === "string" ? entry : `${entry.command}:${entry.label ?? ""}`;
 
 function ToolbarPage() {
-  const lead = useLead();
   const { settings, set } = usePane();
   const { items, displayMode } = settings.toolbar;
   const available: ToolbarEntry[] = [...toolbarWidgets, ...commandIds.filter(id => (commandMeta[id] as CommandMeta).symbol)];
-  return <SettingsPage>
-    <ScopeRow keys={[["toolbar"]]} />
-    <ReadOnlyNote />
-    <SettingsSection first={lead} title="Toolbar" headerRight={<Button onPress={() => set(["toolbar", "items"], undefined)}>Reset to Preset</Button>}>
+  return <>
+    <SettingsSection first title="Toolbar" headerRight={<Button onPress={() => set(["toolbar", "items"], undefined)}>Reset to Preset</Button>}>
       <Choice title="Display" description="Spark's toolbar shows icons only for now (ask S2); labels show in tooltips." value={displayMode} options={[{ label: "Icon and Label", value: "iconAndLabel" }, { label: "Icon Only", value: "iconOnly" }, { label: "Label Only", value: "labelOnly" }]} onChange={value => set(["toolbar", "displayMode"], value)} />
     </SettingsSection>
     <SettingsSection title="Items" card={false}>
       <ListEditor<ToolbarEntry> zone="toolbar" current={items} available={available} onChange={next => set(["toolbar", "items"], next)}
         describe={entry => typeof entry === "string" ? { key: entry, label: widgetTitles[entry] ?? commandTitle(entry) } : { key: toolbarKey(entry), label: entry.label ?? commandTitle(entry.command) }} />
     </SettingsSection>
-  </SettingsPage>;
+  </>;
 }
 
 function MenusPage() {
-  const lead = useLead();
   const { settings, set } = usePane();
   const [target, setTarget] = useState<MenuTarget>("commit");
   const current = settings.contextMenus[target] ?? defaultContextMenus[target];
   const available: MenuEntry[] = ["separator", ...commandIds.filter(id => (commandMeta[id] as CommandMeta).targets?.includes(target))];
-  return <SettingsPage>
-    <ScopeRow keys={[["contextMenus"]]} />
-    <ReadOnlyNote />
-    <SettingsSection first={lead} title="Context Menus" headerRight={<Button onPress={() => set(["contextMenus", target], undefined)}>Reset Menu</Button>}>
+  return <>
+    <SettingsSection first title="Context Menus" headerRight={<Button onPress={() => set(["contextMenus", target], undefined)}>Reset Menu</Button>}>
       <Choice title="Menu" description="Entries that don't apply to what was clicked are left out when the menu opens." value={target} options={menuTargets.map(id => ({ label: titleCase(id), value: id }))} onChange={value => setTarget(value as MenuTarget)} />
     </SettingsSection>
     <SettingsSection title="Items" card={false}>
       <ListEditor<MenuEntry> zone={`menu-${target}`} current={current} available={available} onChange={next => set(["contextMenus", target], next)}
         describe={entry => typeof entry === "string" ? { key: entry, label: entry === "separator" ? "── Separator ──" : commandTitle(entry) } : { key: `submenu:${entry.submenu}`, label: `${entry.submenu} ▸ (${entry.items.length})` }} />
     </SettingsSection>
-  </SettingsPage>;
+  </>;
 }
 
 // ── Keyboard ─────────────────────────────────────────────────────────────────
@@ -411,8 +386,7 @@ function KeyboardPage() {
   const definitions = hotkeyDefinitions();
   const values = Object.fromEntries(definitions.map(definition => [definition.id, (settings.keybindings[definition.id] ?? definition.defaultBindings) as readonly string[]])) as Record<CommandId, readonly string[]>;
   const conflicts = resolveKeyBindings(settings.keybindings).issues;
-  return <View style={styles.grow}>
-    <View style={styles.keyboardScope}><ScopeRow keys={[["keybindings"]]} /></View>
+  return <View>
     {conflicts.length ? <Text style={styles.warning}>{conflicts.map(issue => issue.message).join("\n")}</Text> : null}
     <HotkeyBindingsSettingsContent<CommandId> definitions={definitions} values={values} showTitle={false}
       onChange={(id, next) => set(["keybindings", id], deepEqual([...next], [...definitions.find(definition => definition.id === id)!.defaultBindings]) ? undefined : [...next])}
@@ -444,7 +418,6 @@ async function runAI(pane: Pane) {
 }
 
 function AIPage() {
-  const lead = useLead();
   const pane = usePane();
   const { store, scope, windowId } = pane;
   const state = useValue(aiState$);
@@ -454,10 +427,8 @@ function AIPage() {
     aiState$.assign({ running: true, status: "Starting…", patch: null });
     runAI(pane).catch(error => aiState$.status.set(error instanceof Error ? error.message : String(error))).finally(() => aiState$.running.set(false));
   };
-  return <SettingsPage>
-    <ScopeRow keys={[]} />
-    <ReadOnlyNote />
-    <SettingsSection first={lead} title="Customize with AI" description="Describe the change. Your own Claude or Codex command-line tool writes a settings patch from Legend Git's settings reference; you see it live before anything is saved. This changes settings only; Customize App changes the app's code.">
+  return <>
+    <SettingsSection first title="Customize with AI" description="Describe the change. Your own Claude or Codex command-line tool writes a settings patch from Legend Git's settings reference; you see it live before anything is saved. This changes settings only; Customize App changes the app's code.">
       <SettingsRow title="Request" control={<TextInput key={state.fill} accessibilityLabel="Request" defaultValue={state.request} onChangeText={text => aiState$.request.set(text)} style={styles.prompt} />} />
       <Choice title="Examples" value="" options={[{ label: "Choose an Example…", value: "" }, ...examplePrompts.map(prompt => ({ label: prompt, value: prompt }))]} onChange={value => { if (value) aiState$.assign({ request: value, fill: aiState$.fill.peek() + 1 }); }} />
       <SettingsRow align="center" title={state.running ? "Working…" : "Generate"} description={state.status || undefined} control={<Button disabled={state.running || previewing || !state.request.trim()} onPress={generate}>Generate</Button>} />
@@ -469,7 +440,7 @@ function AIPage() {
         <Button onPress={() => { void dialogs().showMessage({ windowId, title: "AI Settings Changes", message: JSON.stringify(state.patch, null, 2) }).catch(console.error); }}>Show Changes</Button>
       </View>
     </SettingsSection> : null}
-  </SettingsPage>;
+  </>;
 }
 
 // ── Window ───────────────────────────────────────────────────────────────────
@@ -506,27 +477,21 @@ export function GitSettingsWindow() {
     store, settings, root: target.root, scope, setScope, windowId: settingsWindowId,
     set: (path, value) => { store.edit(scope, path, value).catch(report(settingsWindowId, "Couldn’t Change the Setting")); },
   } : null, [store, settings, scope, target.root]);
-  const content = pane ? pages : pages.map(page => ({ ...page, render: () => <View style={styles.grow} /> }));
+  const content = pane ? pages : pages.map(page => ({ ...page, render: () => null }));
+  // One scrolling list of every page's sections, like the other Legend apps' settings; the sidebar jumps to a page.
   return <PaneContext.Provider value={pane}>
-    <SettingsWindow<SettingsPageId> windowId={settingsWindowId} pages={content} selectedPageId={target.page} onSelectionChange={page => settingsTarget$.page.set(page)} />
+    <VirtualizedSettingsWindow<SettingsPageId> windowId={settingsWindowId} appearance={settings?.appearance ?? "system"} estimatedItemSize={900} pages={content} selectedPageId={target.page} onSelectionChange={page => settingsTarget$.page.set(page)} />
   </PaneContext.Provider>;
 }
 
 const label = PlatformColor("labelColor"), secondary = PlatformColor("secondaryLabelColor"), separator = PlatformColor("separatorColor");
 const styles = StyleSheet.create({
-  grow: { flex: 1 },
   inline: { flexDirection: "row", alignItems: "center", gap: 8 },
   select: { minWidth: 180 },
   secondary: { fontSize: 11, color: secondary },
   warning: { marginTop: 12, fontSize: 12, color: PlatformColor("systemOrangeColor") },
   warningText: { color: PlatformColor("systemOrangeColor") },
   error: { color: PlatformColor("systemRedColor") },
-  table: { borderWidth: StyleSheet.hairlineWidth, borderColor: separator, borderRadius: 6 },
-  tableRow: { flexDirection: "row", gap: 8, paddingHorizontal: 8, paddingVertical: 4, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: separator },
-  cellLevel: { width: 52, fontSize: 11 },
-  cellPath: { width: 180, fontSize: 11, fontFamily: "Menlo", color: label },
-  cellMessage: { flex: 1, fontSize: 11, color: label },
-  cellFile: { width: 110, fontSize: 11, color: secondary, textAlign: "right" },
   schematic: { height: 160, padding: 8 },
   split: { flex: 1, gap: 3 },
   box: { flex: 1, borderWidth: 1, borderColor: separator, borderRadius: 4, alignItems: "center", justifyContent: "center", padding: 2 },
@@ -535,12 +500,10 @@ const styles = StyleSheet.create({
   colorField: { width: 190 },
   prompt: { width: 320 },
   lists: { flexDirection: "row", gap: 12 },
-  list: { flex: 1, minWidth: 0, borderWidth: StyleSheet.hairlineWidth, borderColor: separator, borderRadius: 6, padding: 6 },
   listTitle: { fontSize: 12, fontWeight: "600", color: secondary, marginBottom: 4 },
   listRow: { flexDirection: "row", alignItems: "center", gap: 4, minHeight: 26 },
   rowLabel: { flex: 1, minWidth: 0, fontSize: 13, color: label },
   rowButton: { width: 48, flexShrink: 0 },
   rowButtonWide: { width: 68, flexShrink: 0 },
-  keyboardScope: { paddingTop: 56, paddingHorizontal: 32, marginBottom: -28 },
   dropEnd: { minHeight: 28, alignItems: "center", justifyContent: "center" },
 });

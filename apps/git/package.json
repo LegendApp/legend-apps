@@ -16,6 +16,7 @@
     "zod": "^4.6.7",
     "@legendapp/state": "catalog:",
     "@legend-apps/reorder-controls": "workspace:*",
-    "@legend-apps/color-picker": "workspace:*"
+    "@legend-apps/color-picker": "workspace:*",
+    "@legend-apps/design-system": "workspace:*"
   }
 }
