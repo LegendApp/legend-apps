@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Fragment, useMemo } from "react";
 import { View } from "react-native";
 
+import { MusicSplitView } from "../components/MusicSplitView";
 import { Panel, PanelGroup, ResizeHandle } from "../components/ResizablePanels";
 import { getMusicLayoutLeafDefinition } from "./MusicLayoutRegistry";
 import type { MusicLayoutNode } from "./MusicLayoutState";
@@ -48,6 +49,18 @@ function renderChildren(children: MusicLayoutNode[] | undefined, context: MusicL
     ));
 }
 
+function HorizontalSplit({ context, node, path }: RenderNodeProps) {
+    const children = node.children ?? [];
+    if (children.length < 2) return <>{renderChildren(children, context, path)}</>;
+    const panelId = getPanelId(path, children[0], 0);
+    return <MusicSplitView id={panelId}
+        sidebar={<RenderNode context={context} node={children[0]} path={panelId} />}
+        content={children.length === 2
+            ? <RenderNode context={context} node={children[1]} path={getPanelId(path, children[1], 1)} />
+            : <HorizontalSplit context={context} node={{ ...node, children: children.slice(1) }} path={`${path}.rest`} />}
+    />;
+}
+
 function RenderNode({ context, node, path }: RenderNodeProps) {
     if (node.type === "stack") {
         const isHorizontal = node.direction === "horizontal";
@@ -59,6 +72,7 @@ function RenderNode({ context, node, path }: RenderNodeProps) {
     }
 
     if (node.type === "split") {
+        if (node.direction === "horizontal") return <HorizontalSplit context={context} node={node} path={path} />;
         const children = node.children ?? [];
         return (
             <PanelGroup direction={node.direction} className="flex-1 min-h-0 min-w-0">
