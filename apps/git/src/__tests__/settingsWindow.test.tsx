@@ -66,6 +66,16 @@ describe("Settings window", () => {
     expect(named(renderer, "SegmentedControl", props => props.accessibilityLabel !== "Appearance")).toEqual([]);
   });
 
+  it("lists a value the generated choices don't have, so every popup's value is one of its options (Spark's Select throws otherwise)", async () => {
+    const renderer = await renderWindow();
+    const preset = named(renderer, "Select", props => props.accessibilityLabel === "Preset")[0]!;
+    await act(async () => { preset.props.onValueChange("fork"); await new Promise(resolve => setTimeout(resolve, 0)); });
+    const selects = named(renderer, "Select");
+    expect(selects.length).toBeGreaterThan(20);
+    for (const select of selects) expect((select.props.options as { value: string }[]).map(option => option.value)).toContain(select.props.value);
+    expect(named(renderer, "Select", props => props.accessibilityLabel === "Line Width")[0]!.props.value).toBe("1.5");
+  });
+
   it("the Preset popup writes the preset and the window switches to it", async () => {
     const renderer = await renderWindow();
     const preset = named(renderer, "Select", props => props.accessibilityLabel === "Preset")[0]!;

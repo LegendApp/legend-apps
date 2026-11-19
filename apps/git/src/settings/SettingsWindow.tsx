@@ -52,7 +52,9 @@ const titleCase = (key: string) => key.replace(/([A-Z])/g, " $1").replace(/^./, 
 // ── Shared rows ──────────────────────────────────────────────────────────────
 
 function Choice({ title, description, value, options, onChange }: { title: string; description?: string; value: string; options: readonly { label: string; value: string }[]; onChange(value: string): void }) {
-  return <SettingsRow align="center" title={title} description={description} control={<Select accessibilityLabel={title} options={options} value={value} onValueChange={onChange} style={styles.select} />} />;
+  // Spark's Select throws on a value it doesn't list; a file can hold one (Fork's 1.5 pt line width), so it is listed as is.
+  const listed = options.some(option => option.value === value) ? options : [...options, { label: value, value }];
+  return <SettingsRow align="center" title={title} description={description} control={<Select accessibilityLabel={title} options={listed} value={value} onValueChange={onChange} style={styles.select} />} />;
 }
 
 function Toggle({ title, description, value, onChange }: { title: string; description?: string; value: boolean; onChange(value: boolean): void }) {
