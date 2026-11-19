@@ -67,6 +67,10 @@ jest.mock("@legendapp/spark/ui/sidebar", () => {
 });
 jest.mock("@legendapp/spark/ui/split-view", () => ({
   SidebarSplitView: ({ sidebar, list, content }: any) => <>{sidebar}{list}{content}</>,
+  SplitView: ({ panes }: { panes: readonly { id: string; content: import("react").ReactNode }[] }) => {
+    const { Fragment } = require("react");
+    return <>{panes.map(pane => <Fragment key={pane.id}>{pane.content}</Fragment>)}</>;
+  },
 }));
 // Settings and window state files, in memory (the layout tests cover their contents).
 jest.mock("@legendapp/spark/files", () => {
@@ -913,12 +917,23 @@ it("starts the sidebar at the width saved in the settings file and saves a dragg
     const split = () => renderer.root.findByType(SidebarSplitView);
     expect(split().props.sidebarWidth).toBe(264);
     await act(async () => {
-      split().props.onResize({ phase: "provisional", sidebarWidth: 300 });
-      split().props.onResize({ phase: "ready", sidebarWidth: 287.6 });
-      await new Promise(resolve => setTimeout(resolve, 400));
+      split().props.onResize({ phase: "provisional", sidebarWidth: 190, contentWidth: 810 });
+      split().props.onResize({ phase: "ready", sidebarWidth: 250, contentWidth: 750 });
+      split().props.onResize({ phase: "ready", sidebarWidth: 264, contentWidth: 836 });
+      await new Promise(resolve => setTimeout(resolve, 350));
+    });
+    expect(JSON.parse(await files.readText("/data/settings.json")).layout.sizes.sourcetree.sidebar).toEqual([264]);
+    await act(async () => {
+      split().props.onResize({ phase: "ready", sidebarWidth: 287.6, contentWidth: 812.4 });
+      await new Promise(resolve => setTimeout(resolve, 350));
     });
     expect(JSON.parse(await files.readText("/data/settings.json")).layout.sizes.sourcetree.sidebar).toEqual([288]);
     expect(split().props.sidebarWidth).toBe(288);
+    const dragged = split();
+    await act(async () => { lastMenu().onAction({ itemId: "layout:reset" }); });
+    expect(split()).not.toBe(dragged);
+    expect(split().props.sidebarWidth).toBe(220);
+    expect(JSON.parse(await files.readText("/data/settings.json")).layout?.sizes?.sourcetree).toBeUndefined();
   } finally {
     await act(async () => { renderer?.unmount(); });
     await files.writeText("/data/settings.json", JSON.stringify({ version: 1 }));

@@ -2,11 +2,11 @@ import type { MenuItem } from "@legendapp/spark/menus";
 import { activeLayout, isPresetId, presetFiles, viewFor } from "../settings/presets";
 import type { GitSettings, LayoutNode, PresetId, ViewKind } from "../settings/schema";
 import type { GitSettingsStore } from "../settings/store";
-import { activeLayoutName, layoutChoices, layoutSnapshot, movePane, viewKey, type MoveDirection } from "./plan";
+import { activeLayoutName, activePaneSizes, layoutChoices, layoutSnapshot, movePane, viewKey, type MoveDirection } from "./plan";
 import type { PaneSizeWriter } from "./paneSizes";
 import type { WindowStateStore } from "./windowState";
 
-type LayoutState = { settings: GitSettings; base: PresetId; store: GitSettingsStore | null; windowState: WindowStateStore | null; paneSizes?: Pick<PaneSizeWriter, "cancel"> };
+type LayoutState = { settings: GitSettings; base: PresetId; store: GitSettingsStore | null; windowState: WindowStateStore | null; paneSizes?: Pick<PaneSizeWriter, "cancel" | "flush"> };
 
 const directions: { id: MoveDirection; label: string }[] = [{ id: "left", label: "Left" }, { id: "right", label: "Right" }, { id: "up", label: "Up" }, { id: "down", label: "Down" }];
 export const panelTitles: Record<string, string> = {
@@ -43,7 +43,7 @@ export function layoutMenu(state: LayoutState, kind: ViewKind, focused: string):
 }
 
 /** Runs a `layout:` menu item: every change is an edit of the user settings file (or, for sizes, of window state). */
-export async function runLayoutAction(itemId: string, { windowId, layout, kind, focused }: { windowId: string; layout: LayoutState; kind: ViewKind; focused: string }) {
+export async function runLayoutAction(itemId: string, { windowId, layout, kind, focused, onReset }: { windowId: string; layout: LayoutState; kind: ViewKind; focused: string; onReset?: () => void }) {
   const { store, settings, base, windowState } = layout;
   if (!store) return;
   const active = activeLayoutName(settings, base);
@@ -54,7 +54,13 @@ export async function runLayoutAction(itemId: string, { windowId, layout, kind, 
       const { showPrompt } = require("@legendapp/spark/dialogs") as typeof import("@legendapp/spark/dialogs");
       const result = await showPrompt({ windowId, title: "Save Layout As", message: "The current arrangement and sidebar width are saved in your settings file.", placeholder: "Layout name", confirmLabel: "Save" });
       const name = result.canceled ? "" : result.value.trim();
-      if (name) await saveLayoutAs(store, settings, base, name, windowState?.get() ?? {});
+      if (name) {
+        await layout.paneSizes?.flush();
+        const latest = store.settings$.peek();
+        const latestBase = store.base$.peek();
+        const state = windowState?.get();
+        await saveLayoutAs(store, latest, latestBase, name, { ...state, sidebarWidth: activePaneSizes(latest, latestBase).sidebar?.[0] ?? state?.sidebarWidth });
+      }
     } else if (itemId === "layout:reset") {
       windowState?.reset();
       layout.paneSizes?.cancel();
@@ -62,6 +68,7 @@ export async function runLayoutAction(itemId: string, { windowId, layout, kind, 
       // A preset's layout drops the user's edits to it; a saved layout stays saved and the window goes back to the base preset.
       if (isPresetId(active)) await store.edit("user", ["layout", "layouts", active], undefined);
       else await store.edit("user", ["layout", "active"], undefined);
+      onReset?.();
     } else if (itemId.startsWith("layout:move:")) {
       const moved = movedView(layout, kind, focused, itemId.slice("layout:move:".length) as MoveDirection);
       if (!moved) return;

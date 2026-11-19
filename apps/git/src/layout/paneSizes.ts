@@ -5,6 +5,13 @@ import { activeLayoutName } from "./plan";
 /** A divider drag: `path` is a split's `sizeKey` (or `sidebar`), `sizes` its panes' sizes in points along the axis. */
 export type PaneResize = (path: string, sizes: readonly number[]) => void;
 
+// Spark also reports initial layout and window resizes. A divider transfers space within the same extent.
+export function isDividerResize(before: readonly number[] | undefined, sizes: readonly number[]): boolean {
+  return !!before && before.length === sizes.length
+    && Math.abs(sizes.reduce((change, size, index) => change + size - before[index]!, 0)) < 0.5
+    && sizes.some((size, index) => Math.round(size) !== Math.round(before[index]!));
+}
+
 export type PaneSizeWriter = {
   onPaneResize: PaneResize;
   /** Writes pending sizes now. */
@@ -25,19 +32,27 @@ export function createPaneSizeWriter({ store, current, debounceMs = 300 }: {
 }): PaneSizeWriter {
   const pending = new Map<string, { layout: string; sizes: number[] }>();
   let timer: ReturnType<typeof setTimeout> | null = null;
-  const flush = async () => {
+  let generation = 0;
+  let writes = Promise.resolve();
+  const flush = () => {
     if (timer) clearTimeout(timer);
     timer = null;
     const target = store();
     const entries = [...pending.entries()];
     pending.clear();
-    if (!target) return;
-    for (const [key, { layout, sizes }] of entries) {
-      const path = key.slice(layout.length + 1);
-      const saved = current().settings.layout.sizes?.[layout]?.[path];
-      if (saved && saved.length === sizes.length && saved.every((size, index) => size === sizes[index])) continue;
-      await target.edit("user", ["layout", "sizes", layout, path], sizes);
-    }
+    if (!target || !entries.length) return writes;
+    const started = generation;
+    const run = writes.then(async () => {
+      for (const [key, { layout, sizes }] of entries) {
+        if (started !== generation) break;
+        const path = key.slice(layout.length + 1);
+        const saved = current().settings.layout.sizes?.[layout]?.[path];
+        if (saved && saved.length === sizes.length && saved.every((size, index) => size === sizes[index])) continue;
+        await target.edit("user", ["layout", "sizes", layout, path], sizes);
+      }
+    });
+    writes = run.catch(() => {});
+    return run;
   };
   return {
     onPaneResize(path, sizes) {
@@ -50,6 +65,7 @@ export function createPaneSizeWriter({ store, current, debounceMs = 300 }: {
     },
     flush,
     cancel() {
+      generation++;
       if (timer) clearTimeout(timer);
       timer = null;
       pending.clear();

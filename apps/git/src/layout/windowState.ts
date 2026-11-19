@@ -1,15 +1,13 @@
 import type { SettingsIO } from "../settings/store";
 import { isPlainObject } from "../settings/validate";
 
-/** What the window remembers that is not a setting (spec §3.1): dragged divider positions, the collapsed sidebar and which sidebar sections are expanded. */
+/** What the window remembers that is not a setting (spec §3.1): the collapsed sidebar and which sidebar sections are expanded. */
 export type WindowState = { sidebarWidth?: number; sidebarCollapsed?: boolean; sections?: Record<string, boolean> };
 
 export type WindowStateStore = {
   /** Resolves with the saved state (empty when there is none or it is unreadable). */
   ready: Promise<WindowState>;
   get(): WindowState;
-  /** A SidebarSplitView resize: only `ready` metrics are kept, never the provisional ones of a drag in progress. */
-  onResize(event: { phase: "provisional" | "ready"; sidebarWidth: number }): void;
   setSidebarCollapsed(collapsed: boolean): void;
   /** Remembers a sidebar section expanded or collapsed by the user. */
   setSectionExpanded(id: string, expanded: boolean): void;
@@ -55,11 +53,6 @@ export function createWindowStateStore({ io, directory, windowId, debounceMs = 3
   return {
     ready,
     get: () => ({ ...state }),
-    onResize(event) {
-      // A collapsed sidebar reports width 0; the width to restore is the one before it collapsed.
-      if (event.phase !== "ready" || event.sidebarWidth <= 0) return;
-      change({ ...state, sidebarWidth: Math.round(event.sidebarWidth) });
-    },
     setSidebarCollapsed: collapsed => change({ ...state, sidebarCollapsed: collapsed }),
     setSectionExpanded: (id, expanded) => { if (state.sections?.[id] !== expanded) change({ ...state, sections: { ...state.sections, [id]: expanded } }); },
     reset: () => change({}),

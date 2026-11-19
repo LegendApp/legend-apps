@@ -113,7 +113,7 @@
                   "type": "panel",
                   "panel": "composer"
                 },
-                "size": 120,
+                "size": 180,
                 "minSize": 96,
                 "collapsible": true
               }

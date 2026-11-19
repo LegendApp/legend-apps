@@ -6,13 +6,12 @@ export type SwitchCondition = (typeof switchConditions)[number];
 export type LayoutConditions = Partial<Record<SwitchCondition, boolean>>;
 
 /**
- * What a pane renders: one panel instance, or panes along one axis with fixed sizes (D3 interim: no dividers inside the
- * content). A split's `sizeKey` names it in `layout.sizes.<layout>` and each child's `index` is its pane in the
- * layout tree, so sizes stay with their panes when a pane the view can't show is left out.
+ * A split's `sizeKey` names it in `layout.sizes.<layout>`. Each child's `index` is its original position,
+ * so another pane's saved size stays in place when the view hides that pane.
  */
 export type RenderPlan =
   | { type: "panel"; id: string; panel: PanelId; options?: Record<string, unknown> }
-  | { type: "split"; direction: "row" | "column"; sizeKey: string; children: { plan: RenderPlan; index: number; size?: number; minSize?: number; maxSize?: number }[] };
+  | { type: "split"; direction: "row" | "column"; sizeKey: string; savedSizes?: readonly number[]; children: { plan: RenderPlan; index: number; size?: number; minSize?: number; maxSize?: number }[] };
 
 /** Pane sizes from the settings file, by split path (`layout.sizes.<layout>`). */
 export type PaneSizes = Readonly<Record<string, readonly number[]>>;
@@ -45,15 +44,18 @@ export function renderPlan(node: LayoutNode, conditions: LayoutConditions, avail
   const children = node.children.flatMap((child, index) => {
     const plan = renderPlan(child.node, conditions, available, sizes, `${path}.${index}`);
     if (!plan) return [];
-    // A saved size replaces a pane's fixed size; a pane without one keeps sharing the rest (it takes a window resize).
-    const own = saved?.[index];
-    return [{ plan, index, ...pick(child), ...child.size !== undefined && typeof own === "number" && Number.isFinite(own) ? { size: own } : {} }];
+    return [{ plan, index, ...pick(child) }];
   });
   if (children.length === 0) return null;
   if (children.length === 1) return children[0]!.plan;
-  // The last pane flexes when every pane has a size, so the content always fills the window.
-  if (children.every(child => child.size !== undefined)) delete children.at(-1)!.size;
-  return { type: "split", direction: node.direction, sizeKey: path, children };
+  const lastFlexible = children.map(child => child.size).lastIndexOf(undefined);
+  const flexible = lastFlexible < 0 ? children.length - 1 : lastFlexible;
+  children.forEach((child, index) => {
+    const size = saved?.[child.index];
+    if (index === flexible) delete child.size;
+    else if (typeof size === "number" && Number.isFinite(size) && size > 0) child.size = size;
+  });
+  return { type: "split", direction: node.direction, sizeKey: path, children, ...children.length < node.children.length && saved ? { savedSizes: saved } : {} };
 }
 
 const pick = ({ size, minSize, maxSize }: SplitChild) => ({ ...size !== undefined ? { size } : {}, ...minSize !== undefined ? { minSize } : {}, ...maxSize !== undefined ? { maxSize } : {} });
@@ -74,8 +76,9 @@ export const activePaneSizes = (settings: GitSettings, base: PresetId): PaneSize
 
 /** The plan for a window: the active layout's tree for `kind` at its saved sizes, else the fallback, else a blank pane. */
 export function windowPlan(settings: GitSettings, base: PresetId, kind: ViewKind, conditions: LayoutConditions, available: (panel: PanelId) => boolean): RenderPlan {
-  return renderPlan(viewFor(activeLayout(settings, base), kind), conditions, available, activePaneSizes(settings, base), viewKey(settings, base, kind))
-    ?? renderPlan(fallbackTree, conditions, available, {}, "fallback")
+  const sizes = activePaneSizes(settings, base);
+  return renderPlan(viewFor(activeLayout(settings, base), kind), conditions, available, sizes, viewKey(settings, base, kind))
+    ?? renderPlan(fallbackTree, conditions, available, sizes, "fallback")
     ?? { type: "panel", id: "empty", panel: "empty" };
 }
 

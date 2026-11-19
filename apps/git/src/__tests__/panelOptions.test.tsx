@@ -8,6 +8,7 @@ import { FileRow } from "../FileRow";
 import { fileListRows } from "../fileList";
 import { applyColumnMenu, columnMenuItems, CommitFiles, dividerTarget, formatCommitDate, graphColumns, HistoryList, laneColor, resizeColumn, visibleColumns, visibleRefs } from "../HistoryView";
 import { diffMenu, runDiffAction } from "../layout/diffMenu";
+import type { SplitViewProps } from "@legendapp/spark/ui/split-view";
 import { LayoutHost } from "../layout/LayoutHost";
 import { capabilityIssues } from "../settings/capabilities";
 import { defaultSettings } from "../settings/defaults";
@@ -33,6 +34,12 @@ jest.mock("@legendapp/list/react-native", () => ({
     data.map(item => { const { Fragment, createElement } = jest.requireActual("react"); return createElement(Fragment, { key: keyExtractor(item) }, renderItem({ item })); }),
 }));
 jest.mock("@legendapp/spark/ui", () => ({ Button: "Button" }));
+jest.mock("@legendapp/spark/ui/split-view", () => {
+  const { Fragment } = require("react");
+  return {
+    SplitView: ({ panes }: SplitViewProps) => <>{panes.map(pane => <Fragment key={pane.id}>{pane.content}</Fragment>)}</>,
+  };
+});
 jest.mock("@legendapp/spark/ui/sidebar", () => ({ Sidebar: "Sidebar", SidebarItem: "SidebarItem" }));
 jest.mock("@legendapp/spark/ui/symbol", () => ({ SFSymbol: "SFSymbol" }));
 jest.mock("@legendapp/spark/files", () => ({ watch: jest.fn(async () => ({ remove: async () => {} })) }));

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from "react";
-import { PlatformColor, StyleSheet, Text, View } from "react-native";
+import { PlatformColor, ScrollView, StyleSheet, Text, View } from "react-native";
 import { watchDirectories } from "@legend-apps/file-system-watcher";
 import { GitBranchNotMergedError, GitLocalChangesError, GitPullDivergedError, GitPushedCommitsError, GitPushRejectedError, GitServiceError, GitStashDropError, type GitConflictFile, type GitInteractiveRebasePlan, type GitTodoEntry, type GitConflictSide, type GitRefList, type GitStash, type GitStatusEntry } from "@legend-apps/git-core";
 import { Button } from "@legendapp/spark/ui";
@@ -10,7 +10,8 @@ import { LayoutHost, type PanelRenderers } from "./layout/LayoutHost";
 import { DiffDocumentCacheContext } from "./layout/diffDocuments";
 import { layoutMenu, runLayoutAction } from "./layout/layoutMenu";
 import { diffMenu, runDiffAction } from "./layout/diffMenu";
-import { activePaneSizes, planPanels, viewKindFor, windowPlan, type LayoutConditions } from "./layout/plan";
+import { activeLayoutName, activePaneSizes, planPanels, viewKindFor, windowPlan, type LayoutConditions } from "./layout/plan";
+import { isDividerResize } from "./layout/paneSizes";
 import { useWindowLayout } from "./layout/useWindowLayout";
 import type { PanelId } from "./settings/schema";
 import { activeLayout } from "./settings/presets";
@@ -61,6 +62,8 @@ const contentInset = 52;
 /** The main window, or (with `initialPath`) a window opened for one worktree, titled `<repoName> — <branch>`. */
 export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindowProps = {}) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [layoutRevision, setLayoutRevision] = useState(0);
+  const sidebarMetrics = useRef<{ layout: string; requested: number; sizes: readonly [number, number] } | null>(null);
   const [changes, setChanges] = useState(emptyChanges);
   const changesRef = useRef(changes);
   changesRef.current = changes;
@@ -125,7 +128,10 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
     setExpandedSections(current => ({ ...current, [id]: expanded }));
     layout.windowState?.setSectionExpanded(id, expanded);
   };
-  useEffect(() => { if (layoutReady) layout.windowState?.setSidebarCollapsed(sidebarCollapsed); }, [sidebarCollapsed, layoutReady, layout.windowState]);
+  const changeSidebarCollapsed = (collapsed: boolean) => {
+    setSidebarCollapsed(collapsed);
+    layout.windowState?.setSidebarCollapsed(collapsed);
+  };
   const operation = root ? changes.operation : null;
   // Git prepared a message (MERGE_MSG) that concludes the operation as one commit.
   const preparedMessage = operation?.kind === "merge" || operation?.kind === "cherry-pick" || operation?.kind === "revert";
@@ -920,7 +926,7 @@ Rebase anyway?`,
         const message = preparedMessage ? editedMergeMessage.current?.() : null;
         void (message ? controller.current?.commit({ message }) : controller.current?.continueOperation(operation.kind));
       },
-      toggleSidebar: () => setSidebarCollapsed(value => !value),
+      toggleSidebar: () => changeSidebarCollapsed(!sidebarCollapsed),
       showSection: setSection,
       refresh: () => { void controller.current?.refresh(); void historyController.current?.refresh(); void pullsController.current?.refresh(); },
       copySha: oid => { setStringAsync(oid).catch(console.error); },
@@ -1294,7 +1300,10 @@ Rebase anyway?`,
     };
     registerMenuRunner(windowId, itemId => {
       if (disposed) return;
-      if (itemId.startsWith("layout:")) void runLayoutAction(itemId, { windowId, layout: layoutRef.current, kind: viewKindFor(contextRef.current.section), focused: focusedPanel.current });
+      if (itemId.startsWith("layout:")) void runLayoutAction(itemId, {
+        windowId, layout: layoutRef.current, kind: viewKindFor(contextRef.current.section), focused: focusedPanel.current,
+        onReset: () => setLayoutRevision(value => value + 1),
+      });
       else if (itemId.startsWith("diff:")) { const store = layoutRef.current.store; if (store) runDiffAction(itemId, store).catch(console.error); }
       else if (itemId === "settings" || itemId === "customize-toolbar") openSettingsWindow(rootRef.current, itemId === "settings" ? undefined : "toolbar").catch(console.error);
       else runCommand(itemId, contextRef.current);
@@ -1406,7 +1415,7 @@ Rebase anyway?`,
     unstaged: () => listPanel(unstagedList),
     staged: () => listPanel(stagedList),
     changes: () => listPanel(<>{unstagedList}{stagedList}</>),
-    composer: () => listPanel(composer),
+    composer: () => listPanel(<ScrollView>{composer}</ScrollView>),
     // Shown only while Changes is: the hidden copy keeps the composer, not a second diff or graph.
     diff: () => changesActive ? changesDetail : null,
     commitList: ({ id }) => changesActive ? listPanel(historyList(id)) : null,
@@ -1455,10 +1464,12 @@ Rebase anyway?`,
     commitSelected: !!(queueBranch ? history.selectedOid : selectedCommit), operationInProgress: !!operation,
   };
   const focusPanel = (id: string) => { focusedPanel.current = id; setFocusedPanelId(id); };
+  const activeLayoutId = activeLayoutName(layout.settings, layout.base);
+  const sidebarLayout = `${activeLayoutId}:${layoutRevision}`;
   const activeSidebar = activeLayout(layout.settings, layout.base).sidebar;
   // Spark throws when the width is below the minimum; a remembered width or a settings file can be.
   const sidebarMinWidth = activeSidebar?.minWidth ?? 180;
-  const sidebarWidth = Math.max(activePaneSizes(layout.settings, layout.base).sidebar?.[0] ?? layout.initialState?.sidebarWidth ?? activeSidebar?.width ?? 220, sidebarMinWidth);
+  const sidebarWidth = Math.max(activePaneSizes(layout.settings, layout.base).sidebar?.[0] ?? layout.windowState?.get().sidebarWidth ?? activeSidebar?.width ?? 220, sidebarMinWidth);
   const settingsContext = useMemo(() => ({ settings$: layout.settings$, store: layout.store }), [layout.settings$, layout.store]);
   const changesPlan = windowPlan(layout.settings, layout.base, "changes", changesConditions, has(changesPanels));
   // A layout that shows the graph in Changes (GitKraken) needs HEAD's log loaded, as History does.
@@ -1514,17 +1525,24 @@ Rebase anyway?`,
     {/* The window's own background behind the panes: the source list's glass material shows what is behind it, and
         Spark's root material is clear, so without it the sidebar showed the desktop (white in a dark window). */}
     {layoutReady ? <View style={styles.window}><SidebarSplitView
+      key={layoutRevision}
       appearance={layout.settings.appearance}
       style={styles.root}
       sidebarWidth={sidebarWidth}
       sidebarMinWidth={sidebarMinWidth}
       contentMinWidth={480}
       sidebarCollapsed={sidebarCollapsed}
-      onSidebarCollapsedChange={setSidebarCollapsed}
+      onSidebarCollapsedChange={changeSidebarCollapsed}
       onResize={event => {
-        layout.windowState?.onResize(event);
-        // Only the width a drag ends at; a collapsed sidebar reports 0.
-        if (event.phase === "ready" && event.sidebarWidth > 0 && Math.round(event.sidebarWidth) !== sidebarWidth) layout.paneSizes.onPaneResize("sidebar", [event.sidebarWidth]);
+        if (event.phase !== "ready") return;
+        const sizes = [event.sidebarWidth, event.contentWidth] as const;
+        const before = sidebarMetrics.current;
+        sidebarMetrics.current = { layout: sidebarLayout, requested: sidebarWidth, sizes };
+        if (before?.layout === sidebarLayout && before.sizes[0] > 0 && event.sidebarWidth > 0
+          && (before.requested === sidebarWidth || Math.round(before.sizes[0]) === sidebarWidth)
+          && Math.round(event.sidebarWidth) !== sidebarWidth && isDividerResize(before.sizes, sizes)) {
+          layout.paneSizes.onPaneResize("sidebar", [event.sidebarWidth]);
+        }
       }}
       titleBar={{ content: { height: contentInset, material: "titlebar" } }}
       sidebar={
@@ -1564,9 +1582,9 @@ Rebase anyway?`,
             <DiffDocumentCacheContext.Provider value={layout.documents}>
               {/* Changes stays mounted (hidden) in other sections so the commit message draft and a running generation survive a switch. */}
               <View style={[styles.root, kind !== "changes" && styles.hidden]}>
-                <LayoutHost plan={changesPlan} panels={changesPanels} onFocusPanel={focusPanel} onPaneResize={layout.paneSizes.onPaneResize} />
+                <LayoutHost key={activeLayoutId} plan={changesPlan} panels={changesPanels} onFocusPanel={focusPanel} onPaneResize={layout.paneSizes.onPaneResize} />
               </View>
-              {kind !== "changes" ? <LayoutHost plan={windowPlan(layout.settings, layout.base, kind, sectionConditions, has(sectionPanels))} panels={sectionPanels} onFocusPanel={focusPanel} onPaneResize={layout.paneSizes.onPaneResize} /> : null}
+              {kind !== "changes" ? <LayoutHost key={activeLayoutId} plan={windowPlan(layout.settings, layout.base, kind, sectionConditions, has(sectionPanels))} panels={sectionPanels} onFocusPanel={focusPanel} onPaneResize={layout.paneSizes.onPaneResize} /> : null}
             </DiffDocumentCacheContext.Provider>
           </View>
             : changes.loading ? <EmptyState title="Opening Repository…" />

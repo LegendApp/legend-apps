@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { SplitView, type SplitViewProps } from "@legendapp/spark/ui/split-view";
 import { act, create } from "react-test-renderer";
 import { loadUnifiedDiff } from "@legend-apps/diff-parser";
 import { DiffPane } from "../DiffPane";
@@ -24,6 +25,12 @@ jest.mock("@legend-apps/diff-parser", () => ({
 }));
 jest.mock("@legendapp/list/react-native", () => ({ LegendList: "LegendList" }));
 jest.mock("@legendapp/spark/ui", () => ({ Button: "Button" }));
+jest.mock("@legendapp/spark/ui/split-view", () => {
+  const { Fragment } = require("react");
+  return {
+    SplitView: ({ panes }: SplitViewProps) => <>{panes.map(pane => <Fragment key={pane.id}>{pane.content}</Fragment>)}</>,
+  };
+});
 jest.mock("@legendapp/spark/ui/symbol", () => ({ SFSymbol: "SFSymbol" }));
 jest.mock("@legendapp/spark/files", () => ({ watch: jest.fn(async () => ({ remove: async () => {} })) }));
 
@@ -149,6 +156,56 @@ describe("pane sizes", () => {
     expect(JSON.stringify(windowPlan(fork, "sourcetree", "history", {}, all))).not.toContain("\"size\":10");
   });
 
+  it("passes saved sizes and constraints to nested Spark panes and persists divider moves by split path", async () => {
+    const plan = windowPlan(withSizes({ default: [420, 900], "default.1": [280.5, 700], "default.1.0": [180, 400] }), "sourcetree", "history", {}, all);
+    const onPaneResize = jest.fn();
+    let renderer!: ReturnType<typeof create>;
+    await act(async () => { renderer = create(<LayoutHost plan={plan} panels={{}} onPaneResize={onPaneResize} />); });
+    const [top, row, left] = renderer.root.findAllByType(SplitView).map(split => split.props as SplitViewProps);
+    expect(top).toMatchObject({ orientation: "vertical", dividerStyle: "thin", panes: [
+      { id: JSON.stringify(["panel", "commitList"]), initialSize: 420, minSize: 160 },
+      { id: JSON.stringify(["split", "commitDetails", "diff", "fileList"]) },
+    ] });
+    expect(row).toMatchObject({ orientation: "horizontal", panes: [
+      { initialSize: 280.5, minSize: 240 },
+      { id: JSON.stringify(["panel", "diff"]), minSize: 400 },
+    ] });
+    expect(left.panes.map(pane => [pane.id, pane.initialSize, pane.minSize]))
+      .toEqual([[JSON.stringify(["panel", "fileList"]), 180, 120], [JSON.stringify(["panel", "commitDetails"]), undefined, 120]]);
+    row.onResize!([280.5, 700]);
+    left.onResize!([180, 400]);
+    row.onResize!([280.5, 800]); // Window width changed.
+    expect(onPaneResize).not.toHaveBeenCalled();
+    row.onResize!([310.5, 770]);
+    left.onResize!([220, 360]);
+    expect(onPaneResize.mock.calls).toEqual([["default.1", [310.5, 770]], ["default.1.0", [220, 360]]]);
+    await act(async () => { renderer.unmount(); });
+  });
+
+  it("persists flexible pane moves while leaving one pane to take changes in window size", () => {
+    const fork = settings("fork");
+    const plan = windowPlan({ ...fork, layout: { ...fork.layout, sizes: { fork: { "changes.0": [260, 280, 192] } } } }, "fork", "changes", {}, all) as Split;
+    const left = plan.children[0]!.plan as Split;
+    expect(left.children.map(child => child.size)).toEqual([260, undefined, 192]);
+  });
+
+  it("writes visible panes to their original slots when another pane is absent", async () => {
+    const tree: LayoutNode = { type: "split", direction: "row", children: [
+      { size: 320, node: { type: "panel", panel: "fileList" } },
+      { size: 400, node: { type: "panel", panel: "commitDetails" } },
+      { node: { type: "panel", panel: "diff" } },
+    ] };
+    const plan = renderPlan(tree, {}, panel => panel !== "commitDetails", { default: [320, 450, 600] })!;
+    const onPaneResize = jest.fn();
+    let renderer!: ReturnType<typeof create>;
+    await act(async () => { renderer = create(<LayoutHost plan={plan} panels={{}} onPaneResize={onPaneResize} />); });
+    const resize = renderer.root.findByType(SplitView).props.onResize;
+    resize([320, 600]);
+    resize([340, 580]);
+    expect(onPaneResize.mock.calls).toEqual([["default", [340, 450, 580]]]);
+    await act(async () => { renderer.unmount(); });
+  });
+
   it("validates layout.sizes in a settings file", async () => {
     const { io } = memoryIO({ "/data/settings.json": JSON.stringify({ version: 1, layout: { sizes: { sourcetree: { sidebar: [260], default: [400, 300] } } } }) });
     const store = createGitSettingsStore({ io, directory: "/data" });
@@ -163,6 +220,23 @@ describe("onPaneResize", () => {
   beforeEach(() => jest.useFakeTimers());
   afterEach(() => jest.useRealTimers());
   const settle = async () => { for (let i = 0; i < 10; i++) await Promise.resolve(); };
+
+  it("waits for a resize already being written when flushed again", async () => {
+    let finishWrite!: () => void;
+    const edit = jest.fn(() => new Promise<void>(resolve => { finishWrite = resolve; }));
+    const writer = createPaneSizeWriter({ store: () => ({ edit }), current: () => ({ settings: settings("sourcetree"), base: "sourcetree" }) });
+    writer.onPaneResize("sidebar", [272]);
+    const writing = writer.flush();
+    await settle();
+    expect(edit).toHaveBeenCalledTimes(1);
+    const finished = jest.fn();
+    const flushed = writer.flush().then(finished);
+    await settle();
+    expect(finished).not.toHaveBeenCalled();
+    finishWrite();
+    await Promise.all([writing, flushed]);
+    expect(finished).toHaveBeenCalledTimes(1);
+  });
 
   it("writes the active layout's sizes to the user settings file, debounced and rounded", async () => {
     const { io, files } = memoryIO();
@@ -226,24 +300,16 @@ describe("window state", () => {
   beforeEach(() => jest.useFakeTimers());
   afterEach(() => jest.useRealTimers());
 
-  it("keeps ready resizes only, debounced, and restores them", async () => {
-    const { io, files } = memoryIO();
+  it("restores a legacy width and debounces sidebar collapse changes", async () => {
+    const path = "/data/state/main.json";
+    const { io, files } = memoryIO({ [path]: '{ "sidebarWidth": 251 }' });
     const state = createWindowStateStore({ io, directory: "/data", windowId: "main" });
-    await state.ready;
-    state.onResize({ phase: "provisional", sidebarWidth: 300 });
-    state.onResize({ phase: "provisional", sidebarWidth: 310 });
-    jest.advanceTimersByTime(1000);
-    expect(files.size).toBe(0);
-    state.onResize({ phase: "ready", sidebarWidth: 251.4 });
-    state.onResize({ phase: "ready", sidebarWidth: 0 }); // collapsing reports 0; the width before stays
+    await expect(state.ready).resolves.toEqual({ sidebarWidth: 251 });
     state.setSidebarCollapsed(true);
-    expect(files.size).toBe(0);
+    expect(JSON.parse(files.get(path)!)).toEqual({ sidebarWidth: 251 });
     jest.advanceTimersByTime(300);
-    await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
-    expect(JSON.parse(files.get("/data/state/main.json")!)).toEqual({ sidebarWidth: 251, sidebarCollapsed: true });
     await state.close();
-    const again = createWindowStateStore({ io, directory: "/data", windowId: "main" });
-    await expect(again.ready).resolves.toEqual({ sidebarWidth: 251, sidebarCollapsed: true });
+    expect(JSON.parse(files.get(path)!)).toEqual({ sidebarWidth: 251, sidebarCollapsed: true });
   });
 });
 
