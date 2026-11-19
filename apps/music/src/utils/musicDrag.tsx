@@ -18,6 +18,6 @@ export function droppedMusicTracks(event: DropEvent): MusicDragTrack[] {
 }
 // Lays the row content out inside the clickable row; Spark's drag view takes a style, not a className.
 export const musicTrackDragSourceRowStyle = { flex: 1, flexDirection: "row", alignItems: "center", alignSelf: "stretch" } as const;
-export function MusicTrackDragSource({ tracks, ...props }: Omit<DragDropViewProps, "source"> & { tracks: readonly MusicDragTrack[] }) {
-  return <DragDropView {...props} source={musicTrackPayload(tracks)} />;
+export function MusicTrackDragSource({ tracks, ...props }: Omit<DragDropViewProps, "source" | "dragPreview"> & { tracks: readonly MusicDragTrack[] }) {
+  return <DragDropView {...props} source={musicTrackPayload(tracks)} dragPreview="snapshot" />;
 }
