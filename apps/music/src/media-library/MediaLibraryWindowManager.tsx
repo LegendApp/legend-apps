@@ -7,15 +7,13 @@ import { useOnHotkeys } from "../systems/keyboard/Keyboard";
 import { stateSaved$ } from "../systems/State";
 import { perfCount, perfLog } from "@legend-apps/runtime-utils";
 import { WindowsNavigator } from "../windows";
-import { createLibraryWindowStyle } from "./libraryWindowStyle";
+import { createLibraryWindowStyle, MEDIA_LIBRARY_DEFAULT_HEIGHT, MEDIA_LIBRARY_DEFAULT_WIDTH } from "./libraryWindowStyle";
 import { normalizeMusicAppearanceSettings, settings$ } from "../systems/Settings";
 import { getMusicTheme } from "../theme/musicThemes";
 const MEDIA_LIBRARY_WINDOW_KEY = "MediaLibraryWindow" as const;
 const MEDIA_LIBRARY_WINDOW_ID = WindowsNavigator.getId(MEDIA_LIBRARY_WINDOW_KEY);
-const MEDIA_LIBRARY_DEFAULT_WIDTH = 640;
 const MEDIA_LIBRARY_MIN_WIDTH = 360;
 const MEDIA_LIBRARY_MIN_HEIGHT = 400;
-const MEDIA_LIBRARY_DEFAULT_HEIGHT = 600;
 const WINDOW_GAP = 16;
 const clamp = (value: number, min: number, max: number) => {
     if (Number.isNaN(value)) {
