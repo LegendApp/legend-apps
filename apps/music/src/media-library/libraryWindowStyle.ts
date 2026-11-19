@@ -34,8 +34,11 @@ export function createLibraryWindowStyle(theme: MusicTheme): NavigatorWindowOpti
                 sidebarMinWidth: LIBRARY_SIDEBAR_WIDTH,
                 contentMinWidth: 360,
             },
+            // Window open and restyle calls replace the registered macOS options, so keep the whole title bar here.
             titleBar: {
-                contentLayout: "fullSize"
+                contentLayout: "fullSize",
+                transparent: true,
+                titleVisibility: "hidden",
             },
             toolbar: {
                 style: "automatic"
