@@ -3,8 +3,9 @@
     "command": "wait",
     "input": {
       "kind": "text",
-      "text": "App.tsx",
-      "timeoutMs": 60000
+      "text": "App.tsx, Modified",
+      "timeoutMs": 60000,
+      "exact": true
     }
   },
   {
@@ -18,7 +19,7 @@
     "command": "is",
     "input": {
       "predicate": "visible",
-      "selector": "NewFile.ts, Untracked"
+      "selector": "NewFile.ts, Added"
     }
   },
   {
@@ -48,9 +49,5 @@
     "input": {
       "path": ".artifacts/diff-e2e/app-surface-smoke.png"
     }
-  },
-  {
-    "command": "close",
-    "input": {}
   }
 ]

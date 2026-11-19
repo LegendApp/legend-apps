@@ -1,0 +1,52 @@
+[
+  {
+    "command": "wait",
+    "input": {
+      "kind": "text",
+      "text": "App.tsx, Modified",
+      "timeoutMs": 60000,
+      "exact": true
+    }
+  },
+  {
+    "command": "is",
+    "input": {
+      "predicate": "visible",
+      "selector": "NewFile.ts, Added"
+    }
+  },
+  {
+    "command": "toolbar",
+    "input": {
+      "label": "Search"
+    }
+  },
+  {
+    "command": "type",
+    "input": {
+      "text": "@miss"
+    }
+  },
+  {
+    "command": "is",
+    "input": {
+      "predicate": "visible",
+      "selector": "@miss"
+    }
+  },
+  {
+    "command": "wait",
+    "input": {
+      "kind": "text",
+      "text": "Files, No results",
+      "exact": true,
+      "timeoutMs": 10000
+    }
+  },
+  {
+    "command": "screenshot",
+    "input": {
+      "path": ".artifacts/diff-e2e/file-filter-smoke.png"
+    }
+  }
+]

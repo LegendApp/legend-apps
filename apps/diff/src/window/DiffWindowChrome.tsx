@@ -295,7 +295,7 @@ export function DiffSearchStatusPanel({ borderColor, foregroundColor, mutedColor
     const summary = resultCount > 0
         ? `${Math.min(activeResultIndex + 1, resultCount)} of ${resultCount}`
         : "No results";
-    return (<View pointerEvents="none" style={[
+    return (<View accessible accessibilityLabel={`${label}, ${summary}`} pointerEvents="none" style={[
             styles.searchStatusPanel,
             {
                 backgroundColor: panelBackgroundColor,
