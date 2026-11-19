@@ -38,3 +38,20 @@ test("leaves hardware media keys to the native player and handles other bindings
     expect(mockControls.togglePlayPause).toHaveBeenCalledTimes(1);
     await act(() => tree.unmount());
 });
+
+
+test("Space toggles playback only while the playlist has no selection", async () => {
+    const { playlistNavigationState$ } = require("../../state/playlistNavigationState");
+    mockControls.togglePlayPause.mockClear();
+    let tree;
+    await act(() => { tree = create(<MainContainer />); });
+    const { handlers } = mockRegistrations.at(-1);
+    expect(handlers.PlayPauseSpace).toEqual(expect.any(Function));
+    playlistNavigationState$.hasSelection.set(true);
+    expect(handlers.PlayPauseSpace({ binding: "Space" })).toBe(false);
+    expect(mockControls.togglePlayPause).not.toHaveBeenCalled();
+    playlistNavigationState$.hasSelection.set(false);
+    expect(handlers.PlayPauseSpace({ binding: "Space" })).toBe(true);
+    expect(mockControls.togglePlayPause).toHaveBeenCalledTimes(1);
+    await act(() => tree.unmount());
+});

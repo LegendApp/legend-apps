@@ -1,4 +1,4 @@
-import { loadMusicHotkeyFile } from "../hotkeys";
+import { loadMusicHotkeyFile, musicHotkeyDefinitions } from "../hotkeys";
 
 describe("loadMusicHotkeyFile", () => {
     it("migrates bindings saved as legacy key codes", () => {
@@ -9,7 +9,8 @@ describe("loadMusicHotkeyFile", () => {
 
         expect(file.bindings.Search).toEqual(["J"]);
         expect(file.bindings.ToggleShuffle).toEqual(["Alt+S"]);
-        expect(file.bindings.PlayPause).toEqual(["MediaPlayPause", "Space"]);
+        expect(file.bindings.PlayPause).toEqual(["MediaPlayPause"]);
+        expect(file.bindings.PlayPauseSpace).toEqual(["Space"]);
         expect(file.bindings.NextTrack).toEqual(["MediaNext"]);
         expect(file.bindings.ToggleLibrary).toEqual(["L"]);
     });
@@ -21,7 +22,7 @@ describe("loadMusicHotkeyFile", () => {
         expect(file.bindings.ToggleLibrary).toEqual(["L"]);
     });
 
-    it("migrates the original app's flat hotkeys file, merging PlayPauseSpace into PlayPause", () => {
+    it("migrates the original app's flat hotkeys file, keeping PlayPauseSpace separate", () => {
         const file = loadMusicHotkeyFile({
             Search: "K",
             ToggleLibrary: 37,
@@ -39,11 +40,21 @@ describe("loadMusicHotkeyFile", () => {
         expect(file.bindings).toEqual({
             Search: ["K"],
             ToggleLibrary: ["L"],
-            PlayPause: ["MediaPlayPause", "Space"],
+            PlayPause: ["MediaPlayPause"],
+            PlayPauseSpace: ["Space"],
             NextTrack: ["MediaNext"],
             PreviousTrack: ["MediaPrevious"],
             ToggleShuffle: ["Cmd+Shift+S"],
             ToggleRepeatMode: ["Alt+R"],
         });
     });
+});
+
+
+test("shows a separately configurable Space playback row and preserves its binding", () => {
+    expect(musicHotkeyDefinitions.find(definition => definition.id === "PlayPauseSpace"))
+        .toMatchObject({ defaultBindings: ["Space"] });
+    const file = loadMusicHotkeyFile({ PlayPause: "Play/Pause", PlayPauseSpace: "⌘+P" });
+    expect(file.bindings.PlayPause).toEqual(["MediaPlayPause"]);
+    expect(file.bindings.PlayPauseSpace).toEqual(["Cmd+P"]);
 });

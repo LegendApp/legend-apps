@@ -29,10 +29,16 @@ export const musicHotkeyDefinitions = [
         title: "Toggle Media Library",
     },
     {
-        defaultBindings: ["MediaPlayPause", "Space"],
+        defaultBindings: ["MediaPlayPause"],
         description: "Play or pause the current track.",
         id: "PlayPause",
         title: "Play/Pause",
+    },
+    {
+        defaultBindings: ["Space"],
+        description: "Play or pause when no track is selected.",
+        id: "PlayPauseSpace",
+        title: "Play/Pause (Space)",
     },
     {
         defaultBindings: ["MediaNext"],
@@ -168,8 +174,7 @@ function loadBindings(stored: unknown, definition: HotkeyDefinition<string>) {
 function fromLegacyFlatFile(file: Record<string, unknown>) {
     const stored: Record<string, unknown[]> = {};
     for (const [id, binding] of Object.entries(file)) {
-        const target = id === "PlayPauseSpace" ? "PlayPause" : id;
-        if (binding !== "" && binding != null) (stored[target] ??= []).push(binding);
+        if (binding !== "" && binding != null) (stored[id] ??= []).push(binding);
     }
     return stored;
 }
@@ -183,6 +188,11 @@ export function loadMusicHotkeyFile(value: unknown) {
             definition.id in stored ? loadBindings(stored[definition.id], definition) : undefined,
         ]),
     );
+    // Builds that merged the two commands stored Space alongside the media binding.
+    if (!("PlayPauseSpace" in stored) && Array.isArray(bindings.PlayPause) && bindings.PlayPause.includes("Space")) {
+        bindings.PlayPause = bindings.PlayPause.filter(binding => binding !== "Space");
+        bindings.PlayPauseSpace = ["Space"];
+    }
     return normalizeHotkeyFile({ version: hotkeyFileVersion, bindings }, musicHotkeyDefinitions);
 }
 

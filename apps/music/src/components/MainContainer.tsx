@@ -6,6 +6,7 @@ import { initializeLocalAudioPlayer, localAudioControls } from "./LocalAudioPlay
 import { Unregistered } from "./Unregistered";
 import { MusicLayoutRenderer } from "../layout/MusicLayoutRenderer";
 import { mainLayout$, normalizeMusicLayoutFile } from "../layout/MusicLayoutState";
+import { playlistNavigationState$ } from "../state/playlistNavigationState";
 import { SUPPORT_ACCOUNTS } from "../systems/constants";
 import { useOnHotkeys } from "../systems/keyboard/Keyboard";
 import { perfCount, perfLog } from "@legend-apps/runtime-utils";
@@ -36,6 +37,11 @@ export function MainContainer({ benchmarkElapsedSeconds }: MainContainerProps) {
     const layout = useMemo(() => normalizeMusicLayoutFile(layoutFile), [layoutFile]);
 
     useOnHotkeys({
+        PlayPauseSpace: () => {
+            if (playlistNavigationState$.hasSelection.peek()) return false;
+            void localAudioControls.togglePlayPause();
+            return true;
+        },
         PlayPause: unlessNativeMediaKey(() => void localAudioControls.togglePlayPause()),
         NextTrack: unlessNativeMediaKey(localAudioControls.playNext),
         PreviousTrack: unlessNativeMediaKey(localAudioControls.playPrevious),
