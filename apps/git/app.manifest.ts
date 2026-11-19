@@ -18,6 +18,7 @@ const manifest = {
       "@legend-apps/diff-parser",
       "@legend-apps/syntax-parser",
       "@legend-apps/source-editor",
+      // Git filters repository and worktree events by the changed path and content flag.
       "@legend-apps/file-system-watcher",
       "@legendapp/spark/dialogs",
       "@legendapp/spark/menus",
