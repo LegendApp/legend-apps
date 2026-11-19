@@ -22,6 +22,7 @@ type AppleTrackPage = { data?: AppleTrackResource[]; next?: string | null };
 
 const playbackHandlers = new Set<(update: PlaybackStateUpdate) => void>();
 let pollingTimer: ReturnType<typeof setInterval> | null = null;
+let pollingGeneration = 0;
 let playlistsCache: ProviderPlaylist[] = [];
 const playlistTracksCache = new Map<string, LocalTrack[]>();
 let nativeAuthorized = false;
@@ -120,25 +121,41 @@ async function appleRequest<T>(path: string, operation: string): Promise<T> {
 }
 
 function emitPlayback(update: PlaybackStateUpdate): void {
+    if (update.isPlaying === false || update.didComplete || update.error) stopPolling();
     playbackHandlers.forEach((handler) => handler(update));
+}
+
+function stopPolling(): void {
+    pollingGeneration++;
+    if (pollingTimer) clearInterval(pollingTimer);
+    pollingTimer = null;
 }
 
 function startPolling(): void {
     if (pollingTimer) return;
+    const generation = pollingGeneration;
+    let pending = false;
     pollingTimer = setInterval(() => {
+        if (pending) return;
+        pending = true;
         void getAppleMusic().getPlaybackState()
-            .then((state) => emitPlayback({
-                isPlaying: state.isPlaying,
-                isLoading: state.isLoading,
-                positionSeconds: state.positionSeconds,
-                durationSeconds: state.durationSeconds,
-                artwork: state.artworkUrl || undefined,
-                didComplete: state.didComplete,
-                error: state.error || null,
-            }))
-            .catch((error) => emitPlayback({
-                error: error instanceof Error ? error.message : "Apple Music playback state failed.",
-            }));
+            .then((state) => {
+                if (generation !== pollingGeneration) return;
+                emitPlayback({
+                    isPlaying: state.isPlaying,
+                    isLoading: state.isLoading,
+                    positionSeconds: state.positionSeconds,
+                    durationSeconds: state.durationSeconds,
+                    artwork: state.artworkUrl || undefined,
+                    didComplete: state.didComplete,
+                    error: state.error || null,
+                });
+            })
+            .catch((error) => {
+                if (generation !== pollingGeneration) return;
+                emitPlayback({ error: error instanceof Error ? error.message : "Apple Music playback state failed." });
+            })
+            .finally(() => { pending = false; });
     }, 1000);
 }
 
@@ -146,18 +163,23 @@ const appleMusicPlayback = {
     id: "appleMusic" as const,
     startsPlaybackOnLoad: true,
     async load(track: LocalTrack, startPositionSeconds = 0) {
+        stopPolling();
         await ensureAuthorized();
         const trackId = (track.uri ?? track.filePath).split(":").pop() ?? "";
         emitPlayback({ isLoading: true, error: null });
         await getAppleMusic().loadTrack(trackId, Math.max(0, startPositionSeconds));
+        emitPlayback({ isPlaying: true, isLoading: false });
         startPolling();
     },
     async play() {
         await getAppleMusic().play();
+        emitPlayback({ isPlaying: true });
         startPolling();
     },
     async pause() {
+        stopPolling();
         await getAppleMusic().pause();
+        emitPlayback({ isPlaying: false });
     },
     async seek(positionSeconds: number) {
         await getAppleMusic().seek(Math.max(0, positionSeconds));
@@ -166,16 +188,15 @@ const appleMusicPlayback = {
         await getAppleMusic().setVolume(Math.max(0, Math.min(1, volume)));
     },
     async stop() {
+        stopPolling();
         await getAppleMusic().stop();
+        emitPlayback({ isPlaying: false });
     },
     subscribe(handler: (update: PlaybackStateUpdate) => void) {
         playbackHandlers.add(handler);
         return () => {
             playbackHandlers.delete(handler);
-            if (playbackHandlers.size === 0 && pollingTimer) {
-                clearInterval(pollingTimer);
-                pollingTimer = null;
-            }
+            if (playbackHandlers.size === 0) stopPolling();
         };
     },
 };

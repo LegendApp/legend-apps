@@ -25,7 +25,13 @@ const playerHtml = `<!doctype html>
 window.__legendToken = "";
 window.__legendPlayer = null;
 const send = (payload) => window.ReactNativeWebView.postMessage(JSON.stringify(payload));
-const updateState = (state) => send({ type: "state", state });
+let isPlaying = false;
+let stateVersion = 0;
+const updateState = (state) => {
+  stateVersion++;
+  isPlaying = state?.paused === false;
+  send({ type: "state", state });
+};
 window.onSpotifyWebPlaybackSDKReady = () => {
   const player = new Spotify.Player({
     name: "Legend Music",
@@ -45,7 +51,12 @@ window.onSpotifyWebPlaybackSDKReady = () => {
   player.addListener("player_state_changed", updateState);
   player.connect();
   setInterval(async () => {
-    try { updateState(await player.getCurrentState()); } catch (_) {}
+    if (!isPlaying) return;
+    const version = stateVersion;
+    try {
+      const state = await player.getCurrentState();
+      if (version === stateVersion) updateState(state);
+    } catch (_) {}
   }, 1000);
 };
 function receive(event) {
