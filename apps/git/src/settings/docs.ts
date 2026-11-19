@@ -1,5 +1,6 @@
 import { commandCategories, commandIds, commandMeta, type CommandMeta } from "../commandMeta";
 import { defaultShortcut } from "../commands";
+import { historyQueryQualifiers } from "../historyQuery";
 import { buildSettingsJsonSchema } from "./jsonSchema";
 import { panelIds, presetIds, settingsVersion, switchConditions, toolbarWidgets, viewKinds } from "./schema";
 import { isPlainObject } from "./validate";
@@ -96,6 +97,8 @@ export function buildReferenceDoc() {
   out.push("## Layout rules", "", ...layoutRules, "");
   out.push("## Toolbar entries", "", `An entry is a command id (see [commands.md](commands.md)), \`{ "command": <id>, "label"?, "symbol"? }\`, or a widget: ${toolbarWidgets.map(id => `\`${id}\``).join(", ")}.`, "");
   out.push("## Context menu entries", "", "An entry is a command id, `\"separator\"`, or `{ \"submenu\": <title>, \"items\": [ … ] }`. Each target's list replaces the built-in menu whole; entries that don't apply to what was clicked are left out when the menu opens.", "");
+  out.push("## History search", "", "The toolbar's search field (`search` widget) searches History. Free words match a commit's message, author, committer, SHA prefix or branch and tag names, and every word must match. Qualifiers narrow one field; a qualifier's values match either one (`author:ann author:bob`), `-` in front leaves matches out (`-author:bot`, `-wip`), and quotes keep spaces (`author:\"Jay M\"`).", "",
+    "| Qualifier | Matches |", "|---|---|", ...historyQueryQualifiers.map(([example, meaning]) => `| \`${example}\` | ${cell(meaning)} |`), "");
   return `${out.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd()}\n`;
 }
 

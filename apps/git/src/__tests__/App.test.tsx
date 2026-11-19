@@ -459,9 +459,10 @@ it("switches sections from the sidebar, the toolbar segment and the View menu, k
   await act(async () => { listener({ type: "toolbarSelectionChanged", windowId: "main", itemId: "section", value: "history" }); });
   expect(navigation().props.selectedId).toBe("history");
   expect(toolbarItem("section").value).toBe("history");
-  expect(toolbarItem("search")).toMatchObject({ placeholder: "Search Commits" });
+  // One search field searches every field; its placeholder hints at the qualifiers. There is no scope picker.
+  expect(toolbarItem("search")).toMatchObject({ placeholder: "Search, or author:name path:src" });
   expect(toolbarItem("search").disabled).toBeUndefined();
-  expect(toolbarItem("search-scope")).toMatchObject({ type: "menu", label: "Message" });
+  expect(toolbarItem("search-scope")).toBeUndefined();
   // A section switch updates only the toolbar; the title bar options went once, at mount.
   expect(jest.mocked(setWindowOptions).mock.calls.at(-1)![1]).toEqual({ macos: { toolbar: expect.anything() } });
   expect(jest.mocked(setWindowOptions).mock.calls.filter(call => call[1].macos?.titleBar)).toHaveLength(1);
@@ -543,7 +544,7 @@ it("computes each command's enabled state once for the menu bar, toolbar and con
   await act(async () => { renderer.unmount(); });
 });
 
-it("blames a diff line into History, says when it is not committed, searches History by scope, and compares two commits", async () => {
+it("blames a diff line into History, says when it is not committed, searches History, and compares two commits", async () => {
   jest.clearAllMocks();
   jest.mocked(watchDirectories).mockReturnValue({ remove: jest.fn() });
   const head = "a".repeat(40), parent = "b".repeat(40);
@@ -624,25 +625,28 @@ it("blames a diff line into History, says when it is not committed, searches His
   await act(async () => { lastMenu().onAction({ itemId: "blame-line" }); });
   expect(blameLine).toHaveBeenLastCalledWith("/repo", "b.txt", parent, 2, expect.any(AbortSignal));
 
-  // The toolbar search searches History in the chosen scope after typing pauses; Show All clears it.
-  expect(toolbarItem("search-scope").items.map((entry: { label: string; checked: boolean }) => `${entry.label}${entry.checked ? " ✓" : ""}`)).toEqual(["Message ✓", "Author", "Path", "Content"]);
+  // The toolbar search searches all of History's fields after typing pauses; Show All clears it.
+  expect(toolbarItem("search-scope")).toBeUndefined();
   await act(async () => { toolbar({ type: "toolbarSearchChanged", windowId: "main", itemId: "search", value: "fir", shiftKey: false }); });
   await act(async () => { toolbar({ type: "toolbarSearchChanged", windowId: "main", itemId: "search", value: "first", shiftKey: false }); });
   expect(text()).toContain("Searching…");
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 300)); });
   expect(git.searchHistory).toHaveBeenCalledTimes(1);
-  expect(git.searchHistory).toHaveBeenLastCalledWith(head, "message", "first", expect.objectContaining({ offset: 0, count: 500 }));
+  expect(git.searchHistory).toHaveBeenLastCalledWith(expect.objectContaining({ revisions: [head], options: [], match: expect.any(Function) }), expect.objectContaining({ offset: 0, count: 500 }));
   expect(text()).toContain("Search: “first”");
-  expect(text()).toContain("1 in Message");
+  expect(text()).toContain("1 commit");
   expect(renderer.root.findByType("LegendList" as any).props.data.map((commit: { oid: string }) => commit.oid)).toEqual([parent]);
-  await act(async () => { toolbar({ type: "toolbarMenuAction", windowId: "main", itemId: "search-scope", action: { type: "action", itemId: "search-author" } as any }); });
+  // Qualifiers go to git; the field's text is the whole query.
+  await act(async () => { toolbar({ type: "toolbarSearchChanged", windowId: "main", itemId: "search", value: "author:ada first", shiftKey: false }); });
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 300)); });
-  expect(git.searchHistory).toHaveBeenLastCalledWith(head, "author", "first", expect.anything());
-  expect(toolbarItem("search-scope")).toMatchObject({ label: "Author" });
+  expect(git.searchHistory).toHaveBeenLastCalledWith(expect.objectContaining({ options: ["--regexp-ignore-case", "--fixed-strings", "--author=ada"] }), expect.anything());
+  await act(async () => { toolbar({ type: "toolbarSearchChanged", windowId: "main", itemId: "search", value: "first", shiftKey: false }); });
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 300)); });
   expect(menuItem("show-all-history")).toMatchObject({ disabled: false });
-  // Showing a file's history ends the search and clears the field too.
-  expect(toolbarItem("search").value).toBe("first");
+  // Showing a file's history ends the search and clears the field too (the toolbar is rebuilt with an empty field).
+  const toolbarUpdates = jest.mocked(setWindowOptions).mock.calls.length;
   await act(async () => { lastMenu().onAction({ itemId: "show-file-history" }); });
+  expect(jest.mocked(setWindowOptions).mock.calls.length).toBeGreaterThan(toolbarUpdates);
   expect(text()).toContain("File History: b.txt");
   expect(toolbarItem("search").value).toBe("");
   await act(async () => { toolbar({ type: "toolbarSearchChanged", windowId: "main", itemId: "search", value: "first", shiftKey: false }); });
@@ -764,9 +768,6 @@ it("lists Branches, Remotes and Tags in the sidebar, scopes History to a ref, an
   expect(toolbarItem("section").value).toBeNull();
   expect(menuItem("delete-branch")).toMatchObject({ disabled: false });
 
-  // The scope menu works in a ref's list too.
-  await act(async () => { listener({ type: "toolbarMenuAction", windowId: "main", itemId: "search-scope", action: { type: "checkbox", itemId: "search-author" } as any }); });
-  expect(toolbarItem("search-scope").label).toBe("Author");
 
   // Show File History from a ref's commit lists HEAD's history of that file, and isn't closed by leaving the ref.
   let refRow!: ReactTestRenderer;

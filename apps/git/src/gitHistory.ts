@@ -1,17 +1,14 @@
 import { blameLine, openGitHistory, gitHistoryPageSize, type GitBlameHunk, type GitBlameSource, type GitHistoryCommit, type GitHistoryReader } from "@legend-apps/diff-parser";
 import { parseUnifiedPatch, type UnifiedPatchFile } from "@legend-apps/diff-parser/src/unifiedPatch";
-import { getGitService, githubCommitUrl, watchGitRepo, type GitCommitDetails, type GitDirectoryWatcher, type GitFileHistoryCommit, type GitHistorySearchScope, type GitRefDecoration, type GitService } from "@legend-apps/git-core";
+import { getGitService, githubCommitUrl, watchGitRepo, type GitCommitDetails, type GitDirectoryWatcher, type GitFileHistoryCommit, type GitRefDecoration, type GitService } from "@legend-apps/git-core";
+import { historySearch, parseHistoryQuery } from "./historyQuery";
 
 export type CommitFile = { path: string; text: string; file: UnifiedPatchFile };
 export type CommitDetailsState = { oid: string; commit: GitCommitDetails | null; files: CommitFile[]; selectedPath: string | null; loading: boolean; error: string | null };
 /** One file's history (`git log --follow`), shown in place of the full history while set. */
 export type FileHistoryState = { path: string; commits: GitFileHistoryCommit[]; done: boolean; loading: boolean; error: string | null };
-export type SearchScope = GitHistorySearchScope;
-export const searchScopes: readonly { scope: SearchScope; label: string }[] = [
-  { scope: "message", label: "Message" }, { scope: "author", label: "Author" }, { scope: "path", label: "Path" }, { scope: "content", label: "Content" },
-];
-/** A history search's results (`git log --grep/--author/-S/<path>`), shown in place of the full history while set. */
-export type SearchState = { scope: SearchScope; text: string; commits: GitFileHistoryCommit[]; done: boolean; loading: boolean; error: string | null };
+/** A history search's results (historyQuery.ts: free words and author:, path:, … qualifiers), shown in place of the full history while set. */
+export type SearchState = { text: string; commits: GitFileHistoryCommit[]; done: boolean; loading: boolean; error: string | null };
 /** The commits the listed ref has that `base` doesn't (`git log base..ref`, a branch's outgoing commits), shown in place of the full history while set. */
 export type RangeState = { base: string; commits: GitFileHistoryCommit[]; done: boolean; loading: boolean; error: string | null };
 /** Two commits compared (`git diff base target`), shown in the content column while set. */
@@ -194,21 +191,25 @@ export function createGitHistory(onChange: (state: HistoryState) => void, watch:
   };
 
   /** Runs a search from HEAD, at least `count` results, and keeps the selection when it is listed. */
-  const readSearch = async (git: GitService, controller: AbortController, scope: SearchScope, text: string, count = gitHistoryPageSize) => {
+  /** The git log a search runs from the listed commit, or why it can't run. */
+  const searchQuery = (text: string, head: string) => historySearch(parseHistoryQuery(text), head, state.refs);
+  const readSearch = async (git: GitService, controller: AbortController, text: string, count = gitHistoryPageSize) => {
     cancelSearch();
     const run = searchRun;
     const signal = searchSignal(controller);
     const latest = () => current(controller) && run === searchRun;
-    publish({ search: { scope, text, commits: state.search?.scope === scope && state.search.text === text ? state.search.commits : [], done: false, loading: true, error: null } });
+    publish({ search: { text, commits: state.search?.text === text ? state.search.commits : [], done: false, loading: true, error: null } });
     try {
       const head = state.head;
-      const page = !head || head.unborn ? { commits: [], done: true }
-        : await git.searchHistory(head.oid, scope, text, { offset: 0, count: Math.max(count, gitHistoryPageSize), signal });
+      const query = head && !head.unborn ? searchQuery(text, head.oid) : null;
+      if (query?.error) { publish({ search: { text, commits: [], done: true, loading: false, error: query.error } }); return; }
+      const page = !query?.search ? { commits: [], done: true }
+        : await git.searchHistory(query.search, { offset: 0, count: Math.max(count, gitHistoryPageSize), signal });
       if (!latest()) return;
-      publish({ search: { scope, text, commits: page.commits, done: page.done, loading: false, error: null } });
+      publish({ search: { text, commits: page.commits, done: page.done, loading: false, error: null } });
       await keepSelection(git, controller, page.commits);
     } catch (error) {
-      if (latest() && !cancelled(error)) publish({ search: { scope, text, commits: [], done: true, loading: false, error: message(error) } });
+      if (latest() && !cancelled(error)) publish({ search: { text, commits: [], done: true, loading: false, error: message(error) } });
     }
   };
 
@@ -267,7 +268,7 @@ export function createGitHistory(onChange: (state: HistoryState) => void, watch:
     publish({ head: { oid: head.headOid, unborn: head.unborn, detached: head.detached }, commits, done, refs, remoteUrl, currentBranch, loading: false, error: null, selectedOid, ...selectedOid ? {} : { details: null } });
     if (selectedOid && state.details?.oid !== selectedOid) await readDetails(git, selectedOid, controller);
     if (state.file) await readFileHistory(git, controller, state.file.path, state.file.commits.length);
-    if (state.search) await readSearch(git, controller, state.search.scope, state.search.text, state.search.commits.length);
+    if (state.search) await readSearch(git, controller, state.search.text, state.search.commits.length);
   };
 
   // Watcher, toolbar and first-load reloads run one at a time, so an older read never lands last.
@@ -369,21 +370,21 @@ export function createGitHistory(onChange: (state: HistoryState) => void, watch:
       return blame(root, path, source, line, active?.signal);
     },
     /** Searches History after typing pauses; a newer query cancels the older one, and an empty one ends the search. */
-    search(scope: SearchScope, text: string) {
+    search(text: string) {
       if (!service || closed) return;
       if (!text.trim()) { api.closeSearch(); return; }
       // Return in the field, or the same text again, keeps the results.
-      if (state.search?.scope === scope && state.search.text === text && !state.search.error) return;
+      if (state.search?.text === text && !state.search.error) return;
       cancelSearch();
       if (state.file) api.closeFileHistory();
       api.closeCompare();
-      publish({ search: { scope, text, commits: [], done: false, loading: true, error: null } });
+      publish({ search: { text, commits: [], done: false, loading: true, error: null } });
       const run = searchRun;
       searchTimer = setTimeout(() => {
         void (async () => {
           await api.activate();
           const git = service, controller = active;
-          if (git && controller && run === searchRun) await readSearch(git, controller, scope, text);
+          if (git && controller && run === searchRun) await readSearch(git, controller, text);
         })();
       }, searchDelay);
     },
@@ -426,7 +427,8 @@ export function createGitHistory(onChange: (state: HistoryState) => void, watch:
         const latest = () => current(controller) && run === searchRun && state.search === search;
         return searchPaging ??= (async () => {
           try {
-            const page = await git.searchHistory(head, search.scope, search.text, { offset: search.commits.length, count: gitHistoryPageSize, signal: searchAbort?.signal ?? controller.signal });
+            const query = searchQuery(search.text, head).search;
+            const page = query ? await git.searchHistory(query, { offset: search.commits.length, count: gitHistoryPageSize, signal: searchAbort?.signal ?? controller.signal }) : { commits: [], done: true };
             if (latest()) publish({ search: { ...search, commits: [...search.commits, ...page.commits], done: page.done } });
           } catch (error) {
             if (latest() && !cancelled(error)) publish({ search: { ...search, done: true, error: message(error) } });

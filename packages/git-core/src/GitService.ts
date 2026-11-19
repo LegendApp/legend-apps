@@ -419,17 +419,36 @@ export function parseFileHistory(output: string, path: string): GitFileHistoryCo
   return commits;
 }
 
-export type GitHistorySearchScope = "message" | "author" | "path" | "content";
-export type GitHistorySearchPage = { commits: GitFileHistoryCommit[]; done: boolean };
+/** A searched commit: the history row plus what a search can match (full message, committer, ref names from %D). */
+export type GitSearchCommit = GitFileHistoryCommit & { message: string; committerName: string; committerEmail: string; refs: string[] };
+export type GitHistorySearchPage = { commits: GitSearchCommit[]; done: boolean };
+/**
+ * A history search as git log runs it: `revisions` (commit ids, `^<id>` to leave one's commits out), git's own
+ * filters (`options`: author, committer, grep, pickaxe, dates) and pathspecs, plus a test for what git can't filter.
+ */
+export type GitHistoryQuery = { revisions: string[]; options: string[]; paths: string[]; match?: (commit: GitSearchCommit) => boolean };
 
-const searchArgs: Record<GitHistorySearchScope, (text: string) => { options: string[]; paths: string[] }> = {
-  // Fixed strings, case-insensitive, like a search field: "fix(" finds "fix(" and does not fail as a regex.
-  message: text => ({ options: ["--regexp-ignore-case", "--fixed-strings", `--grep=${text}`], paths: [] }),
-  author: text => ({ options: ["--regexp-ignore-case", "--fixed-strings", `--author=${text}`], paths: [] }),
-  // Without :(glob), `*` also matches `/`, so "parser" finds any path containing it.
-  path: text => ({ options: [], paths: [`:(icase)*${text.replace(/[*?[\\]/g, "\\$&")}*`] }),
-  content: text => ({ options: [`-S${text}`], paths: [] }),
-};
+const searchOptionPattern = /^(--(author|committer|grep|since|until)=|--(all-match|regexp-ignore-case|fixed-strings)$|-S)/;
+const revisionPattern = /^\^?[0-9a-f]{40,64}$/i;
+/** Commits read per git call while a test filters them; a search stops once it has a page. */
+const searchBatch = 2000;
+
+/** `git log -z` records of searchFormat, each starting with \x1e. */
+export function parseSearchCommits(output: string): GitSearchCommit[] {
+  const commits: GitSearchCommit[] = [];
+  for (const record of output.split("\x1e")) {
+    if (!record) continue;
+    const [oid = "", parents = "", authorName = "", authorEmail = "", time = "", committerName = "", committerEmail = "", decorations = "", ...rest] = record.split("\0");
+    const message = rest.join("\0").replace(/[\s\0]+$/, "");
+    commits.push({
+      oid, parents: parents.split(" ").filter(Boolean), authorName, authorEmail, time: Number(time), summary: message.split("\n", 1)[0] ?? "",
+      status: "", path: "", oldPath: null, message, committerName, committerEmail,
+      refs: decorations.split(", ").map(ref => ref.replace(/^(HEAD -> |tag: )/, "")).filter(ref => ref && ref !== "HEAD"),
+    });
+  }
+  return commits;
+}
+const searchFormat = "--format=%x1e%H%x00%P%x00%an%x00%ae%x00%at%x00%cn%x00%ce%x00%D%x00%B";
 
 export function parseRefDecorations(output: string) {
   const decorations = new Map<string, GitRefDecoration[]>();
@@ -1071,23 +1090,34 @@ export class GitService {
   }
 
   /**
-   * Commits reachable from `head` whose message, author, a changed path or content (`git log -S`)
-   * matches `text`, in `git log --topo-order` order, `count` at a time from `offset`. Pages walk from
-   * the same `head` oid, so they stay consistent while refs move. Git does the walk: it applies the
-   * commit-graph's changed-path filters for paths and has the pickaxe for content.
+   * Commits a search finds, in `git log --topo-order` order, `count` at a time from `offset`. Git walks and applies
+   * what it can (author, committer, message, dates, the commit-graph's changed-path filters, the pickaxe); `match`
+   * then tests each commit, read `searchBatch` at a time until a page is full. Pages walk from the same revisions.
    */
-  async searchHistory(head: string, scope: GitHistorySearchScope, text: string, { offset = 0, count = 500, ...options }: GitReadOptions & { offset?: number; count?: number } = {}): Promise<GitHistorySearchPage> {
-    if (!/^[0-9a-f]{40,64}$/i.test(head)) throw new Error("Expected a commit id.");
-    if (!text || text.includes("\0")) return { commits: [], done: true };
-    const { options: filters, paths } = searchArgs[scope](text);
-    // `--skip` counts commits before the pickaxe filters them, so content pages walk from `head` and drop the first `offset`.
-    const skip = scope === "content" ? 0 : offset;
-    const output = await this.read([
-      "log", "--topo-order", "-z", "--no-show-signature", "--format=%x1e%H%x00%P%x00%an%x00%ae%x00%at%x00%s",
-      ...filters, `--skip=${skip}`, `--max-count=${offset - skip + count + 1}`, head, "--", ...paths,
-    ], options);
-    const commits = parseFileHistory(output, "").slice(offset - skip);
-    return { commits: commits.slice(0, count), done: commits.length <= count };
+  async searchHistory(query: GitHistoryQuery, { offset = 0, count = 500, ...options }: GitReadOptions & { offset?: number; count?: number } = {}): Promise<GitHistorySearchPage> {
+    const { revisions, paths, match } = query;
+    if (!revisions.length || !revisions.every(revision => revisionPattern.test(revision))) throw new Error("Expected a commit id.");
+    if (!query.options.every(option => searchOptionPattern.test(option)) || [...query.options, ...paths].some(value => value.includes("\0"))) throw new Error("Unsupported search option.");
+    const log = (skip: number, max: number | null) => this.read(["log", "--topo-order", "-z", "--no-show-signature", "--decorate=short", searchFormat, ...query.options,
+      `--skip=${skip}`, ...max === null ? [] : [`--max-count=${max}`], ...revisions, "--", ...paths], options).then(parseSearchCommits);
+    // `--skip` counts commits before the pickaxe filters them, so a content search walks from the start.
+    const pickaxe = query.options.some(option => option.startsWith("-S"));
+    let found: GitSearchCommit[], start = offset;
+    if (match && !pickaxe) {
+      found = [];
+      for (let skip = 0; found.length <= offset + count; skip += searchBatch) {
+        const commits = await log(skip, searchBatch);
+        found.push(...commits.filter(match));
+        if (commits.length < searchBatch) break;
+      }
+    } else {
+      const skip = pickaxe ? 0 : offset;
+      const commits = await log(skip, pickaxe && match ? null : offset - skip + count + 1);
+      found = match ? commits.filter(match) : commits;
+      start = offset - skip;
+    }
+    const page = found.slice(start);
+    return { commits: page.slice(0, count), done: page.length <= count };
   }
 
   /** The patch from commit `base` to commit `target` (`git diff base target`), in `commitPatch`'s format. */
@@ -1125,7 +1155,7 @@ export class GitService {
   }
 
   /** The commits `ref` has that `base` doesn't (`git log base..ref`, both full ref names), newest first, at most `count`. */
-  async logRange(base: string, ref: string, { count = 500, ...options }: GitReadOptions & { count?: number } = {}): Promise<GitHistorySearchPage> {
+  async logRange(base: string, ref: string, { count = 500, ...options }: GitReadOptions & { count?: number } = {}): Promise<GitFileHistoryPage> {
     if (![base, ref].every(name => /^refs\/[^\0\s.][^\0\s]*$/.test(name) && !name.includes(".."))) throw new Error("Expected full ref names.");
     const output = await this.read([
       "log", "--topo-order", "-z", "--no-show-signature", "--format=%x1e%H%x00%P%x00%an%x00%ae%x00%at%x00%s", `--max-count=${count + 1}`, `${base}..${ref}`, "--",

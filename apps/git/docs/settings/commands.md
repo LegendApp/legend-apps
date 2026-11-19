@@ -33,10 +33,6 @@ Settings files name commands by id in `toolbar.items`, `contextMenus` and `keybi
 | `show-all-history` | Show All History |  |  | Leaves file history or search results and shows the full history again. |
 | `blame-line` | Blame Line | Cmd+Alt+b | diffLine | Shows the commit that last changed the clicked diff line. |
 | `compare-with-selected` | Compare with Selected |  | commit | Diffs this commit against the commit selected in History. |
-| `search-message` | Search in Message |  |  | History search matches commit messages. |
-| `search-author` | Search in Author |  |  | History search matches commit authors. |
-| `search-path` | Search in Path |  |  | History search matches changed paths. |
-| `search-content` | Search in Content |  |  | History search matches added or removed text (git log -S). |
 
 ## Repository
 

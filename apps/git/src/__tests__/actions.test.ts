@@ -14,7 +14,7 @@ function fakeContext(overrides: Partial<CommandContext> = {}): CommandContext {
   const run = new Proxy({}, { get: (target: Record<string, jest.Mock>, key: string) => target[key] ??= jest.fn() }) as unknown as CommandContext["run"];
   return {
     hasRepository: true, section: "changes", sidebarCollapsed: false, busy: false, selectedCommit: "c1", selectedFile: null, fileHistoryPath: null,
-    gitHubUrl: oid => `https://github.com/o/r/commit/${oid}`, searching: false, canBlame: false, searchScope: "message", canApplyLines: false, linesLabel: "Stage Selected Lines",
+    gitHubUrl: oid => `https://github.com/o/r/commit/${oid}`, searching: false, canBlame: false, canApplyLines: false, linesLabel: "Stage Selected Lines",
     canDiscardFile: false, canDiscardLines: false, canRestoreDiscard: false, generating: false, canGenerate: false, canCommit: true,
     refs: { branches: [branch("main", true), branch("feature")], remotes: [{ name: "origin", branches: [{ ref: "refs/remotes/origin/main", name: "origin/main" } as never] }], tags: [{ ref: "refs/tags/v1", name: "v1" } as never], defaultBranch: "main" },
     unborn: false, branchBusy: false, stashes: [{ oid: "s1", index: 0, message: "On main: newest", time: 2 }, { oid: "s2", index: 1, message: "On main: older", time: 1 }], hasChanges: true,

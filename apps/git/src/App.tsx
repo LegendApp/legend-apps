@@ -21,7 +21,8 @@ import { createGitRefs, emptyRefs, findRef, recentBranches, resolveBranchName, t
 import { createWorktreePreview, emptyWorktreePreview, worktreeDetail, worktreeName, type WorktreePreviewState } from "./gitWorktrees";
 import { closeMenuWindow, mainWindowId, registerMenuRunner, runMenuAction, useMenuBar, openSettingsWindow, openWorktreePaths, openWorktreeWindow, publishMenu, setMenuWindow, type GitWindowProps } from "./gitWindows";
 import { runCommand as runProcess } from "@legendapp/spark/processes";
-import { commitGitHubUrl, createGitHistory, emptyHistory, searchScopes, type SearchScope } from "./gitHistory";
+import { commitGitHubUrl, createGitHistory, emptyHistory } from "./gitHistory";
+import { historyQueryHint } from "./historyQuery";
 import { createGitNetwork, emptyNetwork, networkStatusText, networkVerb, type NetworkOperation } from "./gitNetwork";
 import { createStashPreview, emptyStashPreview, sidebarDate, stashLabel, type StashPreviewState } from "./gitStashes";
 import { setStringAsync } from "@legendapp/spark/clipboard";
@@ -70,7 +71,6 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
   const [filter, setFilter] = useState("");
   const [history, setHistory] = useState(emptyHistory);
   const historyController = useRef<ReturnType<typeof createGitHistory> | null>(null);
-  const [searchScope, setSearchScope] = useState<SearchScope>("message");
   const [historyQuery, setHistoryQuery] = useState("");
   // Bumped when the app clears the search field (Show All), so the toolbar re-sends its text.
   const [searchEpoch, setSearchEpoch] = useState(0);
@@ -877,7 +877,6 @@ Rebase anyway?`,
     searching: root ? !!history.search : false,
     gitHubUrl: oid => commitGitHubUrl(historyRef.current, oid),
     canBlame: !!root && !!blameTarget,
-    searchScope,
     canApplyLines: !!root && section === "changes" && !!changes.patch?.file?.hunks.length,
     linesLabel: `${selected?.section === "staged" ? "Unstage" : "Stage"} Selected Lines`,
     canDiscardFile: section === "changes" && canDiscardFile,
@@ -938,10 +937,6 @@ Rebase anyway?`,
       },
       blameLine: () => void blameLine(),
       compareWith: oid => void historyController.current?.compare(oid),
-      setSearchScope: scope => {
-        setSearchScope(scope);
-        if (historyQuery) historyController.current?.search(scope, historyQuery);
-      },
       applyLines: () => applyLines.current?.(),
       discardFile: () => void discardFile(),
       discardLines: () => discardLines.current?.(),
@@ -1197,13 +1192,8 @@ Rebase anyway?`,
     networkProgress: () => network.operation ? [{ type: "label", id: "network-progress", label: `${networkVerb(network.operation)}…`, text: `${networkVerb(network.operation)}…`, width: 180 }]
       : networkText ? [{ type: "label", id: "ahead-behind", label: `${aheadBehindTooltip}`, text: networkText }] : [],
     // AppKit's NSSearchToolbarItem (it collapses itself when the toolbar is narrow); Spark's `collapses` button ignores real clicks (Spark ask).
-    search: () => [
-      { type: "search", id: "search", label: "Search", placeholder: showsHistory ? "Search Commits" : "Filter Files", width: 200 },
-      ...showsHistory ? [{
-        type: "menu" as const, id: "search-scope", label: searchScopes.find(entry => entry.scope === searchScope)!.label, tooltip: "Search in",
-        items: searchScopes.map(({ scope, label }) => ({ type: "checkbox" as const, id: `search-${scope}`, label, checked: scope === searchScope })),
-      }] : [],
-    ],
+    // History searches everything at once; qualifiers (author:, path:, before:, …) narrow it (historyQuery.ts).
+    search: () => [{ type: "search", id: "search", label: "Search", placeholder: showsHistory ? historyQueryHint : "Filter Files", width: showsHistory ? 260 : 200 }],
   });
   // The search field keeps its own text; it is passed only when the toolbar is rebuilt (a section switch or Show All).
   const searchText = showsHistory ? historyQuery : filter;
@@ -1280,7 +1270,7 @@ Rebase anyway?`,
         if (!sectionShowsHistory(contextRef.current.section)) setFilter(event.value);
         else {
           setHistoryQuery(event.value);
-          historyOwner.search(contextRef.current.searchScope, event.value);
+          historyOwner.search(event.value);
         }
       }
     });

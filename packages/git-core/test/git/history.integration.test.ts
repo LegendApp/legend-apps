@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { GitService, githubCommitUrl } from "../../src/GitService";
+import { GitService, githubCommitUrl, type GitHistoryQuery } from "../../src/GitService";
 import { fixtureGit } from "../fixtures/make-repos";
 import { realRunner } from "../fixtures/realRunner";
 
@@ -131,7 +131,7 @@ it("has no file history on an unborn HEAD", async () => {
   expect(await git.fileHistory("a.txt")).toEqual({ commits: [], done: true });
 });
 
-it("searches history by message, author, path and content, paged across 500/501 with no duplicates, matching git log", async () => {
+it("searches history with git filters and a commit test, paged across 500/501 with no duplicates, matching git log", async () => {
   const { path, git } = repo("search");
   // 1,002 commits; the even ones match every scope, so each search finds 501.
   let stream = "";
@@ -147,29 +147,39 @@ it("searches history by message, author, path and content, paged across 500/501 
   execFileSync("git", ["fast-import", "--quiet"], { cwd: path, input: stream });
   fixtureGit(path, "reset", "-q", "--hard", "main");
   const head = fixtureGit(path, "rev-parse", "HEAD");
-  const queries = [
-    ["message", "PARSER (#", ["--regexp-ignore-case", "--fixed-strings", "--grep=PARSER (#"]],
-    ["author", "ann match", ["--regexp-ignore-case", "--fixed-strings", "--author=ann match"]],
-    ["path", "parser/", ["--", ":(icase)*parser/*"]],
-    ["content", "NEEDLE", ["-SNEEDLE"]],
-  ] as const;
-  for (const [scope, text, args] of queries) {
-    const expected = fixtureGit(path, "log", "--topo-order", "--format=%H", ...args.filter(arg => arg !== "--" && !arg.startsWith(":")), head, ...args.filter(arg => arg === "--" || arg.startsWith(":"))).split("\n");
+  const grep = (...args: string[]) => fixtureGit(path, "log", "--topo-order", "--format=%H", ...args.filter(arg => arg !== "--" && !arg.startsWith(":")), head, ...args.filter(arg => arg === "--" || arg.startsWith(":"))).split("\n");
+  const fixed = ["--regexp-ignore-case", "--fixed-strings"];
+  const queries: [GitHistoryQuery, string[]][] = [
+    [{ revisions: [head], options: [...fixed, "--grep=PARSER (#"], paths: [] }, [...fixed, "--grep=PARSER (#"]],
+    [{ revisions: [head], options: [...fixed, "--author=ann match"], paths: [] }, [...fixed, "--author=ann match"]],
+    [{ revisions: [head], options: [], paths: [":(icase)*parser/*"] }, ["--", ":(icase)*parser/*"]],
+    [{ revisions: [head], options: ["-SNEEDLE"], paths: [] }, ["-SNEEDLE"]],
+    // A test git can't make reads the history in batches of 2,000 and keeps what passes.
+    [{ revisions: [head], options: [], paths: [], match: commit => commit.message.includes("Fix parser") && commit.committerEmail === "ann@example.test" }, ["--grep=Fix parser"]],
+  ];
+  for (const [query, args] of queries) {
+    const expected = grep(...args);
     expect(expected).toHaveLength(501);
-    const first = await git.searchHistory(head, scope, text);
+    const first = await git.searchHistory(query);
     expect(first.done).toBe(false);
     expect(first.commits).toHaveLength(500);
-    const second = await git.searchHistory(head, scope, text, { offset: 500 });
+    const second = await git.searchHistory(query, { offset: 500 });
     expect(second).toMatchObject({ done: true });
     const oids = [...first.commits, ...second.commits].map(commit => commit.oid);
     expect(new Set(oids).size).toBe(501);
     expect(oids).toEqual(expected);
-    expect(first.commits[0]).toMatchObject({ oid: fixtureGit(path, "rev-parse", "HEAD~1"), summary: "Fix parser (#1000)", authorName: "Ann Match" });
+    expect(first.commits[0]).toMatchObject({ oid: fixtureGit(path, "rev-parse", "HEAD~1"), summary: "Fix parser (#1000)", authorName: "Ann Match", committerName: "Ann Match", message: "Fix parser (#1000)" });
   }
-  // A regex metacharacter is plain text, and an empty query finds nothing.
-  expect((await git.searchHistory(head, "message", "(#100")).commits.map(commit => commit.summary)).toEqual(["Fix parser (#1000)", "Fix parser (#100)"]);
-  expect(await git.searchHistory(head, "message", "")).toEqual({ commits: [], done: true });
-  await expect(git.searchHistory("HEAD", "message", "x")).rejects.toThrow("Expected a commit id.");
+  // Ref names come with each commit; a revision can leave a branch's commits out.
+  fixtureGit(path, "tag", "v-old", "HEAD~1000");
+  const tagged = await git.searchHistory({ revisions: [head, `^${fixtureGit(path, "rev-parse", "HEAD~999")}`], options: [], paths: [] }, { count: 2000 });
+  expect(tagged.commits).toHaveLength(999);
+  expect((await git.searchHistory({ revisions: [head], options: [], paths: [], match: commit => commit.refs.includes("v-old") })).commits.map(commit => commit.refs)).toEqual([["v-old"]]);
+  expect((await git.searchHistory({ revisions: [head], options: [], paths: [] }, { count: 1 })).commits[0]!.refs).toEqual(["main"]);
+  // A regex metacharacter is plain text; ids and options are checked.
+  expect((await git.searchHistory({ revisions: [head], options: [...fixed, "--grep=(#100"], paths: [] })).commits.map(commit => commit.summary)).toEqual(["Fix parser (#1000)", "Fix parser (#100)"]);
+  await expect(git.searchHistory({ revisions: ["HEAD"], options: [], paths: [] })).rejects.toThrow("Expected a commit id.");
+  await expect(git.searchHistory({ revisions: [head], options: ["--output=/tmp/x"], paths: [] })).rejects.toThrow("Unsupported search option.");
 });
 
 it("compares two commits in either order, a merge with its second parent, and a root commit", async () => {

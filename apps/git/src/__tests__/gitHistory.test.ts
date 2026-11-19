@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { GitService, type GitDirectoryChangeEvent } from "@legend-apps/git-core";
+import { GitService, type GitDirectoryChangeEvent, type GitHistoryQuery } from "@legend-apps/git-core";
 import type { GitHistoryCommit, GitHistoryReader } from "@legend-apps/diff-parser";
 import { fixtureGit } from "../../../../packages/git-core/test/fixtures/make-repos";
 import { realRunner } from "../../../../packages/git-core/test/fixtures/realRunner";
@@ -293,12 +293,12 @@ async function until(check: () => boolean) {
   expect(check()).toBe(true);
 }
 
-it("searches by message in place of the history, pages results by 500 with no duplicates, and Show All returns", async () => {
+it("searches with a message: qualifier in place of the history, pages results by 500 with no duplicates, and Show All returns", async () => {
   const path = repo("search");
   const t = setup(path);
   await t.controller.activate();
-  t.controller.search("message", "COMMIT");
-  expect(t.state().search).toMatchObject({ scope: "message", text: "COMMIT", loading: true });
+  t.controller.search("message:COMMIT");
+  expect(t.state().search).toMatchObject({ text: "message:COMMIT", loading: true });
   await until(() => t.state().search?.loading === false);
   const expected = fixtureGit(path, "log", "--topo-order", "--regexp-ignore-case", "--fixed-strings", "--grep=COMMIT", "--format=%H").split("\n");
   expect(expected.length).toBeGreaterThan(1000);
@@ -312,10 +312,10 @@ it("searches by message in place of the history, pages results by 500 with no du
   expect(found).toEqual(expected.slice(0, 1500));
   expect(new Set(found).size).toBe(1500);
   // Showing a file's history ends the search; an empty query does too.
-  t.controller.search("author", "nobody here");
+  t.controller.search('author:"nobody here"');
   await until(() => t.state().search?.loading === false);
   expect(t.state().search).toMatchObject({ commits: [], done: true });
-  t.controller.search("author", "");
+  t.controller.search("");
   expect(t.state().search).toBeNull();
   t.controller.dispose();
 });
@@ -327,27 +327,32 @@ it("debounces typing, and a newer query cancels the running one so only its resu
     repoRoot: "/repo", watchLocations: async () => ({ root: "/repo", gitDir: "/repo/.git", commonDir: "/repo/.git", ignoredPaths: [] }),
     revParse: async () => head, refDecorations: async () => new Map(), remoteUrl: async () => null, currentBranch: async () => "main",
     commitDetails: () => new Promise(() => {}), commitPatch: () => new Promise(() => {}),
-    searchHistory: jest.fn((_head: string, _scope: string, text: string, { signal }: { signal: AbortSignal }) => new Promise(resolve => { calls.push({ text, signal, resolve }); })),
+    searchHistory: jest.fn((query: GitHistoryQuery, { signal }: { signal: AbortSignal }) => new Promise(resolve => { calls.push({ text: query.options.join(" "), signal, resolve }); })),
   };
   let state!: HistoryState;
   const reader = { head: { handle: 1, headOid: head, unborn: false, detached: false }, page: async (offset: number) => ({ offset, commits: [], done: true }), close() {} };
   const controller = createGitHistory(next => { state = next; }, () => ({ remove() {} }), { serviceFor: () => git as unknown as GitService, open: async () => reader, searchDelay: 20 });
   controller.setRoot("/repo");
   await controller.activate();
-  controller.search("message", "f");
-  controller.search("message", "fi");
-  controller.search("message", "fix");
+  controller.search("message:f");
+  controller.search("message:fi");
+  controller.search("message:fix");
   await until(() => calls.length === 1);
-  expect(calls[0]!.text).toBe("fix");
-  controller.search("message", "fixes");
+  expect(calls[0]!.text).toContain("--grep=fix");
+  controller.search("message:fixes");
   expect(calls[0]!.signal.aborted).toBe(true);
   await until(() => calls.length === 2);
   const row = (oid: string) => ({ oid, parents: [], authorName: "A", authorEmail: "a@x", time: 1, summary: oid, status: "", path: "", oldPath: null });
   calls[0]!.resolve({ commits: [row("old")], done: true });
   calls[1]!.resolve({ commits: [row("new")], done: true });
   await settle();
-  expect(state.search).toMatchObject({ text: "fixes", loading: false, commits: [{ oid: "new" }] });
-  expect(git.searchHistory).toHaveBeenCalledWith(head, "message", "fixes", expect.objectContaining({ offset: 0, count: 500 }));
+  expect(state.search).toMatchObject({ text: "message:fixes", loading: false, commits: [{ oid: "new" }] });
+  expect(git.searchHistory).toHaveBeenLastCalledWith(expect.objectContaining({ revisions: [head], options: expect.arrayContaining(["--grep=fixes"]) }), expect.objectContaining({ offset: 0, count: 500 }));
+  // A query that can't run says why, without running git.
+  controller.search("before:soon");
+  await until(() => state.search?.loading === false);
+  expect(state.search).toMatchObject({ text: "before:soon", error: "before: needs a date like 2026-11-01.", commits: [] });
+  expect(git.searchHistory).toHaveBeenCalledTimes(2);
   controller.dispose();
 });
 
@@ -440,10 +445,11 @@ it("keeps search results when the same query arrives again, and re-runs the sear
   const path = repo("search-repeat");
   const t = setup(path);
   await t.controller.activate();
-  t.controller.search("message", "Merge");
+  // A free word searches every field at once.
+  t.controller.search("merge");
   await until(() => t.state().search?.loading === false);
   const first = t.state().search;
-  t.controller.search("message", "Merge");
+  t.controller.search("merge");
   expect(t.state().search).toBe(first);
   fixtureGit(path, "commit", "-q", "--allow-empty", "-m", "Merge-like new commit");
   t.notify(join(path, ".git/refs/heads/main"));

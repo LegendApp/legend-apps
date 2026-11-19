@@ -157,7 +157,7 @@ The commit list (History, refs, review branches).
 | Key | Type | Default | SourceTree \| Fork \| GitKraken | Meaning |
 |---|---|---|---|---|
 | `panels.commitList.density` | `"compact"` \\| `"regular"` \\| `"comfortable"` |  |  |  |  | Row height. Panels without their own density use the global one.<br>`"compact"` File/commit rows 20 pt, sidebar rows 24 pt.<br>`"regular"` File/commit rows 24 pt, sidebar rows 28 pt.<br>`"comfortable"` File/commit rows 28 pt, sidebar rows 32 pt. |
-| `panels.commitList.columns` | array of map of any | `[{"id":"graph"},{"id":"subject"},{"id":"author","width":160},{"id":"date","width":140},{"id":"sha","width":72}]` | `[{"id":"graph","width":120},{"id":"subject"},{"id":"date","width":140},{"id":"author","width":160},{"id":"sha","width":72}]` | `[{"id":"graph","width":90},{"id":"subject"},{"id":"author","width":140},{"id":"date","width":120},{"id":"sha","width":64}]` | `[{"id":"refs","width":180},{"id":"graph","width":220},{"id":"subject"}]` | Columns in display order. |
+| `panels.commitList.columns` | array of map of any | `[{"id":"graph"},{"id":"subject"},{"id":"author","width":160},{"id":"date","width":140},{"id":"sha","width":72}]` | `[{"id":"graph","width":120},{"id":"subject"},{"id":"date","width":140},{"id":"author","width":160},{"id":"sha","width":72}]` | `[{"id":"graph","width":70},{"id":"subject"},{"id":"author","width":110},{"id":"date","width":90}]` | `[{"id":"refs","width":180},{"id":"graph","width":220},{"id":"subject"}]` | Columns in display order. |
 | `panels.commitList.refs` | `"inline"` \\| `"column"` \\| `"hidden"` | `"inline"` | `"inline"` | `"inline"` | `"column"` | Where branch and tag labels go.<br>`"inline"` Before the subject.<br>`"column"` In the refs column.<br>`"hidden"` Not shown. |
 | `panels.commitList.refStyle` | `"text"` \\| `"tinted"` | `"text"` | `"text"` | `"text"` | `"tinted"` | Ref label style.<br>`"text"` Plain text.<br>`"tinted"` Theme ref color with a small SF Symbol. |
 | `panels.commitList.showRemoteRefs` | boolean | `true` | `true` | `true` | `true` | Show remote branches. |
@@ -330,3 +330,19 @@ An entry is a command id (see [commands.md](commands.md)), `{ "command": <id>, "
 ## Context menu entries
 
 An entry is a command id, `"separator"`, or `{ "submenu": <title>, "items": [ … ] }`. Each target's list replaces the built-in menu whole; entries that don't apply to what was clicked are left out when the menu opens.
+
+## History search
+
+The toolbar's search field (`search` widget) searches History. Free words match a commit's message, author, committer, SHA prefix or branch and tag names, and every word must match. Qualifiers narrow one field; a qualifier's values match either one (`author:ann author:bob`), `-` in front leaves matches out (`-author:bot`, `-wip`), and quotes keep spaces (`author:"Jay M"`).
+
+| Qualifier | Matches |
+|---|---|
+| `author:name` | Author name or email (author:jay, author:"Jay M"). |
+| `committer:name` | Committer name or email. |
+| `message:text` | Commit message (subject and body). |
+| `sha:abc123` | Commit SHA prefix (also hash:, commit:). |
+| `path:src/app` | A changed file's path contains the text (also file:). |
+| `branch:main` | Commits reachable from a branch or tag (also ref:, tag:); -branch:main leaves out its commits. |
+| `content:text` | Added or removed text (git log -S); one per search. |
+| `before:2026-11-01` | Committed before that day. |
+| `after:2026-10-01` | Committed on or after that day. |

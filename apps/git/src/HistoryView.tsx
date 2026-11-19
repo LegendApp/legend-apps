@@ -10,7 +10,7 @@ import { Sidebar, SidebarItem } from "@legendapp/spark/ui/sidebar";
 import { SFSymbol } from "@legendapp/spark/ui/symbol";
 import { DiffPane, type DiffLineTarget } from "./DiffPane";
 import { EmptyState } from "./EmptyState";
-import { commitGitHubUrl, relativeDate, searchScopes, shortOid, type CommitFile, type HistoryState } from "./gitHistory";
+import { commitGitHubUrl, relativeDate, shortOid, type CommitFile, type HistoryState } from "./gitHistory";
 import { pathParts } from "./FileRow";
 import { folderItem, useFileList } from "./fileList";
 import { useDensity, usePanelOptions, useThemeTokens } from "./settings/panelOptions";
@@ -285,18 +285,17 @@ export function HistoryList({ history, actions, memory }: { history: HistoryStat
 
   if (history.head?.unborn) return <EmptyState title="No Commits Yet" message="Make the first commit from Changes." />;
   if (!history.head) return history.error ? <Text accessibilityRole="alert" style={styles.error}>{history.error}</Text> : <EmptyState title="Loading History…" />;
-  const listId = search ? `search:${search.scope}:${search.text}` : file?.path ?? (range ? `range:${range.base}..${history.ref}` : undefined);
+  const listId = search ? `search:${search.text}` : file?.path ?? (range ? `range:${range.base}..${history.ref}` : undefined);
   // A remembered offset applies only to the same list (the log of the same ref, or the same search, file or range).
   const listKey = listId ?? `log:${history.ref ?? ""}`;
   const folder = file && pathParts(file.path);
   const filter = search ?? file ?? range;
-  const scopeLabel = search && searchScopes.find(entry => entry.scope === search.scope)!.label;
   const highlighted = (oid: string) => compare ? oid === compare.base || oid === compare.target : oid === selectedOid;
   return <View style={styles.list}>
     {search ? <View style={styles.heading}>
       <View style={styles.headingText}>
         <Text style={styles.headingLabel} accessibilityRole="header" numberOfLines={1}>{`Search: “${search.text}”`}</Text>
-        <Text style={styles.headingFolder} numberOfLines={1}>{search.loading ? `Searching ${scopeLabel!.toLowerCase()}…` : `${search.commits.length}${search.done ? "" : "+"} in ${scopeLabel}`}</Text>
+        <Text style={styles.headingFolder} numberOfLines={1}>{search.loading ? "Searching…" : `${search.commits.length}${search.done ? "" : "+"} ${search.commits.length === 1 && search.done ? "commit" : "commits"}`}</Text>
       </View>
       <Button style={styles.showAll} onPress={() => actions.closeFileHistory()}>Show All</Button>
     </View> : file && folder ? <View style={styles.heading}>
@@ -309,7 +308,7 @@ export function HistoryList({ history, actions, memory }: { history: HistoryStat
     {(filter ?? history).error ? <Text accessibilityRole="alert" style={styles.error}>{(filter ?? history).error}</Text> : null}
     <ColumnHeader layout={layout} columns={options.columns} onMenu={actions.columnMenu} />
     {search?.loading && !search.commits.length ? <EmptyState title="Searching…" />
-      : search && !search.commits.length ? search.error ? null : <EmptyState title="No Results" message={`No commit matches in ${scopeLabel!.toLowerCase()}.`} />
+      : search && !search.commits.length ? search.error ? null : <EmptyState title="No Results" message="No commit matches. Free words search messages, authors, SHAs and branch names; author:, path:, before: and other qualifiers narrow it." />
       : file?.loading ? <EmptyState title="Loading File History…" />
       : file && !file.commits.length ? <EmptyState title="No History" message="No commit touched this file." />
       : range?.loading && !range.commits.length ? <EmptyState title="Loading Commits…" />

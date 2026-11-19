@@ -1,7 +1,6 @@
 import type { GitConflictSide, GitOperation, GitRefList, GitStash, GitUndo } from "@legend-apps/git-core";
 import { undoLabel } from "./gitUndo";
 import { abortLabel, canContinue, conflictPickable, conflictPickLabel, continueLabel, type ConflictEntry } from "./gitOperation";
-import { searchScopes, type SearchScope } from "./gitHistory";
 import { findRef, type WorktreeEntry } from "./gitRefs";
 import { networkVerb, type NetworkOperation } from "./gitNetwork";
 import type { GitHubAccountState } from "./gitHubAccount";
@@ -41,7 +40,6 @@ export type CommandContext = {
   searching: boolean;
   /** The diff pane has a line to blame (the one clicked last). */
   canBlame: boolean;
-  searchScope: SearchScope;
   canApplyLines: boolean;
   linesLabel: string;
   canDiscardFile: boolean;
@@ -114,7 +112,6 @@ export type CommandContext = {
     closeFileHistory(): void;
     blameLine(): void;
     compareWith(oid: string): void;
-    setSearchScope(scope: SearchScope): void;
     applyLines(): void;
     discardFile(): void;
     discardLines(): void;
@@ -330,11 +327,6 @@ export const commands = [
     enabled: (context, target) => !!target && !!context.selectedCommit && target !== context.selectedCommit,
     run: (context, target) => context.run.compareWith(target!),
   },
-  ...searchScopes.map(({ scope, label }) => ({
-    id: `search-${scope}` as const, label,
-    enabled: (context: CommandContext) => context.hasRepository && context.section !== "changes",
-    run: (context: CommandContext) => context.run.setSearchScope(scope),
-  })),
   { id: "apply-lines", label: context => context.linesLabel, shortcut: "Cmd+Shift+l", enabled: context => context.canApplyLines, run: context => context.run.applyLines() },
   { id: "discard-file", label: "Discard Changes to File…", shortcut: "Cmd+Shift+Backspace", enabled: context => context.canDiscardFile, run: context => context.run.discardFile() },
   { id: "discard-lines", label: "Discard Selected Lines…", enabled: context => context.canDiscardLines, run: context => context.run.discardLines() },
