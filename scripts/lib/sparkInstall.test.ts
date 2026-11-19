@@ -504,6 +504,7 @@ import path from "node:path";
 import { rootDir } from "./apps";
 export function getDevSyntaxAssetSourceRoot() { return "syntax"; }
 export function getSlidesCompilerPath() { return "compiler"; }
+export function runPlatformCommand() { throw new Error("Unexpected platform command"); }
 export function runCommand(command, args, options) {
   if (command === "node" && args.includes("build") && args.includes("--dev")) {
     fs.writeFileSync(path.join(options.cwd, ".spark/settings.json"), JSON.stringify({ target: "dev" }));
@@ -574,6 +575,56 @@ export async function runSharedDebugMetro(options) { runCommand("expo", options.
   assert.equal(release.status, 0, release.stderr);
   assert.equal(f.commands().at(-1).command, "node");
   assert.deepEqual(f.commands().at(-1).args.slice(1), ["build", "--release"]);
+});
+
+test("diff pods macos dispatches to shared-host prebuild with zero app builds", t => {
+  const f = appFixture(t);
+  for (const file of ["run-app.ts", "lib/apps.ts", "lib/sharedDebugHost.ts"]) {
+    f.write(`scripts/${file}`, fs.readFileSync(path.resolve("scripts", file), "utf8"));
+  }
+  f.write("scripts/lib/sparkSubpaths.ts", "export const expandSparkSubpath = name => [name];");
+  f.write("scripts/lib/nativeModules.ts", "export function writeGeneratedConfig() { throw new Error('Unexpected shell preparation'); }");
+  f.write("apps/diff/app.manifest.ts", "export default { id: 'diff', platforms: ['macos'], nativeModules: { macos: [] }, bundleIds: {} };");
+  f.write("apps/hello-world/app.manifest.ts", "export default { id: 'hello-world', platforms: ['macos'], nativeModules: { macos: [] }, bundleIds: {} };");
+  const root = fs.realpathSync(f.repoRoot);
+  const cli = path.join(root, "node_modules/@legendapp/spark/bin/spark.cjs");
+  const sdk = path.dirname(path.dirname(cli));
+  const host = path.join(root, "shell/.legend/spark/debug-host");
+  f.write("node_modules/@legendapp/spark/package.json", { exports: { "./cli": "./bin/spark.cjs", "./config": "./config.cjs" } });
+  f.write("node_modules/@legendapp/spark/config.cjs", "");
+  f.write("node_modules/@legendapp/spark/vendor/node_modules/@legendapp/spark-desktop-config/identity.cjs", "");
+  f.write("scripts/lib/sparkSdk.ts", `export const sparkSdkRoot = ${JSON.stringify(sdk)};`);
+  f.write("scripts/lib/sparkWorkspaces.ts", `
+    import fs from "node:fs";
+    import path from "node:path";
+    import { rootDir } from "./apps";
+    export const sparkWorkspace = id => path.join(rootDir, "shell/.legend/spark", id);
+    export function prepareSparkWorkspace(manifest, mode, project) {
+      fs.mkdirSync(path.join(project, ".spark"), { recursive: true });
+      fs.writeFileSync(path.join(project, "config-input.json"), JSON.stringify(manifest));
+    }
+    export function sparkConfig() {}
+  `);
+  const dispatch = f.invoke("run-app", ["diff", "pods", "macos"]);
+  assert.equal(dispatch.status, 0, dispatch.stderr);
+  const route = f.commands()[0];
+  assert.equal(route.command, "bun");
+  const result = f.invoke("spark-app", route.args.slice(1));
+  const calls = f.commands().slice(1);
+  assert.equal(calls.filter(call => call.args.includes("build") || call.command === "xcodebuild").length, 0);
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(calls.map(({ command, args }) => [command, args]), [
+    ["node", [cli, "prebuild", "--platform", "macos", "--project", host]],
+  ]);
+  const config = JSON.parse(fs.readFileSync(path.join(host, "config-input.json"), "utf8"));
+  assert.equal(config.bundleIds.macos, "so.legend.debughost");
+  assert.deepEqual(config.nativeModules.macos, ["@legend-apps/diff-parser"]);
+
+  f.write("shell/.legend/spark/debug-host/inputs.json", { config: {}, packages: [], plugin: "host" });
+  const offline = f.invoke("spark-app", [...route.args.slice(1), "--offline"]);
+  assert.equal(offline.status, 1);
+  assert.match(offline.stderr, /Spark prebuild needs .*pod install/);
+  assert.deepEqual(f.commands().slice(1), calls);
 });
 
 test("spark-app forwards only the analyze action tail to the CLI and offline guard", { timeout: 30_000 }, t => {

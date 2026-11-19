@@ -65,20 +65,46 @@ test("all workspace consumers resolve the root catalog Spark SDK", async () => {
   }
 });
 
-test("generated workspaces record the installed Spark version for its migration gate", async () => {
-  const project = prepareSparkWorkspace(await loadAppManifest("hello-world"));
+test("Spark initializes fresh generated workspaces and preserves their migration receipt", async t => {
+  fs.mkdirSync(sharedSparkWorkspace, { recursive: true });
+  const project = fs.mkdtempSync(path.join(sharedSparkWorkspace, ".init-test-"));
+  t.after(() => fs.rmSync(project, { recursive: true, force: true }));
+  const manifest = await loadAppManifest("hello-world");
+  prepareSparkWorkspace(manifest, "dev", project);
   const { version } = JSON.parse(fs.readFileSync(path.join(sdkRoot, "package.json"), "utf8"));
-  assert.equal(fs.readFileSync(path.join(project, ".spark/version"), "utf8"), `${version}\n`);
+  const receipt = path.join(project, ".spark/version");
+  const pointer = path.join(project, "AGENTS.md");
+  assert.equal(fs.readFileSync(receipt, "utf8"), `${version}\n`);
+  const instructions = fs.readFileSync(pointer, "utf8");
+  assert.match(instructions, /<!-- spark:skill:start -->/);
+  prepareSparkWorkspace(manifest, "dev", project);
+  assert.equal(fs.readFileSync(pointer, "utf8"), instructions);
+
   const transport = JSON.parse(fs.readFileSync(path.join(project, "app.json"), "utf8"));
   assert.equal(transport.expo.experiments.tsconfigPaths, false);
   assert.equal(transport.expo.extra.spark.projectId, "so.legend.helloworld.macos");
+});
+
+test("regeneration applies Spark's migration for an existing 0.0.3 workspace", async t => {
+  fs.mkdirSync(sharedSparkWorkspace, { recursive: true });
+  const project = fs.mkdtempSync(path.join(sharedSparkWorkspace, ".migration-test-"));
+  t.after(() => fs.rmSync(project, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(project, ".spark"));
+  fs.writeFileSync(path.join(project, ".spark/version"), "0.0.3\n");
+  const instructions = path.join(project, "AGENTS.md");
+  fs.writeFileSync(instructions, "Local instructions.\n");
+
+  prepareSparkWorkspace(await loadAppManifest("hello-world"), "dev", project);
+
+  assert.match(fs.readFileSync(path.join(project, ".spark/upgrade-notes.md"), "utf8"), /\[0\.0\.4\]/);
+  assert.match(fs.readFileSync(instructions, "utf8"), /^Local instructions\.\n.*spark:skill:start/s);
 });
 
 test("a shared native host workspace preserves the normal app workspace", async () => {
   const manifest = await loadAppManifest("hello-world");
   const app = prepareSparkWorkspace(manifest);
   const original = fs.readFileSync(path.join(app, "desktop.config.json"), "utf8");
-  const host = fs.mkdtempSync(path.join(os.tmpdir(), "legend-shared-host-"));
+  const host = fs.mkdtempSync(path.join(sharedSparkWorkspace, ".shared-host-test-"));
   try {
     prepareSparkWorkspace({ ...manifest, displayName: "Shared Host" }, "dev", host);
     assert.equal(JSON.parse(fs.readFileSync(path.join(host, "desktop.config.json"), "utf8")).name, "Shared Host");

@@ -227,7 +227,8 @@ export async function assertSparkOfflineBuild(project: string, cli: string, args
     return;
   }
   const { buildMode } = await import(pathToFileURL(path.join(dist, "build-mode.js")).href);
-  const mode = buildMode(values);
+  const action = args[0] === "prebuild" ? "prebuild" : "build";
+  const mode = action === "prebuild" ? "dev" : buildMode(values);
   const force = !!values.force;
   if (values.platform) process.env.SPARK_PLATFORM = values.platform;
   const sdk = await import(pathToFileURL(path.join(dist, "project.js")).href);
@@ -242,11 +243,13 @@ export async function assertSparkOfflineBuild(project: string, cli: string, args
   const inputs = sdk.nativePreparationInputs(project, chosen.included);
   const fingerprint = sdk.digest(JSON.stringify(inputs));
   const projectFingerprint = sdk.nativeProjectFingerprint(inputs, chosen.included);
-  const runtime = sdk.runtimeFor(project, chosen.included, mode);
-  if (mode === "release") runtime.fingerprint = sdk.digest(runtime.fingerprint + sdk.hashFiles(project, [path.relative(project, sdk.stateFile(project, "analysis/app.js"))]));
-  const resultFile = sdk.stateFile(project, `${mode}-build.json`);
-  const existing = fs.existsSync(resultFile) ? sdk.readJson(resultFile) : undefined;
-  if (!force && existing?.runtime.fingerprint === runtime.fingerprint && existing?.preparation?.fingerprint === fingerprint && fs.existsSync(existing.app)) return;
+  if (action === "build") {
+    const runtime = sdk.runtimeFor(project, chosen.included, mode);
+    if (mode === "release") runtime.fingerprint = sdk.digest(runtime.fingerprint + sdk.hashFiles(project, [path.relative(project, sdk.stateFile(project, "analysis/app.js"))]));
+    const resultFile = sdk.stateFile(project, `${mode}-build.json`);
+    const existing = fs.existsSync(resultFile) ? sdk.readJson(resultFile) : undefined;
+    if (!force && existing?.runtime.fingerprint === runtime.fingerprint && existing?.preparation?.fingerprint === fingerprint && fs.existsSync(existing.app)) return;
+  }
   const preparedFile = sdk.stateFile(project, "native-preparation.json");
   const prepared = fs.existsSync(preparedFile) ? sdk.readJson(preparedFile) : undefined;
   const nativeRoot = path.join(project, "macos");
@@ -256,7 +259,7 @@ export async function assertSparkOfflineBuild(project: string, cli: string, args
   const missing = native.missingNativeFrameworks(project) as string[];
   if (needsPods || missing.length) {
     const reason = needsProject ? "native project needs generation" : prepared?.fingerprint !== fingerprint ? "native preparation is missing or out of date" : missing.length ? `native frameworks missing: ${missing.join(", ")}` : "Pods/Manifest.lock missing";
-    throw new SparkInstallError(`Spark build needs ${needsProject ? "template prebuild and " : ""}pod install (${reason}), which may require the network. Reconnect and rerun this command without --offline and with LEGEND_OFFLINE=0. ${sparkOfflineHelp}`);
+    throw new SparkInstallError(`Spark ${action} needs ${needsProject ? "template prebuild and " : ""}pod install (${reason}), which may require the network. Reconnect and rerun this command without --offline and with LEGEND_OFFLINE=0. ${sparkOfflineHelp}`);
   }
 }
 

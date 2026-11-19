@@ -5,7 +5,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { loadAppManifest, rootDir } from "./apps";
-import { acquireInstallLock } from "./sparkInstall";
+import { acquireInstallLock, assertSparkOfflineBuild } from "./sparkInstall";
 import { sparkSdkRoot } from "./sparkSdk";
 import { prepareSparkWorkspace, sparkConfig, sparkWorkspace } from "./sparkWorkspaces";
 import { runCommand } from "./run";
@@ -39,32 +39,45 @@ export function findSharedDebugHost(): SharedHost | undefined {
   if (fs.existsSync(host.app) && host.hash === rootNativeSignature()) return host;
 }
 
-export async function buildSharedDebugHost(cli: string, env: Record<string, string | undefined>, offline: boolean, args: string[] = []) {
+async function withSharedDebugWorkspace<T>(action: () => Promise<T>) {
   fs.mkdirSync(sharedDebugWorkspace, { recursive: true });
   const unlock = acquireInstallLock(sharedDebugWorkspace, 3_600_000);
-  try {
+  try { return await action(); }
+  finally { unlock(); }
+}
+
+async function prepareSharedDebugWorkspace() {
+  const base = await loadAppManifest("hello-world");
+  // The shared host always links the Diff parser and its native configuration plugin.
+  prepareSparkWorkspace({ ...base, displayName: "Legend Debug Host",
+    bundleIds: { ...base.bundleIds, macos: "so.legend.debughost" },
+    nativeModules: { ...base.nativeModules, macos: [...base.nativeModules.macos, "@legend-apps/diff-parser"] },
+  }, "dev", sharedDebugWorkspace);
+}
+
+export async function prebuildSharedDebugHost(cli: string, env: Record<string, string | undefined>, offline: boolean, args: string[]) {
+  return withSharedDebugWorkspace(async () => {
+    await prepareSharedDebugWorkspace();
+    const prebuildArgs = ["prebuild", ...args, "--platform", "macos", "--project", sharedDebugWorkspace];
+    if (offline) await assertSparkOfflineBuild(sharedDebugWorkspace, cli, prebuildArgs);
+    runCommand("node", [cli, ...prebuildArgs], { cwd: rootDir, env });
+  });
+}
+
+export async function buildSharedDebugHost(cli: string, env: Record<string, string | undefined>, offline: boolean, args: string[] = []) {
+  return withSharedDebugWorkspace(async () => {
     const cached = findSharedDebugHost();
     if (cached && !args.includes("--force")) { console.log(`Reusing shared Debug host ${cached.hash.slice(0, 12)}.`); return cached; }
-    const base = await loadAppManifest("hello-world");
-    prepareSparkWorkspace({ ...base, displayName: "Legend Debug Host",
-      bundleIds: { ...base.bundleIds, macos: "so.legend.debughost" } }, "dev", sharedDebugWorkspace);
-    const configFile = path.join(sharedDebugWorkspace, "desktop.config.json");
-    const config = read(configFile);
-    // All root modules are linked, independently of the app being launched.
-    config.expo.plugins = [path.join(rootDir, "packages/diff-parser/app.plugin.cjs")];
-    write(configFile, config);
+    await prepareSharedDebugWorkspace();
     const buildArgs = ["build", "--dev", ...args];
-    if (offline) {
-      const { assertSparkOfflineBuild } = await import("./sparkInstall");
-      await assertSparkOfflineBuild(sharedDebugWorkspace, cli, buildArgs);
-    }
+    if (offline) await assertSparkOfflineBuild(sharedDebugWorkspace, cli, buildArgs);
     fs.rmSync(receiptFile, { force: true });
     runCommand("node", [cli, ...buildArgs], { cwd: sharedDebugWorkspace, env });
     const built = read(path.join(sharedDebugWorkspace, ".spark/dev-build.json"));
     const host: SharedHost = { app: built.app, framework: sdk.VERSION, hash: rootNativeSignature() };
     write(receiptFile, host);
     return host;
-  } finally { unlock(); }
+  });
 }
 
 /** Use the same plist translation as a separate build, including lifecycle plugins and Music glass. */

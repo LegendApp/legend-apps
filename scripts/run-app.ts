@@ -80,7 +80,8 @@ async function main() {
   }
 
   if (command.platform === "macos" && (["run", "pods", "prebuild"].includes(command.mode) || (command.mode === "build" && command.extraArgs.includes("--dev")))) {
-    runCommand("bun", ["scripts/spark-app.ts", command.appId, command.mode === "run" ? "run" : "build", ...command.extraArgs.filter(arg => arg !== "--dev")], { cwd: rootDir });
+    const action = command.mode === "prebuild" ? "build" : command.mode;
+    runCommand("bun", ["scripts/spark-app.ts", command.appId, action, ...command.extraArgs.filter(arg => arg !== "--dev")], { cwd: rootDir });
     return;
   }
 

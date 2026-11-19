@@ -14,8 +14,8 @@ const [appId, action = "prepare"] = commandArgs;
 const actionArgs = commandArgs.slice(2);
 const actionTail = [...actionArgs, ...(separator < 0 ? [] : extra.slice(separator))];
 const appArgs = separator < 0 ? [] : extra.slice(separator + 1);
-if (!appId) throw new Error(`Usage: bun scripts/spark-app.ts <app> <prepare|install|build|build-release|run|start|analyze> [--offline] [--reinstall]\n${sparkOfflineHelp}`);
-if (!["prepare", "install", "build", "build-release", "run", "start", "analyze"].includes(action)) throw new Error(`Unknown Spark action: ${action}`);
+if (!appId) throw new Error(`Usage: bun scripts/spark-app.ts <app> <prepare|install|build|build-release|run|start|pods|analyze> [--offline] [--reinstall]\n${sparkOfflineHelp}`);
+if (!["prepare", "install", "build", "build-release", "run", "start", "pods", "analyze"].includes(action)) throw new Error(`Unknown Spark action: ${action}`);
 const manifest = await loadAppManifest(appId);
 assertSupportedPlatform(manifest, "macos");
 const mode = action === "build-release" ? "release" : "dev";
@@ -36,15 +36,21 @@ let cli = "";
 const buildArgs = ["build", action === "build-release" ? "--release" : "--dev", ...(action === "run" ? [] : actionTail)];
 try {
   if (installOptions.offline) assertSparkOfflineArgs(action === "run" ? actionArgs : actionTail);
-  if (["install", "build", "build-release", "run", "start"].includes(action)) {
+  if (["install", "build", "build-release", "run", "start", "pods"].includes(action)) {
     installSparkWorkspace({ project: rootDir, appId, env, ...installOptions });
   }
   if (appId === "slides" && action === "build-release") {
     const { packageSlidesCompilerBundle } = await import("./lib/slidesCompiler");
     await packageSlidesCompilerBundle(path.join(project, ".spark/compiler"), process.env.SPARK_MACOS_ARCH ?? process.arch);
   }
-  prepareSparkWorkspace(manifest, mode, project);
-  if (!["prepare", "install"].includes(action)) cli = createRequire(path.join(project, "package.json")).resolve("@legendapp/spark/cli");
+  if (action === "pods") {
+    const { prebuildSharedDebugHost } = await import("./lib/sharedDebugHost");
+    cli = createRequire(path.join(rootDir, "package.json")).resolve("@legendapp/spark/cli");
+    await prebuildSharedDebugHost(cli, env, installOptions.offline, actionTail);
+  } else {
+    prepareSparkWorkspace(manifest, mode, project);
+    if (!["prepare", "install"].includes(action)) cli = createRequire(path.join(project, "package.json")).resolve("@legendapp/spark/cli");
+  }
   if (!sharedDebug && installOptions.offline && ["build", "build-release", "run"].includes(action)) {
     await assertSparkOfflineBuild(project, cli, buildArgs);
   }
@@ -53,7 +59,7 @@ try {
   process.exit(error instanceof SparkInstallError ? error.exitCode : 1);
 }
 if (action === "prepare") console.log(project);
-else if (action !== "install") {
+else if (action !== "install" && action !== "pods") {
   if (action === "build" && actionArgs.includes("--help")) {
     if (installOptions.offline) console.log(sparkOfflineHelp);
     runCommand("node", [cli, "build", "--help"], { cwd: project, env });
