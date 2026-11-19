@@ -39,6 +39,7 @@ const mockAudioPlayer = {
     pause: jest.fn(async () => ({ success: true })),
     play: jest.fn(async () => ({ success: true })),
     seek: jest.fn(async () => ({ success: true })),
+    setProgressUpdateInterval: jest.fn(),
     setVolume: jest.fn(async () => ({ success: true })),
     stop: jest.fn(async () => ({ success: true })),
     updateNowPlayingInfo: jest.fn(),

@@ -1217,6 +1217,7 @@ export function initializeLocalAudioPlayer(): void {
     }
 
     localAudioPlayerInitialized = true;
+    audioPlayer.setProgressUpdateInterval(5);
     ensureStreamingProvidersRegistered();
     for (const provider of getStreamingProviders()) {
         provider.playback.subscribe((update) => applyStreamingPlaybackUpdate(provider.id, update));
