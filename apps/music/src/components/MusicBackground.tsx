@@ -1,3 +1,4 @@
+import { GlassView } from "@legendapp/spark/ui/glass";
 import { useValue } from "@legendapp/state/react";
 import { useEffect, type ReactNode } from "react";
 import { StyleSheet, View, type LayoutChangeEvent } from "react-native";
@@ -27,10 +28,11 @@ export function MusicBackground({ children, onLayout }: MusicBackgroundProps) {
 
     return (
         <View style={[styles.root, { backgroundColor: rootBackgroundColor }]} onLayout={onLayout}>
-            <View
-                pointerEvents="none"
-                style={[styles.media, { backgroundColor: background.color }]}
-            />
+            {background.glassEnabled ? (
+                <GlassView glassStyle="regular" tintColor={background.color} pointerEvents="none" style={styles.media} />
+            ) : (
+                <View pointerEvents="none" style={[styles.media, { backgroundColor: background.color }]} />
+            )}
             <View style={styles.content}>{children}</View>
         </View>
     );
