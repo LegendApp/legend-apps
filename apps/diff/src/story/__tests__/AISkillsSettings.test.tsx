@@ -8,7 +8,13 @@ import { builtInStorySkills, changeStorySkill, parseStorySkill } from "../storyS
 import { skillEditorContext$, skillPreviewTargets, skillViewerContexts$ } from "../skillRuntime";
 
 jest.mock("@legendapp/spark/ui/settings", () => {
-  const { View } = require("react-native"); return { SettingsSection: View };
+  const { Select } = require("@legendapp/spark/ui");
+  const { View } = require("react-native");
+  return {
+    SettingsSection: View,
+    SettingsSelectRow: ({ label, ...props }: import("@legendapp/spark/ui/settings").SettingsSelectRowProps) =>
+      <Select {...props} accessibilityLabel={label} variant="borderless" />,
+  };
 });
 jest.mock("../skillRuntime", () => {
   const { observable } = require("@legendapp/state"); const { useValue } = require("@legendapp/state/react");
@@ -35,6 +41,34 @@ beforeEach(() => {
   diffActiveMenuWindow$.set("viewer"); skillViewerContexts$.set({ viewer: { repoRoot: "/repo", hasDiff: true } });
   skillEditorContext$.set({ windowId: "viewer", skillName: "change-story" }); skillPreviewTargets.clear();
 });
+it.each([
+  ["Output", ["story", "check", "comments", "patch"], "comments", "output"],
+  ["Organization", ["auto", "concepts", "commits"], "commits", "organization"],
+] as const)("uses a borderless menu for %s and saves the chosen value", async (label, choices, value, key) => {
+  const screen = await render(<AISkillsSettings />);
+  const select = screen.getByLabelText(label);
+  expect(select.props.variant).toBe("borderless");
+  expect(select.props.options.map((option: { value: string }) => option.value)).toEqual(choices);
+  expect(screen.getByLabelText(`${label}: ${value}`).props.accessibilityState.disabled).toBe(true);
+
+  await fireEvent.press(screen.getByLabelText("Duplicate to edit"));
+  if (key === "output") await fireEvent.press(screen.getByLabelText("Kind: workflow"));
+  await fireEvent.press(screen.getByLabelText(`${label}: ${value}`));
+  await fireEvent.press(screen.getByLabelText("Save skill"));
+  expect(parseStorySkill(mockLibrary.save.mock.calls[0][1])[key]).toBe(value);
+  await screen.unmount();
+});
+
+it("keeps Kind and Tool segmented", async () => {
+  const { container, unmount } = await render(<AISkillsSettings />);
+  const segments = container.queryAll(node => node.type === "View" && node.props.options && node.props.variant === undefined);
+  expect(segments.map(node => [node.props.accessibilityLabel, node.props.options.map((option: { label: string }) => option.label)])).toEqual([
+    ["Kind", ["story", "workflow"]],
+    ["Tool", ["auto", "codex", "claude"]],
+  ]);
+  await unmount();
+});
+
 it("shows active layer badges, protects built-ins and duplicates to an editable user copy", async () => {
   const screen = await render(<AISkillsSettings />);
   expect(screen.getByText("change-story · built-in")).toBeTruthy();

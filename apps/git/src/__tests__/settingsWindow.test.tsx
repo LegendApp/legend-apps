@@ -61,8 +61,11 @@ describe("Settings window", () => {
     const rows = [...named(renderer, "settings-row"), ...named(renderer, "settings-switch-row")].map(node => node.props.label);
     expect(rows).toEqual(expect.arrayContaining(["Preset", "Import…", "Export…", "Active Layout", "Wrap", "Font", "Display", "Menu", "Request"]));
     expect(named(renderer, "settings-switch-row").length).toBeGreaterThan(5);
-    // No two-segment Off/On stand-ins.
-    expect(named(renderer, "SegmentedControl", props => props.accessibilityLabel !== "Appearance")).toEqual([]);
+    const segments = named(renderer, "SegmentedControl").map(node => node.props);
+    expect(segments).toEqual([expect.objectContaining({
+      accessibilityLabel: "Appearance",
+      options: [{ label: "Light", value: "light" }, { label: "Dark", value: "dark" }],
+    })]);
   });
 
   it("lists a value the generated choices don't have, so every popup's value is one of its options (Spark's Select throws otherwise)", async () => {

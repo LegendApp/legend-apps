@@ -1,4 +1,4 @@
-import { fireEvent, render, type RenderResult } from "@testing-library/react-native";
+import { fireEvent, render } from "@testing-library/react-native";
 import React from "react";
 import { GeneralSettingsContent } from "../settings/GeneralSettingsPage";
 
@@ -37,24 +37,6 @@ jest.mock("../markdownSettings", () => ({
   useMarkdownToolbarLayoutSetting: (layoutId: "selection" | "top") => mockSettings.toolbarLayouts[layoutId],
 }));
 
-function segmentedSelected(view: RenderResult, label: string) {
-  const { control, value } = segmentedOption(view, label);
-  return control.props.value === value;
-}
-
-function segmentedOption(view: RenderResult, label: string) {
-  for (const control of view.container.queryAll((node) => node.type === "NativeSegmentedControl")) {
-    const segments = JSON.parse(control.props.segmentsJson) as { label: string; value: string }[];
-    const option = segments.find((segment) => segment.label === label);
-    if (option) return { control, value: option.value };
-  }
-  throw new Error(`Missing native segmented option for ${label}`);
-}
-
-function switchControl(view: RenderResult) {
-  return view.getByLabelText("Autosave");
-}
-
 describe("GeneralSettingsContent", () => {
   beforeEach(() => {
     mockSettings.autosave = "enabled";
@@ -77,24 +59,38 @@ describe("GeneralSettingsContent", () => {
 
   it("updates startup autosave and toolbar mode settings", async () => {
     const view = await render(<GeneralSettingsContent />);
+    const startup = view.getByLabelText("Startup");
+    const autosave = view.getByLabelText("Autosave");
 
-    expect(segmentedSelected(view, "New")).toBe(true);
-    expect(switchControl(view).props.accessibilityState?.checked).toBe(true);
-    expect(segmentedSelected(view, "Floating")).toBe(true);
+    expect(startup.type).toBe("NativeSegmentedControl");
+    expect(JSON.parse(startup.props.segmentsJson)).toEqual([
+      { label: "New", value: "newDocument" },
+      { label: "Last", value: "lastDocument" },
+    ]);
+    expect(startup.props.value).toBe("newDocument");
+    expect(autosave.props.accessibilityState?.checked).toBe(true);
+    const toolbar = view.getByLabelText("Formatting Toolbar");
+    expect(toolbar.type).toBe("NativeSelect");
+    expect(toolbar.props.borderless).toBe(true);
+    expect(toolbar.props.value).toBe("selection");
+    expect(JSON.parse(toolbar.props.itemsJson)).toEqual([
+      { label: "Floating", value: "selection" },
+      { label: "Top", value: "top" },
+      { label: "Bottom", value: "bottom" },
+      { label: "Hidden", value: "hidden" },
+    ]);
 
-    const lastOption = segmentedOption(view, "Last");
-    const bottomOption = segmentedOption(view, "Bottom");
-    await fireEvent(lastOption.control, "valueChange", { nativeEvent: { value: lastOption.value } });
-    await fireEvent(switchControl(view), "valueChange", false);
-    await fireEvent(bottomOption.control, "valueChange", { nativeEvent: { value: bottomOption.value } });
+    await fireEvent(startup, "valueChange", { nativeEvent: { value: "lastDocument" } });
+    await fireEvent(autosave, "valueChange", false);
+    await fireEvent(toolbar, "valueChange", { nativeEvent: { value: "bottom" } });
     await view.rerender(<GeneralSettingsContent />);
 
     expect(mockSetMarkdownStartupBehaviorSetting).toHaveBeenCalledWith("lastDocument");
     expect(mockSetMarkdownAutosaveSetting).toHaveBeenCalledWith("disabled");
     expect(mockSetMarkdownFormattingToolbarModeSetting).toHaveBeenCalledWith("bottom");
-    expect(segmentedSelected(view, "Last")).toBe(true);
-    expect(switchControl(view).props.accessibilityState?.checked).toBe(false);
-    expect(segmentedSelected(view, "Bottom")).toBe(true);
+    expect(view.getByLabelText("Startup").props.value).toBe("lastDocument");
+    expect(view.getByLabelText("Autosave").props.accessibilityState?.checked).toBe(false);
+    expect(view.getByLabelText("Formatting Toolbar").props.value).toBe("bottom");
     await view.unmount();
   });
 });

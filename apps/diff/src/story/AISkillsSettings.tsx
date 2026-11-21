@@ -1,7 +1,7 @@
 import { useValue } from "@legendapp/state/react";
 import { revealInFileManager } from "@legendapp/spark/files";
 import { showWindow } from "@legendapp/spark/windows";
-import { SettingsSection } from "@legendapp/spark/ui/settings";
+import { SettingsSection, SettingsSelectRow } from "@legendapp/spark/ui/settings";
 import { useState } from "react";
 import { SegmentedControl } from "@legendapp/spark/ui";
 import { Pressable, Text, TextInput, View } from "react-native";
@@ -14,6 +14,8 @@ import { skillEditorContext$, skillPreviewTargets, skillViewerContexts$, useSkil
 
 const skillId = (skill: StorySkill) => skill.path ?? `built-in:${skill.name}`;
 const draftOf = (skill: StorySkill) => ({ ...skill, maxDiffTokens: String(skill.maxDiffTokens), timeout: String(skill.timeout) });
+const outputOptions = ["story", "check", "comments", "patch"].map(value => ({ label: value, value }));
+const organizationOptions = ["auto", "concepts", "commits"].map(value => ({ label: value, value }));
 
 function SkillEditor({ skill, library, windowId, onSelect }: { skill: StorySkill; library: SkillLibrary; windowId: string; onSelect(id: string): void }) {
   const [original, setOriginal] = useState(skill);
@@ -30,7 +32,7 @@ function SkillEditor({ skill, library, windowId, onSelect }: { skill: StorySkill
     finally { setBusy(false); }
   };
   const input = (key: "name" | "maxDiffTokens" | "timeout", label: string) => <View className="gap-1"><Text className="text-sm text-text-secondary">{label}</Text><TextInput accessibilityLabel={label} editable={!builtIn && !busy} value={draft[key]} onChangeText={value => update(key, value)} className="min-h-8 rounded border border-border-primary px-2 text-sm text-text-primary" /></View>;
-  const choices = (key: "kind" | "output" | "organization" | "tool", label: string, values: string[]) => <View className="gap-1"><Text className="text-sm text-text-secondary">{label}</Text><SegmentedControl accessibilityLabel={label} options={values.map(value => ({ label: value, value }))} value={draft[key]} disabled={builtIn || busy} onValueChange={value => update(key, value)} style={{ width: segmentedControlWidth(values), height: 24 }} /></View>;
+  const choices = (key: "kind" | "tool", label: string, values: string[]) => <View className="gap-1"><Text className="text-sm text-text-secondary">{label}</Text><SegmentedControl accessibilityLabel={label} options={values.map(value => ({ label: value, value }))} value={draft[key]} disabled={builtIn || busy} onValueChange={value => update(key, value)} style={{ width: segmentedControlWidth(values), height: 24 }} /></View>;
   return <View className="gap-3 p-4">
     <Text className="text-base font-semibold text-text-primary">{skill.name} · {skill.layer}</Text>
     {skill.layer === "repo" ? <Text className="text-sm text-text-secondary">From this repository. Each changed prompt needs approval before running.</Text> : null}
@@ -38,8 +40,20 @@ function SkillEditor({ skill, library, windowId, onSelect }: { skill: StorySkill
     {skill.path ? <Text selectable className="text-xs text-text-secondary">{skill.path}</Text> : null}
     {input("name", "Skill name")}
     {choices("kind", "Kind", ["story", "workflow"])}
-    {choices("output", "Output", ["story", "check", "comments", "patch"])}
-    {choices("organization", "Organization", ["auto", "concepts", "commits"])}
+    <SettingsSelectRow
+      label="Output"
+      options={outputOptions}
+      value={draft.output}
+      disabled={builtIn || busy}
+      onValueChange={value => update("output", value)}
+    />
+    <SettingsSelectRow
+      label="Organization"
+      options={organizationOptions}
+      value={draft.organization}
+      disabled={builtIn || busy}
+      onValueChange={value => update("organization", value)}
+    />
     {choices("tool", "Tool", ["auto", "codex", "claude"])}
     {input("maxDiffTokens", "Maximum diff tokens")}{input("timeout", "Timeout (seconds)")}
     <Text className="text-sm text-text-secondary">Markdown prompt</Text>

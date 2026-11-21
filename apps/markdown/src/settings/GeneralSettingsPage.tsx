@@ -1,6 +1,7 @@
 import {
   SettingsSection,
   SettingsSegmentedRow,
+  SettingsSelectRow,
   SettingsSwitchRow,
 } from "@legendapp/spark/ui/settings";
 import {
@@ -48,7 +49,7 @@ export function GeneralSettingsContent() {
           value={autosave === "enabled"}
           onValueChange={(checked) => setMarkdownAutosaveSetting(checked ? "enabled" : "disabled")}
         />
-        <SettingsSegmentedRow
+        <SettingsSelectRow
           description="Pick where formatting controls appear while editing."
           label="Formatting Toolbar"
           options={formattingToolbarModeOptions}
