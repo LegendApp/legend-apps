@@ -9,9 +9,8 @@ import { getMacOSReleaseBuild, getMacOSSparkleFeedUrl, getMacOSSparklePublicEdKe
 import { getMacOSReleaseMarkdownConfig, getMacOSReleaseProfile } from "./macosReleaseProfile";
 import type { AppManifest } from "./types";
 import { acquireInstallLock } from "./sparkInstall";
-import { sparkSdkPackages, sparkSdkRoot } from "./sparkSdk";
+import { preservePreviousSparkInstall, sharedSparkWorkspace, sparkSdkPackages, sparkSdkRoot } from "./sparkSdk";
 
-export const sharedSparkWorkspace = path.join(shellDir, ".legend", "spark");
 export const sparkWorkspace = (appId: string, mode: "dev" | "release" = "dev") => path.join(sharedSparkWorkspace, mode === "release" ? `${appId}-release` : appId);
 
 export function sparkMetroBlockList(appId: string) {
@@ -144,22 +143,6 @@ export function sparkConfig(manifest: AppManifest, mode: "dev" | "release" = "de
   } satisfies SparkApplicationConfig;
 }
 
-export function preservePreviousSparkInstall(project: string) {
-  for (const name of ["node_modules", "bun.lock"]) {
-    const previous = path.join(project, name);
-    if (!fs.existsSync(previous)) continue;
-    if (name === "node_modules" && fs.readdirSync(previous).every(entry => entry === ".cache")) {
-      fs.rmSync(previous, { recursive: true });
-      continue;
-    }
-    const backup = path.join(path.dirname(project), ".legacy-installs", path.basename(project), name);
-    if (fs.existsSync(backup)) throw new Error(`Cannot preserve old Spark install: ${backup} already exists. Move ${previous} before preparing this app.`);
-    fs.mkdirSync(path.dirname(backup), { recursive: true });
-    fs.renameSync(previous, backup);
-    if (name === "node_modules") fs.rmSync(path.join(project, ".spark/native-selection.json"), { force: true });
-  }
-}
-
 function initializeSparkWorkspace(project: string) {
   const state = path.join(project, ".spark");
   const unlock = acquireInstallLock(state);
@@ -180,12 +163,6 @@ export function prepareSparkWorkspace(manifest: AppManifest, mode: "dev" | "rele
   const dependencies = { ...repo.dependencies, react: repo.devDependencies.react, "react-native": repo.devDependencies["react-native"] };
   for (const [name, version] of Object.entries(dependencies)) if (version === "catalog:") dependencies[name] = repo.catalog[name];
   fs.mkdirSync(path.join(project, ".spark"), { recursive: true });
-  if (path.dirname(project) === sharedSparkWorkspace) {
-    // The former shared install shadows the repository SDK for every generated project.
-    const unlock = acquireInstallLock(sharedSparkWorkspace);
-    try { preservePreviousSparkInstall(sharedSparkWorkspace); }
-    finally { unlock(); }
-  }
   preservePreviousSparkInstall(project);
   const settings = path.join(project, ".spark/settings.json");
   if (!fs.existsSync(settings)) write(settings, { target: "dev" });

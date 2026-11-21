@@ -5,7 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-test("a standalone checkout migrates consumers of a stale shared Spark install offline", () => {
+test("a standalone checkout prepares a stale Spark install before dispatching run and migrates offline", () => {
   const workspace = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "spark-standalone-apps-")));
   const root = path.join(workspace, "apps");
   const source = path.resolve(import.meta.dirname, "../..");
@@ -44,6 +44,17 @@ test("a standalone checkout migrates consumers of a stale shared Spark install o
     const state = path.join(sharedWorkspace, "hello-world/.spark");
     fs.mkdirSync(state, { recursive: true });
     fs.writeFileSync(path.join(state, "version"), "0.0.3\n");
+    fs.copyFileSync(path.join(source, "scripts/run-app.ts"), path.join(root, "scripts/run-app.ts"));
+    const bin = path.join(workspace, "bin");
+    fs.mkdirSync(bin);
+    fs.writeFileSync(path.join(bin, "bun"), '#!/bin/sh\nprintf "%s\\n" "$@"\n', { mode: 0o755 });
+    const run = spawnSync(process.execPath, ["scripts/run-app.ts", "hello-world", "run", "--offline"], {
+      cwd: root, encoding: "utf8", env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+    });
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(run.stdout, "scripts/spark-app.ts\nhello-world\nrun\n--offline\n");
+    assert.equal(fs.existsSync(path.join(sharedWorkspace, "node_modules")), false, "run must prepare Spark before dispatching to the shared Debug host");
+
     const result = spawnSync(process.execPath, ["-e", 'import { loadAppManifest, rootDir } from "./scripts/lib/apps.ts"; import { prepareSparkWorkspace } from "./scripts/lib/sparkWorkspaces.ts"; import { sparkInstallHash } from "./scripts/lib/sparkInstall.ts"; const manifest = await loadAppManifest("hello-world"); const project = prepareSparkWorkspace(manifest); prepareSparkWorkspace(manifest); const shared = rootDir; console.log(JSON.stringify({ project, shared, hash: sparkInstallHash(shared, process.cwd()) }));'], { cwd: root, encoding: "utf8", env: { ...process.env, LEGEND_SPARK_SDK: "file:another-missing-sdk.tgz", LEGEND_OFFLINE: "1", EXPO_OFFLINE: "1" } });
     assert.equal(result.status, 0, result.stderr);
     const { project, shared, hash } = JSON.parse(result.stdout);
