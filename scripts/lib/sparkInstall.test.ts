@@ -231,9 +231,34 @@ test("a matching install stamp cannot hide an older installed Spark", t => {
   f.write(sdk, { version: "0.0.4" });
   fs.writeFileSync(f.stamp, f.hash());
   assert.throws(() => installSparkWorkspace({ ...f.options, offline: true }, () => assert.fail("unexpected install")), /dependencies changed/);
-  assert.throws(() => installSparkWorkspace(f.options, () => {}), /expected Spark 0\.0\.5 after Bun install/);
+  assert.throws(() => installSparkWorkspace(f.options, () => {}), /catalog dependencies still resolve incorrectly/);
   assert.equal(fs.existsSync(f.stamp), false);
   assert.equal(installSparkWorkspace(f.options, () => f.write(sdk, { version: "0.0.5" })), "installed");
+  assert.equal(installSparkWorkspace({ ...f.options, offline: true }, () => assert.fail("unexpected install")), "skipped");
+});
+
+test("catalog version mismatches in workspace links force Bun to relink them", t => {
+  const f = fixture(t);
+  const spark = "@legendapp/spark";
+  f.write("project/package.json", {
+    workspaces: ["apps/*"],
+    dependencies: { [spark]: "catalog:" },
+    catalog: { [spark]: "0.0.5" },
+  });
+  f.write("project/apps/example/package.json", { dependencies: { [spark]: "catalog:" } });
+  f.write("project/node_modules/@legendapp/spark/package.json", { version: "0.0.5" });
+  f.write("project/node_modules/.bun/spark-old/package.json", { version: "0.0.4" });
+  f.write("project/node_modules/.bun/spark-new/package.json", { version: "0.0.5" });
+  const appLink = path.join(f.project, "apps/example/node_modules", spark);
+  fs.mkdirSync(path.dirname(appLink), { recursive: true });
+  fs.symlinkSync(path.relative(path.dirname(appLink), path.join(f.project, "node_modules/.bun/spark-old")), appLink);
+  fs.writeFileSync(f.stamp, f.hash());
+
+  assert.equal(installSparkWorkspace(f.options, () => {
+    assert.equal(fs.existsSync(appLink), false);
+    fs.symlinkSync(path.relative(path.dirname(appLink), path.join(f.project, "node_modules/.bun/spark-new")), appLink);
+  }), "installed");
+  assert.equal(JSON.parse(fs.readFileSync(path.join(appLink, "package.json"), "utf8")).version, "0.0.5");
   assert.equal(installSparkWorkspace({ ...f.options, offline: true }, () => assert.fail("unexpected install")), "skipped");
 });
 

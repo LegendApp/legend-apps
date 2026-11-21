@@ -119,6 +119,38 @@ function runInstall(args: string[], options: InstallOptions) {
   if (result.status !== 0) throw new SparkInstallError(`Bun install failed for ${options.appId} (${result.signal ?? result.status}).`, result.status ?? 1);
 }
 
+function catalogInstallMismatches(project: string) {
+  const root = JSON.parse(fs.readFileSync(path.join(project, "package.json"), "utf8"));
+  const workspaces = [project, ...(root.workspaces ?? []).flatMap((workspace: string) => {
+    if (!workspace.endsWith("/*")) return [path.resolve(project, workspace)];
+    const directory = path.resolve(project, workspace.slice(0, -2));
+    return fs.readdirSync(directory).map((name: string) => path.join(directory, name));
+  })];
+  const mismatches = new Set<string>();
+  for (const workspace of workspaces) {
+    const manifest = path.join(workspace, "package.json");
+    if (!fs.existsSync(manifest)) continue;
+    const pkg = JSON.parse(fs.readFileSync(manifest, "utf8"));
+    for (const section of [pkg.dependencies, pkg.devDependencies, pkg.optionalDependencies, pkg.peerDependencies]) {
+      for (const [name, spec] of Object.entries(section ?? {})) {
+        if (spec !== "catalog:") continue;
+        const pin = root.catalog?.[name];
+        let installed = path.join(workspace, "node_modules", name, "package.json");
+        let directory = workspace;
+        while (!fs.existsSync(installed) && directory !== project) {
+          directory = path.dirname(directory);
+          installed = path.join(directory, "node_modules", name, "package.json");
+        }
+        const version = fs.existsSync(installed) && JSON.parse(fs.readFileSync(installed, "utf8")).version;
+        if (typeof pin !== "string" || typeof version !== "string" || !Bun.semver.satisfies(version, pin)) {
+          mismatches.add(path.dirname(installed));
+        }
+      }
+    }
+  }
+  return [...mismatches];
+}
+
 export function acquireInstallLock(project: string, timeoutMs = 60_000) {
   const lock = path.join(project, ".legend-install.lock");
   const owner = `${process.pid}-${randomUUID()}`;
@@ -186,13 +218,7 @@ function installUnlocked(options: InstallOptions, execute: typeof runInstall): "
   const hash = sparkInstallHash(project, options.repoRoot);
   const nodeModules = path.join(project, "node_modules");
   const stamp = path.join(nodeModules, ".legend-install-stamp");
-  const { catalog } = JSON.parse(fs.readFileSync(path.join(project, "package.json"), "utf8"));
-  const pin = catalog?.["@legendapp/spark"];
-  const exactPin = typeof pin === "string" && /^\d+\.\d+\.\d+(?:-[\w.-]+)?(?:\+[\w.-]+)?$/.test(pin);
-  const sdkManifest = path.join(nodeModules, "@legendapp/spark/package.json");
-  const hasPinnedSpark = () => !exactPin ||
-    (fs.existsSync(sdkManifest) && JSON.parse(fs.readFileSync(sdkManifest, "utf8")).version === pin);
-  if (!options.force && fs.existsSync(stamp) && fs.readFileSync(stamp, "utf8").trim() === hash && hasPinnedSpark()) {
+  if (!options.force && fs.existsSync(stamp) && fs.readFileSync(stamp, "utf8").trim() === hash && !catalogInstallMismatches(project).length) {
     console.log(`${appId}: dependencies unchanged; skipping Bun install.`);
     return "skipped";
   }
@@ -204,8 +230,13 @@ function installUnlocked(options: InstallOptions, execute: typeof runInstall): "
   fs.rmSync(stamp, { force: true });
   const inputs = sparkInstallHash(project, options.repoRoot, false);
   try {
+    for (const link of catalogInstallMismatches(project)) {
+      try { if (fs.lstatSync(link).isSymbolicLink()) fs.unlinkSync(link); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+    }
     execute(["install", "--linker", "hoisted"], options);
-    if (!hasPinnedSpark()) throw new SparkInstallError(`${appId}: expected Spark ${pin} after Bun install.`);
+    const mismatches = catalogInstallMismatches(project);
+    if (mismatches.length) throw new SparkInstallError(`${appId}: catalog dependencies still resolve incorrectly: ${mismatches.map(link => path.relative(project, link)).join(", ")}.`);
     fs.mkdirSync(nodeModules, { recursive: true });
     fs.writeFileSync(stamp, `${inputs === sparkInstallHash(project, options.repoRoot, false) ? sparkInstallHash(project, options.repoRoot) : hash}\n`);
   } catch (error) {
