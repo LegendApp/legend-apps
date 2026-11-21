@@ -223,6 +223,20 @@ test("force bypasses a matching stamp and a failed install invalidates it withou
   assert.equal(installSparkWorkspace(f.options, () => {}), "installed");
 });
 
+test("a matching install stamp cannot hide an older installed Spark", t => {
+  const f = fixture(t);
+  const spark = "@legendapp/spark";
+  const sdk = `project/node_modules/${spark}/package.json`;
+  f.write("project/package.json", { dependencies: { [spark]: "catalog:" }, catalog: { [spark]: "0.0.5" } });
+  f.write(sdk, { version: "0.0.4" });
+  fs.writeFileSync(f.stamp, f.hash());
+  assert.throws(() => installSparkWorkspace({ ...f.options, offline: true }, () => assert.fail("unexpected install")), /dependencies changed/);
+  assert.throws(() => installSparkWorkspace(f.options, () => {}), /expected Spark 0\.0\.5 after Bun install/);
+  assert.equal(fs.existsSync(f.stamp), false);
+  assert.equal(installSparkWorkspace(f.options, () => f.write(sdk, { version: "0.0.5" })), "installed");
+  assert.equal(installSparkWorkspace({ ...f.options, offline: true }, () => assert.fail("unexpected install")), "skipped");
+});
+
 test("install locks recover dead owners and empty directories", t => {
   const f = fixture(t);
   const lock = path.join(f.project, ".legend-install.lock");

@@ -5,7 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-test("a standalone checkout prepares consumers of its root install", () => {
+test("a standalone checkout migrates consumers of a stale shared Spark install offline", () => {
   const workspace = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "spark-standalone-apps-")));
   const root = path.join(workspace, "apps");
   const source = path.resolve(import.meta.dirname, "../..");
@@ -35,7 +35,16 @@ test("a standalone checkout prepares consumers of its root install", () => {
     const repoSource = JSON.stringify(repo);
     fs.writeFileSync(path.join(root, "package.json"), repoSource);
     fs.writeFileSync(path.join(root, "spark.local.json"), JSON.stringify({ sdk: "file:missing-sdk.tgz" }));
-    const result = spawnSync(process.execPath, ["-e", 'import { loadAppManifest, rootDir } from "./scripts/lib/apps.ts"; import { prepareSparkWorkspace } from "./scripts/lib/sparkWorkspaces.ts"; import { sparkInstallHash } from "./scripts/lib/sparkInstall.ts"; const project = prepareSparkWorkspace(await loadAppManifest("hello-world")); const shared = rootDir; console.log(JSON.stringify({ project, shared, hash: sparkInstallHash(shared, process.cwd()) }));'], { cwd: root, encoding: "utf8", env: { ...process.env, LEGEND_SPARK_SDK: "file:another-missing-sdk.tgz" } });
+    const sharedWorkspace = path.join(root, "shell/.legend/spark");
+    const sdkManifest = "node_modules/@legendapp/spark/package.json";
+    const oldSdk = JSON.stringify({ name: "@legendapp/spark", version: "0.0.3", spark: { bundledModuleRoot: "vendor" } });
+    fs.mkdirSync(path.dirname(path.join(sharedWorkspace, sdkManifest)), { recursive: true });
+    fs.writeFileSync(path.join(sharedWorkspace, sdkManifest), oldSdk);
+    fs.writeFileSync(path.join(sharedWorkspace, "bun.lock"), "legacy lock");
+    const state = path.join(sharedWorkspace, "hello-world/.spark");
+    fs.mkdirSync(state, { recursive: true });
+    fs.writeFileSync(path.join(state, "version"), "0.0.3\n");
+    const result = spawnSync(process.execPath, ["-e", 'import { loadAppManifest, rootDir } from "./scripts/lib/apps.ts"; import { prepareSparkWorkspace } from "./scripts/lib/sparkWorkspaces.ts"; import { sparkInstallHash } from "./scripts/lib/sparkInstall.ts"; const manifest = await loadAppManifest("hello-world"); const project = prepareSparkWorkspace(manifest); prepareSparkWorkspace(manifest); const shared = rootDir; console.log(JSON.stringify({ project, shared, hash: sparkInstallHash(shared, process.cwd()) }));'], { cwd: root, encoding: "utf8", env: { ...process.env, LEGEND_SPARK_SDK: "file:another-missing-sdk.tgz", LEGEND_OFFLINE: "1", EXPO_OFFLINE: "1" } });
     assert.equal(result.status, 0, result.stderr);
     const { project, shared, hash } = JSON.parse(result.stdout);
     assert.equal(shared, root);
@@ -44,6 +53,11 @@ test("a standalone checkout prepares consumers of its root install", () => {
     assert.equal(generated.dependencies["@legendapp/spark"], repo.catalog["@legendapp/spark"]);
     assert.equal(generated.overrides["@legendapp/spark"], repo.catalog["@legendapp/spark"]);
     assert.equal(fs.existsSync(path.join(project, "node_modules")), false);
+    assert.equal(fs.existsSync(path.join(sharedWorkspace, "node_modules")), false);
+    const backup = path.join(root, "shell/.legend/.legacy-installs/spark");
+    assert.equal(fs.readFileSync(path.join(backup, sdkManifest), "utf8"), oldSdk);
+    assert.equal(fs.readFileSync(path.join(backup, "bun.lock"), "utf8"), "legacy lock");
+    assert.equal(fs.readFileSync(path.join(state, "version"), "utf8"), `${repo.catalog["@legendapp/spark"]}\n`);
     assert.equal(fs.readFileSync(path.join(root, "package.json"), "utf8"), repoSource);
   } finally { fs.rmSync(workspace, { recursive: true, force: true }); }
 });

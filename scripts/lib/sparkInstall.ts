@@ -186,7 +186,13 @@ function installUnlocked(options: InstallOptions, execute: typeof runInstall): "
   const hash = sparkInstallHash(project, options.repoRoot);
   const nodeModules = path.join(project, "node_modules");
   const stamp = path.join(nodeModules, ".legend-install-stamp");
-  if (!options.force && fs.existsSync(stamp) && fs.readFileSync(stamp, "utf8").trim() === hash) {
+  const { catalog } = JSON.parse(fs.readFileSync(path.join(project, "package.json"), "utf8"));
+  const pin = catalog?.["@legendapp/spark"];
+  const exactPin = typeof pin === "string" && /^\d+\.\d+\.\d+(?:-[\w.-]+)?(?:\+[\w.-]+)?$/.test(pin);
+  const sdkManifest = path.join(nodeModules, "@legendapp/spark/package.json");
+  const hasPinnedSpark = () => !exactPin ||
+    (fs.existsSync(sdkManifest) && JSON.parse(fs.readFileSync(sdkManifest, "utf8")).version === pin);
+  if (!options.force && fs.existsSync(stamp) && fs.readFileSync(stamp, "utf8").trim() === hash && hasPinnedSpark()) {
     console.log(`${appId}: dependencies unchanged; skipping Bun install.`);
     return "skipped";
   }
@@ -199,6 +205,7 @@ function installUnlocked(options: InstallOptions, execute: typeof runInstall): "
   const inputs = sparkInstallHash(project, options.repoRoot, false);
   try {
     execute(["install", "--linker", "hoisted"], options);
+    if (!hasPinnedSpark()) throw new SparkInstallError(`${appId}: expected Spark ${pin} after Bun install.`);
     fs.mkdirSync(nodeModules, { recursive: true });
     fs.writeFileSync(stamp, `${inputs === sparkInstallHash(project, options.repoRoot, false) ? sparkInstallHash(project, options.repoRoot) : hash}\n`);
   } catch (error) {

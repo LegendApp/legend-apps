@@ -179,9 +179,14 @@ export function prepareSparkWorkspace(manifest: AppManifest, mode: "dev" | "rele
   const active = getActiveNativePackages(manifest, "macos");
   const dependencies = { ...repo.dependencies, react: repo.devDependencies.react, "react-native": repo.devDependencies["react-native"] };
   for (const [name, version] of Object.entries(dependencies)) if (version === "catalog:") dependencies[name] = repo.catalog[name];
-  preservePreviousSparkInstall(project);
-  fs.mkdirSync(project, { recursive: true });
   fs.mkdirSync(path.join(project, ".spark"), { recursive: true });
+  if (path.dirname(project) === sharedSparkWorkspace) {
+    // The former shared install shadows the repository SDK for every generated project.
+    const unlock = acquireInstallLock(sharedSparkWorkspace);
+    try { preservePreviousSparkInstall(sharedSparkWorkspace); }
+    finally { unlock(); }
+  }
+  preservePreviousSparkInstall(project);
   const settings = path.join(project, ".spark/settings.json");
   if (!fs.existsSync(settings)) write(settings, { target: "dev" });
   write(path.join(project, "package.json"), {
