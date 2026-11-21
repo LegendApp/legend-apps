@@ -1,7 +1,7 @@
 import { Linking, Text, View } from "react-native";
 
 import { Button } from "../components/Button";
-import { SettingsPage, SettingsSection } from "./components";
+import { SettingsSection } from "./components";
 
 interface Library {
     name: string;
@@ -67,14 +67,6 @@ const libraries: Library[] = [
     },
 ];
 
-export function OpenSourceSettings() {
-    return (
-        <SettingsPage>
-            <OpenSourceSettingsContent />
-        </SettingsPage>
-    );
-}
-
 export function OpenSourceSettingsContent() {
     const handleOpenLink = (url: string) => {
         Linking.openURL(url);
@@ -86,11 +78,8 @@ export function OpenSourceSettingsContent() {
 
     return (
         <>
-            <SettingsSection
-                title="Legend Music is Open Source"
-                description="Legend Music is completely free and open source. Contribute to development, explore the code, or build your own version."
-                first
-            >
+            <SettingsSection title="Legend Music is Open Source">
+              <Text className="px-3 py-2 text-sm text-text-secondary">Legend Music is completely free and open source. Contribute to development, explore the code, or build your own version.</Text>
                 <Button
                     onClick={handleOpenLegendMusicSource}
                     className="self-start rounded-lg bg-accent-primary px-6 py-3 hover:bg-accent-secondary"
@@ -99,11 +88,8 @@ export function OpenSourceSettingsContent() {
                 </Button>
             </SettingsSection>
 
-            <SettingsSection
-                title="Legend Kit"
-                description="A comprehensive suite of Legend tools with premium apps built on Legend State, List, and Motion."
-                contentClassName="flex flex-col gap-3"
-            >
+            <SettingsSection title="Legend Kit">
+              <Text className="px-3 py-2 text-sm text-text-secondary">A comprehensive suite of Legend tools with premium apps built on Legend State, List, and Motion.</Text>
                 <Button
                     onClick={() => handleOpenLink("https://legendapp.com/kit")}
                     className="self-start rounded-lg bg-accent-primary/80 px-4 py-2 hover:bg-accent-primary"
@@ -114,9 +100,9 @@ export function OpenSourceSettingsContent() {
 
             <SettingsSection
                 title="Open Source Libraries"
-                description="Legend Music is built on top of these fantastic open source projects:"
                 // contentClassName="flex flex-col gap-3"
             >
+              <Text className="px-3 py-2 text-sm text-text-secondary">Legend Music is built on top of these fantastic open source projects:</Text>
                 {libraries.map((library) => (
                     <View
                         key={library.name}

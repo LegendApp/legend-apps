@@ -1,4 +1,4 @@
-import { createSettingsWindowOptions } from "@legendapp/spark/settings/window";
+import { createSettingsWindowOptions } from "@legendapp/spark/ui/settings";
 import { createWindowsNavigator, setWindowBounds, setWindowFullscreen, type DisplayInfo, type WindowsConfig } from "@legendapp/spark/windows";
 import { createPresenterToolbarItems } from "./presenterToolbar";
 import { openOrShowWindow } from "@legend-apps/runtime-utils";

@@ -30,7 +30,7 @@ mock.module("@legendapp/spark/updates", () => ({
 mock.module("@legendapp/spark/menus", () => ({ useMenu: (config: MenuOptions) => { menu = config; } }));
 mock.module("@legendapp/state/react", () => ({ useValue: (read: () => unknown) => read() }));
 mock.module("../webExport", () => ({ exportDeckToHTML: async () => {}, webExport$: observable({ status: "idle" }) }));
-mock.module("@legendapp/spark/settings/window", () => ({ createSettingsWindowOptions: (options: object) => options }));
+mock.module("@legendapp/spark/ui/settings", () => ({ createSettingsWindowOptions: (options: object) => options }));
 mock.module("@legend-apps/runtime-utils", () => ({ openOrShowWindow: async (_id: string, open: () => Promise<void>) => open() }));
 mock.module("@legendapp/spark/windows", () => ({
   createWindowsNavigator: () => ({ open: async () => { expect(automaticallyChecks).toBe(false); calls.push("audience"); } }),

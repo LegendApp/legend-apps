@@ -14,8 +14,8 @@ mock.module("../compilerRuntime", () => ({
 }));
 mock.module("@legendapp/spark/processes", () => ({ runCommand() {} }));
 mock.module("@legendapp/spark/dialogs", () => ({ openFileDialog() {} }));
-mock.module("@legendapp/spark/settings/window", () => ({
-  SettingsSection: "section", SettingsRow: ({ control }) => control,
+mock.module("@legendapp/spark/ui/settings", () => ({
+  SettingsSection: "section", SettingsRow: ({ children }) => children,
 }));
 mock.module("@legend-apps/runtime-utils", () => ({ decodeProcessText: bytes => new TextDecoder().decode(bytes) }));
 mock.module("../slidesSettings", () => ({ useCompilerRuntimePathSetting: () => "" }));

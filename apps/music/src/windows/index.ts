@@ -1,4 +1,4 @@
-import { createSettingsWindowOptions } from "@legendapp/spark/settings/window";
+import { createSettingsWindowOptions } from "@legendapp/spark/ui/settings";
 import { createWindowsNavigator, type WindowsConfig, } from "@legendapp/spark/windows";
 import { OVERLAY_WINDOW_HEIGHT_COMPACT, OVERLAY_WINDOW_WIDTH_COMPACT } from "../overlay/OverlayConstants";
 const windowsConfig = {

@@ -7,7 +7,7 @@ import { AISkillsSettings } from "../AISkillsSettings";
 import { builtInStorySkills, changeStorySkill, parseStorySkill } from "../storySkill";
 import { skillEditorContext$, skillPreviewTargets, skillViewerContexts$ } from "../skillRuntime";
 
-jest.mock("@legendapp/spark/settings/window", () => {
+jest.mock("@legendapp/spark/ui/settings", () => {
   const { View } = require("react-native"); return { SettingsSection: View };
 });
 jest.mock("../skillRuntime", () => {

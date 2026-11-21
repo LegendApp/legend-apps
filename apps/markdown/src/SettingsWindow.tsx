@@ -1,48 +1,38 @@
 import { PortalProvider } from "@gorhom/portal";
 import {
+  SettingsPage,
   VirtualizedSettingsWindow,
-  type SettingsWindowPage,
-} from "@legendapp/spark/settings/window";
+} from "@legendapp/spark/ui/settings";
 import { getLegendDisplayThemeAppearance } from "@legend-apps/theme";
 import { settingsWindowIdentifier } from "./appConstants";
 import { useMarkdownDisplayThemeSetting } from "./markdownSettings";
 import { AppearanceSettingsContent } from "./settings/AppearanceSettingsPage";
 import { GeneralSettingsContent } from "./settings/GeneralSettingsPage";
 import { HotkeysSettingsContent } from "./settings/HotkeysSettingsPage";
-import { isSettingsPage, type SettingsPage } from "./settings/settingsPages";
-
-const pages: SettingsWindowPage<SettingsPage>[] = [
-  {
-    id: "general",
-    render: () => <GeneralSettingsContent />,
-    title: "General",
-  },
-  {
-    id: "hotkeys",
-    render: () => <HotkeysSettingsContent />,
-    title: "Hotkeys",
-  },
-  {
-    id: "appearance",
-    render: () => <AppearanceSettingsContent />,
-    title: "Appearance",
-  },
-];
+import { isSettingsPage, type SettingsPage as SettingsPageId } from "./settings/settingsPages";
 
 export function SettingsWindow({ initialPage }: { initialPage?: string }) {
-  const initialSettingsPage = initialPage && isSettingsPage(initialPage) ? initialPage : pages[0].id;
+  const initialSettingsPage = initialPage && isSettingsPage(initialPage) ? initialPage : "general";
   const selectedDisplayTheme = useMarkdownDisplayThemeSetting();
   const appearance = getLegendDisplayThemeAppearance(selectedDisplayTheme);
 
   return (
     <PortalProvider>
-      <VirtualizedSettingsWindow
+      <VirtualizedSettingsWindow<SettingsPageId>
         appearance={appearance}
-        estimatedItemSize={640}
         defaultPageId={initialSettingsPage}
-        pages={pages}
         windowId={settingsWindowIdentifier}
-      />
+      >
+        <SettingsPage id="general" title="General" icon="gearshape">
+          <GeneralSettingsContent />
+        </SettingsPage>
+        <SettingsPage id="hotkeys" title="Hotkeys" icon="keyboard">
+          <HotkeysSettingsContent />
+        </SettingsPage>
+        <SettingsPage id="appearance" title="Appearance" icon="paintbrush">
+          <AppearanceSettingsContent />
+        </SettingsPage>
+      </VirtualizedSettingsWindow>
     </PortalProvider>
   );
 }

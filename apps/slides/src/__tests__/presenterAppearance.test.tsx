@@ -8,7 +8,7 @@ import { defaultPresenterTextColor, defaultPresenterInactiveColor, normalizePres
 
 const files = new Map();
 let onWrite;
-let selectedPage = "appearance", pageMounts = 0;
+
 mock.module("react-native", () => ({
   Platform: { OS: "macos" }, View: "view", Text: "text", TextInput: "input", ScrollView: "scroll",
   StyleSheet: { create: styles => styles, flatten: styles => styles },
@@ -19,13 +19,14 @@ mock.module("../../../../packages/storage/src/NativeStorage", () => ({ default: 
   readStorageText: (_root, path) => files.get(path) ?? null,
   writeStorageText: (_root, path, value) => { files.set(path, value); onWrite?.(); return true; },
 } }));
-mock.module("@legendapp/spark/settings/window", () => ({
-  SettingsWindow: ({ pages }) => pages.find(page => page.id === selectedPage).render(),
-  SettingsPage: ({ children }) => { React.useEffect(() => { pageMounts++; }, []); return children; },
+mock.module("@legendapp/spark/ui/settings", () => ({
+  SettingsWindow: ({ children }) => <>{children}</>,
+  SettingsPage: ({ id, children }) => <page id={id}>{children}</page>,
   SettingsSection: "section",
-  SettingsRow: ({ title, control }) => <row title={title}>{control}</row>,
+  SettingsRow: ({ label, children }) => <row label={label}>{children}</row>,
+  SettingsSwitchRow: "switch",
 }));
-mock.module("@legend-apps/design-system", () => ({ SelectControl: "select", SwitchControl: "switch" }));
+mock.module("@legend-apps/design-system", () => ({ SelectControl: "select" }));
 mock.module("../TransitionSettingsPage", () => ({ TransitionSettingsPage: "transitions" }));
 mock.module("../CompilerSettingsPage", () => ({ CompilerSettingsPage: "compiler" }));
 mock.module("../EffectsSettingsPage", () => ({ EffectsSettingsPage: "effects" }));
@@ -44,19 +45,15 @@ test("presenter colors default safely and normalize valid hex colors", () => {
   }
 });
 
-test("switching Settings pages remounts the page scroll view", async () => {
-  selectedPage = "appearance";
-  pageMounts = 0;
+test("declares the five settings pages in order", async () => {
   let tree;
   try {
     await act(() => { tree = create(<SettingsWindow />); });
-    expect(pageMounts).toBe(1);
-    selectedPage = "effects";
-    await act(() => tree.update(<SettingsWindow />));
-    expect(pageMounts).toBe(2);
+    expect(tree.root.findAllByType("page").map(page => page.props.id)).toEqual([
+      "appearance", "timer", "transitions", "effects", "compiler",
+    ]);
   } finally {
     if (tree) await act(() => tree.unmount());
-    selectedPage = "appearance";
   }
 });
 
@@ -70,8 +67,8 @@ test("Appearance color edits update notes immediately and persist across a new s
     const input = label => tree.root.findAllByType("input").find(node => node.props.accessibilityLabel === label);
     expect(notes().props.textColor).toBe(defaultPresenterTextColor);
     expect(notes().props.inactiveColor).toBe(defaultPresenterInactiveColor);
-    expect(tree.root.findAllByType("row").map(row => row.props.title)).toContain("Presenter Text Color");
-    expect(tree.root.findAllByType("row").map(row => row.props.title)).toContain("Presenter Inactive Color");
+    expect(tree.root.findAllByType("row").map(row => row.props.label)).toContain("Presenter Text Color");
+    expect(tree.root.findAllByType("row").map(row => row.props.label)).toContain("Presenter Inactive Color");
     const persisted = new Promise(resolve => { onWrite = resolve; });
     await act(() => input("Presenter text color").props.onChangeText("#334455"));
     await act(() => input("Presenter text color").props.onSubmitEditing());

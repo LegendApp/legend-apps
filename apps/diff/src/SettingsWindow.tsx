@@ -1,5 +1,4 @@
 import { useValue } from "@legendapp/state/react";
-import { SwitchControl } from "@legend-apps/design-system";
 import { HotkeyBindingsSettingsContent as SharedHotkeyBindingsSettingsContent } from "@legendapp/spark/shortcuts/commands";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
@@ -8,8 +7,8 @@ import {
   SettingsRow,
   SettingsSection,
   VirtualizedSettingsWindow,
-  type SettingsWindowPage,
-} from "@legendapp/spark/settings/window";
+  SettingsSwitchRow,
+} from "@legendapp/spark/ui/settings";
 import {
   SourceSyntaxToggleSettingsRows,
   SourceTypographySettingsRows,
@@ -55,14 +54,6 @@ import { setDiffManagedWindowRestorationEnabled } from "./diffWindowRestoration"
 import { AISkillsSettings } from "./story/AISkillsSettings";
 import { CustomizeDiffSettings } from "./customization/CustomizeDiffSettings";
 
-function AppearanceSettingsPage() {
-  return (
-    <SettingsPage>
-      <AppearanceSettingsContent />
-    </SettingsPage>
-  );
-}
-
 function AppearanceSettingsContent() {
   const adaptiveLightModeEnabled = useDiffAdaptiveLightModeEnabledSetting();
   const fontFamily = useDiffFontFamilySetting();
@@ -77,10 +68,7 @@ function AppearanceSettingsContent() {
 
   return (
     <>
-      <SettingsSection
-        first
-        title={null}
-      >
+      <SettingsSection>
         <SourceTypographySettingsRows
           fontAccessibilityLabel="Diff font"
           fontFamily={fontFamily}
@@ -97,52 +85,26 @@ function AppearanceSettingsContent() {
           selectedTheme={selectedSyntaxTheme}
           title={null}
         />
-        <SettingsRow
-          align="center"
-          control={(
-            <SwitchControl
-              accessibilityLabel="Restore windows on startup"
-              checked={restoreWindowsOnStartup}
-              onChange={handleRestoreWindowsOnStartupChange}
-            />
-          )}
+        <SettingsSwitchRow
           description="Reopen previous Diff windows with their saved size and position."
-          title="Restore Windows on Startup"
+          label="Restore Windows on Startup"
+          value={restoreWindowsOnStartup}
+          onValueChange={handleRestoreWindowsOnStartupChange}
         />
-        <SettingsRow
-          align="center"
-          control={(
-            <SwitchControl
-              accessibilityLabel="Show only changed hunks by default"
-              checked={showOnlyHunks}
-              onChange={setDiffShowOnlyHunksSetting}
-            />
-          )}
+        <SettingsSwitchRow
           description="Load local repository diffs with unchanged sections collapsed."
-          title="Show only changed hunks by default"
+          label="Show only changed hunks by default"
+          value={showOnlyHunks}
+          onValueChange={setDiffShowOnlyHunksSetting}
         />
-        <SettingsRow
-          align="center"
-          control={(
-            <SwitchControl
-              accessibilityLabel="Use adaptive light mode"
-              checked={adaptiveLightModeEnabled}
-              onChange={setDiffAdaptiveLightModeEnabledSetting}
-            />
-          )}
+        <SettingsSwitchRow
           description="Render simpler rows while scrolling quickly."
-          title="Adaptive light mode"
+          label="Adaptive light mode"
+          value={adaptiveLightModeEnabled}
+          onValueChange={setDiffAdaptiveLightModeEnabledSetting}
         />
       </SettingsSection>
     </>
-  );
-}
-
-function SyntaxSettingsPage() {
-  return (
-    <SettingsPage>
-      <SyntaxSettingsContent />
-    </SettingsPage>
   );
 }
 
@@ -153,49 +115,28 @@ function SyntaxSettingsContent() {
   const syntaxHighlightingEnabled = useDiffSyntaxHighlightingEnabledSetting();
 
   return (
-    <SettingsSection
-      first
-      title={null}
-    >
+    <SettingsSection>
       <SourceSyntaxToggleSettingsRows
         onSyntaxHighlightingChange={setDiffSyntaxHighlightingEnabledSetting}
         syntaxHighlightingEnabled={syntaxHighlightingEnabled}
       />
-      <SettingsRow
-        align="center"
-        control={(
-          <SwitchControl
-            accessibilityLabel="Highlight changed characters"
-            checked={highlightChangedCharacters}
-            onChange={setDiffHighlightChangedCharactersSetting}
-          />
-        )}
+      <SettingsSwitchRow
         description="Emphasize character-level changes within paired added and removed lines."
-        title="Highlight changed characters"
+        label="Highlight changed characters"
+        value={highlightChangedCharacters}
+        onValueChange={setDiffHighlightChangedCharactersSetting}
       />
-      <SettingsRow
-        align="center"
-        control={(
-          <SwitchControl
-            accessibilityLabel="Ignore whitespace changes"
-            checked={ignoreWhitespaceChanges}
-            onChange={setDiffIgnoreWhitespaceChangesSetting}
-          />
-        )}
+      <SettingsSwitchRow
         description="Ignore changes that only add, remove, or rearrange whitespace. Open diffs reload when this changes."
-        title="Ignore whitespace changes"
+        label="Ignore whitespace changes"
+        value={ignoreWhitespaceChanges}
+        onValueChange={setDiffIgnoreWhitespaceChangesSetting}
       />
-      <SettingsRow
-        align="center"
-        control={(
-          <SwitchControl
-            accessibilityLabel="Show whitespace characters"
-            checked={showWhitespaceCharacters}
-            onChange={setDiffShowWhitespaceCharactersSetting}
-          />
-        )}
+      <SettingsSwitchRow
         description="Draw visible markers for spaces and tabs without changing copied text."
-        title="Show whitespace characters"
+        label="Show whitespace characters"
+        value={showWhitespaceCharacters}
+        onValueChange={setDiffShowWhitespaceCharactersSetting}
       />
     </SettingsSection>
   );
@@ -237,33 +178,16 @@ function CommandLineButton({
   );
 }
 
-function DebuggingSettingsPage() {
-  return (
-    <SettingsPage>
-      <DebuggingSettingsContent />
-    </SettingsPage>
-  );
-}
-
 function DebuggingSettingsContent() {
   const showStatisticsPanel = useDiffShowStatisticsPanelSetting();
 
   return (
-    <SettingsSection
-      first
-      title={null}
-    >
-      <SettingsRow
-        align="center"
-        control={(
-          <SwitchControl
-            accessibilityLabel="Show statistics panel"
-            checked={showStatisticsPanel}
-            onChange={setDiffShowStatisticsPanelSetting}
-          />
-        )}
+    <SettingsSection>
+      <SettingsSwitchRow
         description="Show a small overlay with load and document statistics."
-        title="Show statistics panel"
+        label="Show statistics panel"
+        value={showStatisticsPanel}
+        onValueChange={setDiffShowStatisticsPanelSetting}
       />
     </SettingsSection>
   );
@@ -293,14 +217,6 @@ function getCommandLineDescription(status: DiffCliInstallStatus | null, sourceCo
     description = "Install the ldiff launcher.";
   }
   return description;
-}
-
-function CommandLineSettingsPage() {
-  return (
-    <SettingsPage>
-      <CommandLineSettingsContent />
-    </SettingsPage>
-  );
 }
 
 function CommandLineSettingsContent() {
@@ -382,31 +298,25 @@ function CommandLineSettingsContent() {
 
   return (
     <>
-      <SettingsSection
-        first
-        title={null}
-      >
+      <SettingsSection>
         <SettingsRow
-          align="center"
-          control={(
-            <View className="flex-row gap-2">
+          description={commandLineDescription}
+          label="ldiff">
+          <View className="flex-row gap-2">
+            <CommandLineButton
+              disabled={isInstalling || isUninstalling}
+              label={isInstalling ? "Installing..." : status?.installed ? "Update" : "Install"}
+              onPress={handleInstall}
+            />
+            {canUninstall ? (
               <CommandLineButton
                 disabled={isInstalling || isUninstalling}
-                label={isInstalling ? "Installing..." : status?.installed ? "Update" : "Install"}
-                onPress={handleInstall}
+                label={isUninstalling ? "Uninstalling..." : "Uninstall"}
+                onPress={handleUninstall}
               />
-              {canUninstall ? (
-                <CommandLineButton
-                  disabled={isInstalling || isUninstalling}
-                  label={isUninstalling ? "Uninstalling..." : "Uninstall"}
-                  onPress={handleUninstall}
-                />
-              ) : null}
-            </View>
-          )}
-          description={commandLineDescription}
-          title="ldiff"
-        />
+            ) : null}
+          </View>
+        </SettingsRow>
         {error ? (
           <View className="px-1 pt-1">
             <Text className="text-xs text-danger">{error}</Text>
@@ -417,53 +327,39 @@ function CommandLineSettingsContent() {
   );
 }
 
-const pages: SettingsWindowPage<DiffSettingsPage>[] = [
-  { id: "aiSkills", title: "AI Skills", render: () => <AISkillsSettings /> },
-  {
-    id: "customize",
-    render: () => <CustomizeDiffSettings />,
-    title: "Customize App",
-  },
-  {
-    id: "appearance",
-    render: () => <AppearanceSettingsContent />,
-    title: "Appearance",
-  },
-  {
-    id: "syntax",
-    render: () => <SyntaxSettingsContent />,
-    title: "Syntax",
-  },
-  {
-    id: "hotkeys",
-    render: () => <HotkeysSettingsContent />,
-    title: "Hotkeys",
-  },
-  {
-    id: "debugging",
-    render: () => <DebuggingSettingsContent />,
-    title: "Debugging",
-  },
-  {
-    id: "commandLine",
-    render: () => <CommandLineSettingsContent />,
-    title: "Command Line",
-  },
-];
-
 export function SettingsWindow() {
   const syntaxTheme = useDiffSyntaxTheme();
   const selectedPageId = useValue(diffSettingsPage$);
 
   return (
-    <VirtualizedSettingsWindow
+    <VirtualizedSettingsWindow<DiffSettingsPage>
       appearance={syntaxTheme.appearance}
-      estimatedItemSize={360}
-      pages={pages}
       selectedPageId={selectedPageId}
       onSelectionChange={page => diffSettingsPage$.set(page)}
       windowId={diffSettingsWindowIdentifier}
-    />
+    >
+      <SettingsPage id="aiSkills" title="AI Skills" icon="sparkles">
+        <AISkillsSettings />
+      </SettingsPage>
+      <SettingsPage id="customize" title="Customize App" icon="slider.horizontal.3">
+        <CustomizeDiffSettings />
+      </SettingsPage>
+      <SettingsPage id="appearance" title="Appearance" icon="paintbrush">
+        <AppearanceSettingsContent />
+      </SettingsPage>
+      <SettingsPage id="syntax" title="Syntax" icon="chevron.left.forwardslash.chevron.right">
+        <SyntaxSettingsContent />
+      </SettingsPage>
+      <SettingsPage id="hotkeys" title="Hotkeys" icon="keyboard">
+        <HotkeysSettingsContent />
+      </SettingsPage>
+      <SettingsPage id="debugging" title="Debugging" icon="ladybug">
+        <DebuggingSettingsContent />
+      </SettingsPage>
+      <SettingsPage id="commandLine" title="Command Line" icon="terminal">
+        <CommandLineSettingsContent />
+      </SettingsPage>
+    </VirtualizedSettingsWindow>
   );
 }
 

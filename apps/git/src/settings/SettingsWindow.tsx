@@ -1,8 +1,7 @@
 import { observable } from "@legendapp/state";
 import { useValue } from "@legendapp/state/react";
 import { Button, Select, SegmentedControl, TextInput } from "@legendapp/spark/ui";
-import { SettingsCard, SettingsRow, SettingsSection, VirtualizedSettingsWindow, type SettingsWindowPage } from "@legendapp/spark/settings/window";
-import { SwitchControl } from "@legend-apps/design-system";
+import { SettingsRow, SettingsSection, VirtualizedSettingsWindow, SettingsPage, SettingsSwitchRow } from "@legendapp/spark/ui/settings";
 import { DragDropProvider, DraggableItem, DroppableZone } from "@legend-apps/reorder-controls";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { PlatformColor, StyleSheet, Text, View } from "react-native";
@@ -54,11 +53,18 @@ const titleCase = (key: string) => key.replace(/([A-Z])/g, " $1").replace(/^./, 
 function Choice({ title, description, value, options, onChange }: { title: string; description?: string; value: string; options: readonly { label: string; value: string }[]; onChange(value: string): void }) {
   // Spark's Select throws on a value it doesn't list; a file can hold one (Fork's 1.5 pt line width), so it is listed as is.
   const listed = options.some(option => option.value === value) ? options : [...options, { label: value, value }];
-  return <SettingsRow align="center" title={title} description={description} control={<Select accessibilityLabel={title} options={listed} value={value} onValueChange={onChange} style={styles.select} />} />;
+  return <SettingsRow label={title} description={description}>
+    <Select accessibilityLabel={title} options={listed} value={value} onValueChange={onChange} variant="borderless" style={styles.select} />
+  </SettingsRow>;
 }
 
 function Toggle({ title, description, value, onChange }: { title: string; description?: string; value: boolean; onChange(value: boolean): void }) {
-  return <SettingsRow align="center" title={title} description={description} control={<SwitchControl accessibilityLabel={title} checked={value} onChange={onChange} />} />;
+  return <SettingsSwitchRow
+    label={title}
+    description={description}
+    value={value}
+    onValueChange={onChange}
+  />;
 }
 
 /** The scope popup (every setting below writes to that layer) and Reset to All Repositories for what this repository overrides (spec §6). */
@@ -67,11 +73,13 @@ function ScopeRow() {
   const repoFile = useValue(() => store.layers$.repo.get()?.file ?? null);
   if (!root) return null;
   const overridden = Object.keys(repoFile ?? {}).filter(key => !(fileOnlyKeys as readonly string[]).includes(key) || key === "extends").map(key => [key]);
-  return <SettingsSection first title={null}>
-    <SettingsRow align="center" title="Apply To" description={scope === "repo" ? root : "Every repository without its own value."} control={<View style={styles.inline}>
-      <Select accessibilityLabel="Apply To" options={[{ label: "All Repositories", value: "user" }, { label: "This Repository", value: "repo" }]} value={scope} onValueChange={value => setScope(value as LayerId)} style={styles.select} />
-      {overridden.length ? <Button onPress={() => { for (const path of overridden) void store.edit("repo", path, undefined); }}>Reset to All Repositories</Button> : null}
-    </View>} />
+  return <SettingsSection>
+    <SettingsRow label="Apply To" description={scope === "repo" ? root : "Every repository without its own value."}>
+      <View style={styles.inline}>
+        <Select accessibilityLabel="Apply To" options={[{ label: "All Repositories", value: "user" }, { label: "This Repository", value: "repo" }]} value={scope} onValueChange={value => setScope(value as LayerId)} style={styles.select} />
+        {overridden.length ? <Button onPress={() => { for (const path of overridden) void store.edit("repo", path, undefined); }}>Reset to All Repositories</Button> : null}
+      </View>
+    </SettingsRow>
   </SettingsSection>;
 }
 
@@ -144,24 +152,35 @@ function GeneralPage() {
   return <>
     <ScopeRow />
     <ReadOnlyNote />
-    <SettingsSection first={!pane.root} title="Look">
+    <SettingsSection title="Look">
       <Choice title="Preset" description="The base every other setting starts from: layout, toolbar, sidebar, panels and theme." value={extendsValue} options={presetIds.map(id => ({ label: layoutTitle(id), value: id }))}
         onChange={value => { choosePreset(store, scope, value as PresetId).catch(report(windowId, "Couldn’t Change the Preset")); }} />
       <Choice title="Appearance" value={settings.appearance} options={[{ label: "System", value: "system" }, { label: "Light", value: "light" }, { label: "Dark", value: "dark" }]} onChange={value => set(["appearance"], value)} />
       <Choice title="Density" description="Row heights in lists and the diff." value={settings.density} options={[{ label: "Compact", value: "compact" }, { label: "Regular", value: "regular" }, { label: "Comfortable", value: "comfortable" }]} onChange={value => set(["density"], value)} />
     </SettingsSection>
-    <SettingsSection title="Settings File" description="Shared files name commands by id only and never carry window state, paths or tokens.">
-      <SettingsRow align="center" title="Import…" description="Replace your settings with a shared file, or apply it on top. A backup is written first." control={<Button onPress={() => { importFile().catch(report(windowId, "Couldn’t Import Settings")); }}>Import…</Button>} />
-      {undo ? <SettingsRow align="center" title="Undo Import" description="Puts back the file as it was before the last import." control={<Button onPress={() => { undoImport(store, undo).then(() => { lastUndo = null; setUndo(null); }, report(windowId, "Couldn’t Undo the Import")); }}>Undo Import</Button>} /> : null}
-      <SettingsRow align="center" title="Export…" description="Writes one shareable .json file." control={<View style={styles.inline}>
-        <Select accessibilityLabel="What to export" options={exportParts.map(id => ({ label: exportPartTitles[id], value: id }))} value={part} onValueChange={value => setPart(value as ExportPart)} style={styles.select} />
-        <Button onPress={() => { exportFile().catch(report(windowId, "Couldn’t Export Settings")); }}>Export…</Button>
-      </View>} />
-      <SettingsRow align="center" title="Reveal Settings File" description={store.paths[scope] ?? undefined} control={<Button onPress={reveal}>Show in Finder</Button>} />
+    <SettingsSection title="Settings File">
+      <Text className="px-3 py-2 text-sm text-text-secondary">Shared files name commands by id only and never carry window state, paths or tokens.</Text>
+      <SettingsRow label="Import…" description="Replace your settings with a shared file, or apply it on top. A backup is written first.">
+        <Button onPress={() => { importFile().catch(report(windowId, "Couldn’t Import Settings")); }}>Import…</Button>
+      </SettingsRow>
+      {undo ? <SettingsRow label="Undo Import" description="Puts back the file as it was before the last import.">
+        <Button onPress={() => { undoImport(store, undo).then(() => { lastUndo = null; setUndo(null); }, report(windowId, "Couldn’t Undo the Import")); }}>Undo Import</Button>
+      </SettingsRow> : null}
+      <SettingsRow label="Export…" description="Writes one shareable .json file.">
+        <View style={styles.inline}>
+          <Select accessibilityLabel="What to export" options={exportParts.map(id => ({ label: exportPartTitles[id], value: id }))} value={part} onValueChange={value => setPart(value as ExportPart)} style={styles.select} />
+          <Button onPress={() => { exportFile().catch(report(windowId, "Couldn’t Export Settings")); }}>Export…</Button>
+        </View>
+      </SettingsRow>
+      <SettingsRow label="Reveal Settings File" description={store.paths[scope] ?? undefined}>
+        <Button onPress={reveal}>Show in Finder</Button>
+      </SettingsRow>
     </SettingsSection>
-    <SettingsSection title="Issues" description={issues.length ? "Problems in your settings files, and settings shown differently until macOS pieces land. Nothing here stops the app." : "No issues."}>
-      {issues.length ? issues.map((issue, index) => <SettingsRow key={index} title={issue.path || "(file)"} description={`${issue.message} (${issue.file.split("/").pop()})`}
-        control={<Text style={issue.level === "error" ? styles.error : issue.level === "warning" ? styles.warningText : styles.secondary}>{titleCase(issue.level)}</Text>} />) : null}
+    <SettingsSection title="Issues">
+      <Text className="px-3 py-2 text-sm text-text-secondary">{issues.length ? "Problems in your settings files, and settings shown differently until macOS pieces land. Nothing here stops the app." : "No issues."}</Text>
+      {issues.length ? issues.map((issue, index) => <SettingsRow key={index} label={issue.path || "(file)"} description={`${issue.message} (${issue.file.split("/").pop()})`}>
+        <Text style={issue.level === "error" ? styles.error : issue.level === "warning" ? styles.warningText : styles.secondary}>{titleCase(issue.level)}</Text>
+      </SettingsRow>) : null}
     </SettingsSection>
   </>;
 }
@@ -188,12 +207,15 @@ function LayoutPage() {
     if (name) await saveLayoutAs(store, settings, base, name, {});
   }
   return <>
-    <SettingsSection first title="Layout" description="Divider positions are window state, kept per window; View ▸ Layout moves panes.">
+    <SettingsSection title="Layout">
+      <Text className="px-3 py-2 text-sm text-text-secondary">Divider positions are window state, kept per window; View ▸ Layout moves panes.</Text>
       <Choice title="Active Layout" value={settings.layout.active} options={names.map(name => ({ label: layoutTitle(name), value: name }))} onChange={value => set(["layout", "active"], value)} />
-      <SettingsRow align="center" title="Save Layout As…" description="Copies the active layout into a named layout you can edit." control={<View style={styles.inline}>
-        <Button onPress={() => { saveAs().catch(report(windowId, "Couldn’t Save the Layout")); }}>Save Layout As…</Button>
-        <Button onPress={() => set(["layout"], undefined)}>Reset to Preset</Button>
-      </View>} />
+      <SettingsRow label="Save Layout As…" description="Copies the active layout into a named layout you can edit.">
+        <View style={styles.inline}>
+          <Button onPress={() => { saveAs().catch(report(windowId, "Couldn’t Save the Layout")); }}>Save Layout As…</Button>
+          <Button onPress={() => set(["layout"], undefined)}>Reset to Preset</Button>
+        </View>
+      </SettingsRow>
     </SettingsSection>
     {(["default", ...viewKinds] as const).filter(kind => kind === "default" || layout.views[kind]).map(kind => <SettingsSection key={kind} title={kind === "default" ? "Default View" : `${titleCase(kind)} View`}>
       <View style={styles.schematic}><Schematic node={(layout.views as Record<string, LayoutNode>)[kind]!} /></View>
@@ -225,7 +247,7 @@ function OptionRows({ path, node, value }: { path: string[]; node: JsonNode; val
       const values = Array.from({ length: child.maximum - child.minimum + 1 }, (_, index) => String(child.minimum! + index));
       return <Choice key={key} title={title} description={description} value={String(current)} options={values.map(option => ({ label: option, value: option }))} onChange={next => set(at, Number(next))} />;
     }
-    return <SettingsRow key={key} title={title} description={`${description ?? ""} Edit in the settings file or from the commit list's column menu.`.trim()} control={null} muted />;
+    return <SettingsRow key={key} label={title} description={`${description ?? ""} Edit in the settings file or from the commit list's column menu.`.trim()} />;
   })}</>;
 }
 
@@ -233,7 +255,8 @@ function PanelsPage() {
   const { settings } = usePane();
   const shown = panelIds.filter(id => id !== "empty");
   return <>
-    {shown.map((panel, index) => <SettingsSection key={panel} first={index === 0} title={panelTitles[panel] ?? panel} description={panelSchemas()[panel]?.description}>
+    {shown.map(panel => <SettingsSection key={panel} title={panelTitles[panel] ?? panel}>
+      <Text className="px-3 py-2 text-sm text-text-secondary">{panelSchemas()[panel]?.description}</Text>
       <OptionRows path={["panels", panel]} node={panelSchemas()[panel]!} value={settings.panels[panel as PanelId] as Record<string, unknown>} />
     </SettingsSection>)}
   </>;
@@ -255,12 +278,14 @@ function colorPanel(): ((initial: string) => Promise<string>) | null {
 function ColorRow({ title, path, value, appearance, onRemove }: { title: string; path: string[]; value: string; appearance: Appearance; onRemove?: () => void }) {
   const { set } = usePane();
   const pick = colorPanel();
-  return <SettingsRow align="center" title={title} control={<View style={styles.inline}>
-    <View style={[styles.swatch, { backgroundColor: resolveColor(value, appearance) }]} />
-    {pick ? <Button onPress={() => { pick(resolveColor(value, appearance).slice(0, 7)).then(color => set(path, color), console.error); }}>Choose…</Button> : null}
-    <TextInput key={value} accessibilityLabel={title} defaultValue={value} onChangeText={text => { if (colorPattern.test(text.trim()) && text.trim() !== value) set(path, text.trim()); }} style={styles.colorField} />
-    {onRemove ? <Button onPress={onRemove}>Remove</Button> : null}
-  </View>} />;
+  return <SettingsRow label={title}>
+    <View style={styles.inline}>
+      <View style={[styles.swatch, { backgroundColor: resolveColor(value, appearance) }]} />
+      {pick ? <Button onPress={() => { pick(resolveColor(value, appearance).slice(0, 7)).then(color => set(path, color), console.error); }}>Choose…</Button> : null}
+      <TextInput key={value} accessibilityLabel={title} defaultValue={value} onChangeText={text => { if (colorPattern.test(text.trim()) && text.trim() !== value) set(path, text.trim()); }} style={styles.colorField} />
+      {onRemove ? <Button onPress={onRemove}>Remove</Button> : null}
+    </View>
+  </SettingsRow>;
 }
 
 const fontFamilies = ["system-mono", "Menlo", "SF Mono", "Monaco", "Courier New", "JetBrains Mono", "Fira Code"];
@@ -274,21 +299,25 @@ function ThemePage() {
     <ColorRow key={name} title={titleCase(name)} path={[...base, key, name]} value={value} appearance={appearance} />);
   const lanes = tokens.lanes;
   return <>
-    <SettingsSection first title="Code Font" description="The UI font always follows macOS.">
+    <SettingsSection title="Code Font">
+      <Text className="px-3 py-2 text-sm text-text-secondary">The UI font always follows macOS.</Text>
       <Choice title="Font" value={settings.theme.fonts.code} options={[...new Set([...fontFamilies, settings.theme.fonts.code])].map(name => ({ label: name === "system-mono" ? "System Monospaced" : name, value: name }))} onChange={value => set(["theme", "fonts", "code"], value)} />
       <Choice title="Size" value={String(settings.theme.fonts.codeSize)} options={Array.from({ length: 13 }, (_, index) => String(index + 9)).map(size => ({ label: `${size} pt`, value: size }))} onChange={value => set(["theme", "fonts", "codeSize"], Number(value))} />
     </SettingsSection>
-    <SettingsSection title="Colors" headerRight={<SegmentedControl accessibilityLabel="Appearance" options={[{ label: "Light", value: "light" }, { label: "Dark", value: "dark" }]} value={appearance} onValueChange={value => setAppearance(value as Appearance)} />}
-      description={"#RRGGBB, #RRGGBBAA, or system:<NSColor name> such as system:systemGreen."}>
+    <SettingsSection title="Colors">
+      <Text className="px-3 py-2 text-sm text-text-secondary">{"#RRGGBB, #RRGGBBAA, or system:<NSColor name> such as system:systemGreen."}</Text>
+      <View className="flex-row justify-end px-3 py-2"><SegmentedControl accessibilityLabel="Appearance" options={[{ label: "Light", value: "light" }, { label: "Dark", value: "dark" }]} value={appearance} onValueChange={value => setAppearance(value as Appearance)} /></View>
       <ColorRow title="Accent" path={[...base, "accent"]} value={tokens.accent} appearance={appearance} />
     </SettingsSection>
     <SettingsSection title="File Status">{group("status")}</SettingsSection>
     <SettingsSection title="Diff">{group("diff")}</SettingsSection>
     <SettingsSection title="Ref Labels">{group("refs")}</SettingsSection>
-    <SettingsSection title="Graph Lanes" description="In order; the last color is used for lanes past the maximum." headerRight={<View style={styles.inline}>
+    <SettingsSection title="Graph Lanes">
+      <Text className="px-3 py-2 text-sm text-text-secondary">In order; the last color is used for lanes past the maximum.</Text>
+      <View style={styles.inline} className="justify-end px-3 py-2">
       <Button onPress={() => set([...base, "lanes"], [...lanes.slice(0, -1), lanes.at(-2) ?? "#007AFF", lanes.at(-1)!])}>Add Lane</Button>
       <Button onPress={() => set([...base, "lanes"], undefined)}>Reset</Button>
-    </View>}>
+      </View>
       {lanes.map((value, index) => <ColorRow key={index} title={index === lanes.length - 1 ? "Overflow" : `Lane ${index + 1}`} path={[...base, "lanes"]} value={value} appearance={appearance}
         onRemove={lanes.length > 3 && index < lanes.length - 1 ? () => set([...base, "lanes"], lanes.filter((_, at) => at !== index)) : undefined} />)}
     </SettingsSection>
@@ -313,13 +342,13 @@ function ListEditor<Entry>({ zone, current, available, describe, onChange }: { z
   };
   return <DragDropProvider>
     <View style={styles.lists}>
-      <SettingsCard className="flex-1 min-w-0 p-2">
+      <View className="rounded-xl border border-border-primary bg-background-secondary flex-1 min-w-0 p-2">
         <Text style={styles.listTitle}>Available</Text>
         {available.map(entry => { const item = describe(entry); return <DraggableItem key={item.key} id={`${zone}-available-${item.key}`} zoneId={zone} dragOverlayMode="local" data={{ from: "available", entry } satisfies Drag}>
           <View style={styles.listRow}><Text style={styles.rowLabel} numberOfLines={1}>{item.label}</Text><Button variant="borderless" style={styles.rowButton} onPress={() => insert(entry, current.length)}>Add</Button></View>
         </DraggableItem>; })}
-      </SettingsCard>
-      <SettingsCard className="flex-1 min-w-0 p-2">
+      </View>
+      <View className="rounded-xl border border-border-primary bg-background-secondary flex-1 min-w-0 p-2">
         <Text style={styles.listTitle}>Current</Text>
         {current.map((entry, index) => { const item = describe(entry); return <DroppableZone key={`${index}-${item.key}`} allowDrop={() => true} onDrop={dropAt(index)}>
           <DraggableItem id={`${zone}-current-${index}-${item.key}`} zoneId={zone} dragOverlayMode="local" data={{ from: "current", index } satisfies Drag}>
@@ -332,7 +361,7 @@ function ListEditor<Entry>({ zone, current, available, describe, onChange }: { z
           </DraggableItem>
         </DroppableZone>; })}
         <DroppableZone allowDrop={() => true} onDrop={dropAt(current.length)}><View style={styles.dropEnd}><Text style={styles.secondary}>Drop here to add at the end</Text></View></DroppableZone>
-      </SettingsCard>
+      </View>
     </View>
   </DragDropProvider>;
 }
@@ -345,10 +374,11 @@ function ToolbarPage() {
   const { items, displayMode } = settings.toolbar;
   const available: ToolbarEntry[] = [...toolbarWidgets, ...commandIds.filter(id => (commandMeta[id] as CommandMeta).symbol)];
   return <>
-    <SettingsSection first title="Toolbar" headerRight={<Button onPress={() => set(["toolbar", "items"], undefined)}>Reset to Preset</Button>}>
+    <SettingsSection title="Toolbar">
+      <View className="flex-row justify-end px-3 py-2"><Button onPress={() => set(["toolbar", "items"], undefined)}>Reset to Preset</Button></View>
       <Choice title="Display" description="Spark's toolbar shows icons only for now (ask S2); labels show in tooltips." value={displayMode} options={[{ label: "Icon and Label", value: "iconAndLabel" }, { label: "Icon Only", value: "iconOnly" }, { label: "Label Only", value: "labelOnly" }]} onChange={value => set(["toolbar", "displayMode"], value)} />
     </SettingsSection>
-    <SettingsSection title="Items" card={false}>
+    <SettingsSection title="Items">
       <ListEditor<ToolbarEntry> zone="toolbar" current={items} available={available} onChange={next => set(["toolbar", "items"], next)}
         describe={entry => typeof entry === "string" ? { key: entry, label: widgetTitles[entry] ?? commandTitle(entry) } : { key: toolbarKey(entry), label: entry.label ?? commandTitle(entry.command) }} />
     </SettingsSection>
@@ -361,10 +391,11 @@ function MenusPage() {
   const current = settings.contextMenus[target] ?? defaultContextMenus[target];
   const available: MenuEntry[] = ["separator", ...commandIds.filter(id => (commandMeta[id] as CommandMeta).targets?.includes(target))];
   return <>
-    <SettingsSection first title="Context Menus" headerRight={<Button onPress={() => set(["contextMenus", target], undefined)}>Reset Menu</Button>}>
+    <SettingsSection title="Context Menus">
+      <View className="flex-row justify-end px-3 py-2"><Button onPress={() => set(["contextMenus", target], undefined)}>Reset Menu</Button></View>
       <Choice title="Menu" description="Entries that don't apply to what was clicked are left out when the menu opens." value={target} options={menuTargets.map(id => ({ label: titleCase(id), value: id }))} onChange={value => setTarget(value as MenuTarget)} />
     </SettingsSection>
-    <SettingsSection title="Items" card={false}>
+    <SettingsSection title="Items">
       <ListEditor<MenuEntry> zone={`menu-${target}`} current={current} available={available} onChange={next => set(["contextMenus", target], next)}
         describe={entry => typeof entry === "string" ? { key: entry, label: entry === "separator" ? "── Separator ──" : commandTitle(entry) } : { key: `submenu:${entry.submenu}`, label: `${entry.submenu} ▸ (${entry.items.length})` }} />
     </SettingsSection>
@@ -430,12 +461,18 @@ function AIPage() {
     runAI(pane).catch(error => aiState$.status.set(error instanceof Error ? error.message : String(error))).finally(() => aiState$.running.set(false));
   };
   return <>
-    <SettingsSection first title="Customize with AI" description="Describe the change. Your own Claude or Codex command-line tool writes a settings patch from Legend Git's settings reference; you see it live before anything is saved. This changes settings only; Customize App changes the app's code.">
-      <SettingsRow title="Request" control={<TextInput key={state.fill} accessibilityLabel="Request" defaultValue={state.request} onChangeText={text => aiState$.request.set(text)} style={styles.prompt} />} />
+    <SettingsSection title="Customize with AI">
+      <Text className="px-3 py-2 text-sm text-text-secondary">Describe the change. Your own Claude or Codex command-line tool writes a settings patch from Legend Git's settings reference; you see it live before anything is saved. This changes settings only; Customize App changes the app's code.</Text>
+      <SettingsRow label="Request">
+        <TextInput key={state.fill} accessibilityLabel="Request" defaultValue={state.request} onChangeText={text => aiState$.request.set(text)} style={styles.prompt} />
+      </SettingsRow>
       <Choice title="Examples" value="" options={[{ label: "Choose an Example…", value: "" }, ...examplePrompts.map(prompt => ({ label: prompt, value: prompt }))]} onChange={value => { if (value) aiState$.assign({ request: value, fill: aiState$.fill.peek() + 1 }); }} />
-      <SettingsRow align="center" title={state.running ? "Working…" : "Generate"} description={state.status || undefined} control={<Button disabled={state.running || previewing || !state.request.trim()} onPress={generate}>Generate</Button>} />
+      <SettingsRow label={state.running ? "Working…" : "Generate"} description={state.status || undefined}>
+        <Button disabled={state.running || previewing || !state.request.trim()} onPress={generate}>Generate</Button>
+      </SettingsRow>
     </SettingsSection>
-    {previewing ? <SettingsSection title="AI settings preview" description="The window shows these settings now; nothing is saved until you keep them." card={false}>
+    {previewing ? <SettingsSection title="AI settings preview">
+      <Text className="px-3 py-2 text-sm text-text-secondary">The window shows these settings now; nothing is saved until you keep them.</Text>
       <View style={styles.inline}>
         <Button onPress={() => { store.replace(scope, store.layerFile(scope).file!).then(() => aiState$.assign({ patch: null, status: "Kept." }), report(windowId, "Couldn’t Save the Settings")); }}>Keep</Button>
         <Button onPress={() => { store.preview(scope, null); aiState$.assign({ patch: null, status: "Reverted." }); }}>Revert</Button>
@@ -446,17 +483,6 @@ function AIPage() {
 }
 
 // ── Window ───────────────────────────────────────────────────────────────────
-
-const pages: SettingsWindowPage<SettingsPageId>[] = [
-  { id: "general", title: "General", render: () => <GeneralPage /> },
-  { id: "layout", title: "Layout", render: () => <LayoutPage /> },
-  { id: "panels", title: "Panels", render: () => <PanelsPage /> },
-  { id: "theme", title: "Theme", render: () => <ThemePage /> },
-  { id: "toolbar", title: "Toolbar", render: () => <ToolbarPage /> },
-  { id: "menus", title: "Context Menus", render: () => <MenusPage /> },
-  { id: "keyboard", title: "Keyboard", render: () => <KeyboardPage /> },
-  { id: "ai", title: "Customize with AI", render: () => <AIPage /> },
-];
 
 export const settingsWindowId = "git-settings"; // gitWindows registers the window under this id
 
@@ -479,10 +505,33 @@ export function GitSettingsWindow() {
     store, settings, root: target.root, scope, setScope, windowId: settingsWindowId,
     set: (path, value) => { store.edit(scope, path, value).catch(report(settingsWindowId, "Couldn’t Change the Setting")); },
   } : null, [store, settings, scope, target.root]);
-  const content = pane ? pages : pages.map(page => ({ ...page, render: () => null }));
-  // One scrolling list of every page's sections, like the other Legend apps' settings; the sidebar jumps to a page.
   return <PaneContext.Provider value={pane}>
-    <VirtualizedSettingsWindow<SettingsPageId> windowId={settingsWindowId} appearance={settings?.appearance ?? "system"} estimatedItemSize={900} pages={content} selectedPageId={target.page} onSelectionChange={page => settingsTarget$.page.set(page)} />
+    <VirtualizedSettingsWindow<SettingsPageId> windowId={settingsWindowId} appearance={settings?.appearance ?? "system"} selectedPageId={target.page} onSelectionChange={page => settingsTarget$.page.set(page)} >
+      <SettingsPage id="general" title="General" icon="gearshape">
+        {pane ? <GeneralPage /> : null}
+      </SettingsPage>
+      <SettingsPage id="layout" title="Layout" icon="rectangle.split.2x1">
+        {pane ? <LayoutPage /> : null}
+      </SettingsPage>
+      <SettingsPage id="panels" title="Panels" icon="sidebar.left">
+        {pane ? <PanelsPage /> : null}
+      </SettingsPage>
+      <SettingsPage id="theme" title="Theme" icon="paintbrush">
+        {pane ? <ThemePage /> : null}
+      </SettingsPage>
+      <SettingsPage id="toolbar" title="Toolbar" icon="rectangle.topthird.inset.filled">
+        {pane ? <ToolbarPage /> : null}
+      </SettingsPage>
+      <SettingsPage id="menus" title="Context Menus" icon="list.bullet">
+        {pane ? <MenusPage /> : null}
+      </SettingsPage>
+      <SettingsPage id="keyboard" title="Keyboard" icon="keyboard">
+        {pane ? <KeyboardPage /> : null}
+      </SettingsPage>
+      <SettingsPage id="ai" title="Customize with AI" icon="sparkles">
+        {pane ? <AIPage /> : null}
+      </SettingsPage>
+    </VirtualizedSettingsWindow>
   </PaneContext.Provider>;
 }
 

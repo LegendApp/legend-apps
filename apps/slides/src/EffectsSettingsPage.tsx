@@ -1,5 +1,5 @@
 import { useValue } from "@legendapp/state/react";
-import { SettingsRow, SettingsSection } from "@legendapp/spark/settings/window";
+import { SettingsRow, SettingsSection } from "@legendapp/spark/ui/settings";
 import { NativeVideoView } from "@legend-apps/presentation";
 import { useEffect, useRef, useState } from "react";
 import { Alert, Image, Linking, Pressable, ScrollView, Text, View } from "react-native";
@@ -76,23 +76,25 @@ export function EffectsSettingsPage() {
   const rows = installed ? effectPackRows(loaded?.catalog ?? null, installed) : [];
   const disabled = busy || presenting;
   return <>
-    <SettingsSection first title="Effect Packs">
-      <SettingsRow title="Installed effects" description="Packs install into Application Support and work offline. Decks keep the version they were built with."
-        control={<RuntimeButton title="Open Folder" onPress={() => void effectsDirectory().then(async directory => { await mkdir(directory, { recursive: true }); await Linking.openURL(`file://${encodeURI(directory)}`); }).catch(console.error)} />} />
-      {!catalog && <SettingsRow title="Catalog" description="Loading effects from legend.so…" control={null} />}
-      {catalog && "error" in catalog && <SettingsRow title="Catalog unavailable" description={`Showing installed packs only. ${catalog.error}`}
-        control={<RuntimeButton title="Try Again" onPress={refreshCatalog} />} />}
-      {presenting && <SettingsRow title="Presenting" description="Finish presenting to install, update or remove effects." control={null} />}
+    <SettingsSection title="Effect Packs">
+      <SettingsRow label="Installed effects" description="Packs install into Application Support and work offline. Decks keep the version they were built with.">
+        <RuntimeButton title="Open Folder" onPress={() => void effectsDirectory().then(async directory => { await mkdir(directory, { recursive: true }); await Linking.openURL(`file://${encodeURI(directory)}`); }).catch(console.error)} />
+      </SettingsRow>
+      {!catalog && <SettingsRow label="Catalog" description="Loading effects from legend.so…" />}
+      {catalog && "error" in catalog && <SettingsRow label="Catalog unavailable" description={`Showing installed packs only. ${catalog.error}`}>
+        <RuntimeButton title="Try Again" onPress={refreshCatalog} />
+      </SettingsRow>}
+      {presenting && <SettingsRow label="Presenting" description="Finish presenting to install, update or remove effects." />}
       {busy || message && progress ? <View className="px-4 py-4"><EffectProgress /></View>
-        : error ? <SettingsRow title="Effect operation failed" description={error} control={null} />
-        : message ? <SettingsRow title={message} control={null} /> : null}
+        : error ? <SettingsRow label="Effect operation failed" description={error} />
+        : message ? <SettingsRow label={message} /> : null}
     </SettingsSection>
-    {rows.map(row => <SettingsSection key={row.id} title={row.id[0].toUpperCase() + row.id.slice(1)}
-      description={`${stateLabel[row.state]}${row.installed ? ` · ${row.installed.version}` : ""}${row.latest && row.state !== "installed" ? ` · Latest ${row.latest}` : ""}${row.incompatibility ? ` · ${row.incompatibility}` : ""}${row.effects.length ? ` · ${row.effects.map(effect => effect.title).join(", ")}` : ""}`}
-      headerRight={<View className="flex-row gap-2">
+    {rows.map(row => <SettingsSection key={row.id} title={row.id[0].toUpperCase() + row.id.slice(1)}>
+      <Text className="px-3 py-2 text-sm text-text-secondary">{`${stateLabel[row.state]}${row.installed ? ` · ${row.installed.version}` : ""}${row.latest && row.state !== "installed" ? ` · Latest ${row.latest}` : ""}${row.incompatibility ? ` · ${row.incompatibility}` : ""}${row.effects.length ? ` · ${row.effects.map(effect => effect.title).join(", ")}` : ""}`}</Text>
+      <View className="flex-row justify-end gap-2 px-3 py-2">
         {row.latest && row.state !== "installed" && row.state !== "incompatible" ? <RuntimeButton title={row.state === "update" ? `Update to ${row.latest}` : "Install"} disabled={disabled} onPress={() => install(row)} /> : null}
         {row.installed ? <RuntimeButton title="Remove" disabled={disabled} onPress={() => remove(row)} /> : null}
-      </View>}>
+      </View>
       {loaded && row.effects.length ? <ScrollView horizontal contentContainerStyle={{ gap: 16, padding: 16 }}>
         {row.effects.map(effect => <EffectCard key={effect.slug} effect={effect} catalogURL={loaded.url} />)}
       </ScrollView> : null}

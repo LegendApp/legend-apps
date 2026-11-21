@@ -1,10 +1,5 @@
-import {
-  ColorValueInput,
-  SelectControl,
-  SegmentedOptions,
-  SwitchControl,
-} from "@legend-apps/design-system";
-import { SettingsRow, SettingsSection } from "@legendapp/spark/settings/window";
+import { ColorValueInput } from "@legend-apps/design-system";
+import { SettingsRow, SettingsSection, SettingsSelectRow, SettingsSwitchRow, SettingsSegmentedRow } from "@legendapp/spark/ui/settings";
 import type { LegendThemeBackground, LegendThemeBackgroundSource } from "@legend-apps/theme";
 import { Text, TextInput, Pressable, View } from "react-native";
 
@@ -19,7 +14,6 @@ export type AppearanceThemeIssue = {
 };
 
 export type ThemeSelectorSectionProps = {
-  first?: boolean;
   issues?: AppearanceThemeIssue[];
   onThemeChange: (theme: string) => void;
   selectedTheme: string;
@@ -145,7 +139,6 @@ function setGlassEnabled(background: LegendThemeBackground, glassEnabled: boolea
 }
 
 export function ThemeSelectorSection({
-  first = false,
   issues = [],
   onThemeChange,
   selectedTheme,
@@ -157,18 +150,12 @@ export function ThemeSelectorSection({
     : themes[0]?.value ?? selectedTheme;
 
   return (
-    <SettingsSection first={first} title={null}>
-      <SettingsRow
-        align="center"
-        control={(
-          <SelectControl
-            accessibilityLabel={title}
-            onChange={onThemeChange}
-            options={themes}
-            value={selectedThemeValue}
-          />
-        )}
-        title={title}
+    <SettingsSection>
+      <SettingsSelectRow
+        label={title}
+        options={themes}
+        value={selectedThemeValue}
+        onValueChange={onThemeChange}
       />
       {issues.length > 0 ? (
         <View className="gap-1 px-4 pb-3.5">
@@ -195,114 +182,90 @@ export function BackgroundSettingsSection({
 
   return (
     <SettingsSection title="Background">
-      <SettingsRow
-        title="Liquid Glass"
+      <SettingsSwitchRow
+        label="Liquid Glass"
         description="Use the native translucent glass background"
-        control={
-          <SwitchControl
-            checked={background.glassEnabled}
-            onChange={(checked) => onBackgroundChange(setGlassEnabled(background, checked))}
-          />
-        }
+        value={background.glassEnabled}
+        onValueChange={(checked) => onBackgroundChange(setGlassEnabled(background, checked))}
       />
-      <SettingsRow
-        title="Source"
+      <SettingsSegmentedRow
+        label="Source"
         description="Choose what appears above the glass layer"
-        control={
-          <SegmentedOptions
-            options={backgroundSourceOptions}
-            value={source.type}
-            onChange={(value) => onBackgroundChange(backgroundWithSource(background, value, fallbackColor))}
-          />
-        }
+        options={backgroundSourceOptions}
+        value={source.type}
+        onValueChange={(value) => onBackgroundChange(backgroundWithSource(background, value as LegendThemeBackgroundSource["type"], fallbackColor))}
       />
       {source.type === "color" ? (
         <SettingsRow
-          title="Background Color"
-          description="Supports alpha, for example #101014cc"
-          align="center"
-          control={
-            <ColorValueInput
-              value={sourceColor}
-              onChange={(color) => onBackgroundChange(setColorSource(background, color))}
-            />
-          }
-        />
+          label="Background Color"
+          description="Supports alpha, for example #101014cc">
+          <ColorValueInput
+            value={sourceColor}
+            onChange={(color) => onBackgroundChange(setColorSource(background, color))}
+          />
+        </SettingsRow>
       ) : null}
       {source.type === "image" ? (
         <SettingsRow
-          title="Background Image"
-          description="Choose an image file or paste a local path"
-          align="center"
-          control={
-            <View className="flex-row items-center gap-2">
-              <TextInput
-                value={imagePath}
-                onChangeText={(path) => onBackgroundChange(setImageSource(background, path))}
-                placeholder="/path/to/image.jpg"
-                autoCapitalize="none"
-                autoCorrect={false}
-                className="h-8 w-72 rounded-md border border-border-primary bg-background-primary px-2 text-sm text-text-primary"
-              />
-              {onChooseImage ? (
-                <Pressable
-                  accessibilityRole="button"
-                  className="h-8 justify-center rounded-md border border-border-primary bg-background-primary px-3 hover:bg-background-secondary/70"
-                  onPress={async () => {
-                    const nextImagePath = await onChooseImage();
-                    if (nextImagePath) {
-                      onBackgroundChange(setImageSource(background, nextImagePath));
-                    }
-                  }}
-                >
-                  <Text className="text-sm text-text-primary">Choose</Text>
-                </Pressable>
-              ) : null}
-            </View>
-          }
-        />
+          label="Background Image"
+          description="Choose an image file or paste a local path">
+          <View className="flex-row items-center gap-2">
+            <TextInput
+              value={imagePath}
+              onChangeText={(path) => onBackgroundChange(setImageSource(background, path))}
+              placeholder="/path/to/image.jpg"
+              autoCapitalize="none"
+              autoCorrect={false}
+              className="h-8 w-72 rounded-md border border-border-primary bg-background-primary px-2 text-sm text-text-primary"
+            />
+            {onChooseImage ? (
+              <Pressable
+                accessibilityRole="button"
+                className="h-8 justify-center rounded-md border border-border-primary bg-background-primary px-3 hover:bg-background-secondary/70"
+                onPress={async () => {
+                  const nextImagePath = await onChooseImage();
+                  if (nextImagePath) {
+                    onBackgroundChange(setImageSource(background, nextImagePath));
+                  }
+                }}
+              >
+                <Text className="text-sm text-text-primary">Choose</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        </SettingsRow>
       ) : null}
       {source.type !== "none" ? (
         <SettingsRow
-          title="Opacity"
-          description="Opacity of the color or image layer"
-          align="center"
-          control={
-            <View className="flex-row items-center gap-2">
-              <TextInput
-                value={normalizePercent(background.opacity)}
-                onChangeText={(value) => onBackgroundChange(setBackgroundOpacity(background, value))}
-                keyboardType="numeric"
-                className="h-8 w-20 rounded-md border border-border-primary bg-background-primary px-2 text-center text-sm text-text-primary"
-              />
-              <Text className="text-sm text-text-secondary">%</Text>
-            </View>
-          }
-        />
+          label="Opacity"
+          description="Opacity of the color or image layer">
+          <View className="flex-row items-center gap-2">
+            <TextInput
+              value={normalizePercent(background.opacity)}
+              onChangeText={(value) => onBackgroundChange(setBackgroundOpacity(background, value))}
+              keyboardType="numeric"
+              className="h-8 w-20 rounded-md border border-border-primary bg-background-primary px-2 text-center text-sm text-text-primary"
+            />
+            <Text className="text-sm text-text-secondary">%</Text>
+          </View>
+        </SettingsRow>
       ) : null}
-      <SettingsRow
-        title="Tint"
+      <SettingsSwitchRow
+        label="Tint"
         description="Add a transparent color over the background, for example #00000044"
-        control={
-          <SwitchControl
-            checked={background.tint.enabled}
-            onChange={(checked) => onBackgroundChange(setBackgroundTintEnabled(background, checked))}
-          />
-        }
+        value={background.tint.enabled}
+        onValueChange={(checked) => onBackgroundChange(setBackgroundTintEnabled(background, checked))}
       />
       {background.tint.enabled ? (
         <SettingsRow
-          title="Tint Color"
-          description="Supports alpha, for example #00000044"
-          align="center"
-          control={
-            <ColorValueInput
-              label="Tint"
-              value={background.tint.color}
-              onChange={(color) => onBackgroundChange(setBackgroundTintColor(background, color))}
-            />
-          }
-        />
+          label="Tint Color"
+          description="Supports alpha, for example #00000044">
+          <ColorValueInput
+            label="Tint"
+            value={background.tint.color}
+            onChange={(color) => onBackgroundChange(setBackgroundTintColor(background, color))}
+          />
+        </SettingsRow>
       ) : null}
     </SettingsSection>
   );

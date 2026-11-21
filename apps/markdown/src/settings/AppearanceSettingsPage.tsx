@@ -1,10 +1,9 @@
-import { SegmentedOptions, SelectControl } from "@legend-apps/design-system";
 import { getLegendDisplayThemeFiles, getMarkdownLayoutThemeFiles } from "@legend-apps/theme";
 import {
-  SettingsPage,
-  SettingsRow,
   SettingsSection,
-} from "@legendapp/spark/settings/window";
+  SettingsSelectRow,
+  SettingsSegmentedRow,
+} from "@legendapp/spark/ui/settings";
 import { useMemo } from "react";
 import { Text, View } from "react-native";
 import {
@@ -76,14 +75,6 @@ function getSelectedThemeValue(options: readonly { value: string }[], selectedTh
     : options[0]?.value ?? selectedTheme;
 }
 
-export function AppearanceSettingsPage() {
-  return (
-    <SettingsPage>
-      <AppearanceSettingsContent />
-    </SettingsPage>
-  );
-}
-
 export function AppearanceSettingsContent() {
   const userThemeLoadResult = useMemo(() => loadMarkdownUserThemesSync({ force: true }), []);
   const displayThemeOptions = useMemo(
@@ -104,99 +95,61 @@ export function AppearanceSettingsContent() {
 
   return (
     <>
-      <SettingsSection
-        first
-        title={null}
-      >
-        <SettingsRow
-          align="center"
-          control={(
-            <SelectControl
-              accessibilityLabel="Display Theme"
-              onChange={setMarkdownDisplayThemeSetting}
-              options={displayThemeOptions}
-              value={getSelectedThemeValue(displayThemeOptions, selectedDisplayTheme)}
-            />
-          )}
-          title="Display Theme"
+      <SettingsSection>
+        <SettingsSelectRow
+          label="Display Theme"
+          options={displayThemeOptions}
+          value={getSelectedThemeValue(displayThemeOptions, selectedDisplayTheme)}
+          onValueChange={setMarkdownDisplayThemeSetting}
         />
-        <ThemeIssueMessages issues={userThemeLoadResult.displayThemes.issues} />
-        <SettingsRow
-          align="center"
-          control={(
-            <SelectControl
-              accessibilityLabel="Layout Theme"
-              onChange={setMarkdownLayoutThemeSetting}
-              options={layoutThemeOptions}
-              value={getSelectedThemeValue(layoutThemeOptions, selectedLayoutTheme)}
-            />
-          )}
-          title="Layout Theme"
+        {userThemeLoadResult.displayThemes.issues.length > 0 ? (
+          <ThemeIssueMessages issues={userThemeLoadResult.displayThemes.issues} />
+        ) : null}
+        <SettingsSelectRow
+          label="Layout Theme"
+          options={layoutThemeOptions}
+          value={getSelectedThemeValue(layoutThemeOptions, selectedLayoutTheme)}
+          onValueChange={setMarkdownLayoutThemeSetting}
         />
-        <ThemeIssueMessages issues={userThemeLoadResult.layoutThemes.issues} />
+        {userThemeLoadResult.layoutThemes.issues.length > 0 ? (
+          <ThemeIssueMessages issues={userThemeLoadResult.layoutThemes.issues} />
+        ) : null}
       </SettingsSection>
-      <SettingsSection
-        title="Document"
-      >
-        <SettingsRow
-          align="center"
-          control={(
-            <SegmentedOptions
-              onChange={setMarkdownFontFamilySetting}
-              options={fontFamilyOptions}
-              value={selectedFontFamily}
-            />
-          )}
+      <SettingsSection title="Document">
+        <SettingsSegmentedRow
           description="Use the theme typeface, a serif reading face, or a fixed-width face."
-          title="Font"
+          label="Font"
+          options={fontFamilyOptions}
+          value={selectedFontFamily}
+          onValueChange={value => setMarkdownFontFamilySetting(value as MarkdownFontFamilySetting)}
         />
-        <SettingsRow
-          align="center"
-          control={(
-            <SegmentedOptions
-              onChange={setMarkdownFontSizeSetting}
-              options={fontSizeOptions}
-              value={selectedFontSize}
-            />
-          )}
+        <SettingsSegmentedRow
           description="Adjust the base text size for the editor."
-          title="Font Size"
+          label="Font Size"
+          options={fontSizeOptions}
+          value={selectedFontSize}
+          onValueChange={value => setMarkdownFontSizeSetting(value as MarkdownFontSizeSetting)}
         />
-        <SettingsRow
-          align="center"
-          control={(
-            <SegmentedOptions
-              onChange={setMarkdownLineHeightSetting}
-              options={lineHeightOptions}
-              value={selectedLineHeight}
-            />
-          )}
+        <SettingsSegmentedRow
           description="Change vertical rhythm for dense editing or slower reading."
-          title="Line Height"
+          label="Line Height"
+          options={lineHeightOptions}
+          value={selectedLineHeight}
+          onValueChange={value => setMarkdownLineHeightSetting(value as MarkdownLineHeightSetting)}
         />
-        <SettingsRow
-          align="center"
-          control={(
-            <SegmentedOptions
-              onChange={setMarkdownContentWidthSetting}
-              options={contentWidthOptions}
-              value={selectedContentWidth}
-            />
-          )}
+        <SettingsSegmentedRow
           description="Set the maximum width used by the document body."
-          title="Maximum Width"
+          label="Maximum Width"
+          options={contentWidthOptions}
+          value={selectedContentWidth}
+          onValueChange={value => setMarkdownContentWidthSetting(value as MarkdownContentWidthSetting)}
         />
-        <SettingsRow
-          align="center"
-          control={(
-            <SegmentedOptions
-              onChange={setMarkdownDocumentDensitySetting}
-              options={densityOptions}
-              value={selectedDensity}
-            />
-          )}
+        <SettingsSegmentedRow
           description="Control the outer padding and spacing between blocks."
-          title="Density"
+          label="Density"
+          options={densityOptions}
+          value={selectedDensity}
+          onValueChange={value => setMarkdownDocumentDensitySetting(value as MarkdownDocumentDensitySetting)}
         />
       </SettingsSection>
     </>
@@ -204,10 +157,6 @@ export function AppearanceSettingsContent() {
 }
 
 function ThemeIssueMessages({ issues }: { issues: readonly { filename: string; message: string }[] }) {
-  if (issues.length === 0) {
-    return null;
-  }
-
   return (
     <View className="gap-1 px-4 pb-3.5">
       {issues.map((issue) => (

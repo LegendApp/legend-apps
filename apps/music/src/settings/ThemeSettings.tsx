@@ -3,7 +3,7 @@ import { useEffect } from "react";
 import { Text, TextInput, View } from "react-native";
 import { Button } from "../components/Button";
 import { Checkbox } from "../components/Checkbox";
-import { SettingsPage, SettingsRow, SettingsSection } from "./components";
+import { SettingsRow, SettingsSection } from "./components";
 import {
     defaultMusicAppearance,
     ensureMusicAppearanceSettings,
@@ -19,14 +19,6 @@ function applyMusicTheme(themeName: MusicThemeName) {
     settings$.appearance.theme.set(theme.name);
     themeState$.customColors.dark.set(JSON.parse(JSON.stringify(theme.colors)));
 }
-
-export const ThemeSettings = () => {
-    return (
-        <SettingsPage>
-            <ThemeSettingsContent />
-        </SettingsPage>
-    );
-};
 
 export function ThemeSettingsContent() {
     const { resetTheme } = useTheme();
@@ -48,17 +40,10 @@ export function ThemeSettingsContent() {
 
     return (
         <>
-            <SettingsSection
-                card={false}
-                contentClassName="gap-3"
-                first
-                headerRight={(
-                    <Button onClick={handleReset} variant="secondary" className="px-3 py-1.5 h-auto">
+            <SettingsSection title="Theme">
+              <View className="flex-row justify-end px-3 py-2"><Button onClick={handleReset} variant="secondary" className="px-3 py-1.5 h-auto">
                         <Text className="text-sm text-text-primary">Reset</Text>
-                    </Button>
-                )}
-                title="Theme"
-            >
+                    </Button></View>
                 <View accessibilityRole="radiogroup" className="gap-2">
                     {musicThemeOptions.map((theme) => {
                         const isSelected = selectedTheme === theme.value;
@@ -80,35 +65,32 @@ export function ThemeSettingsContent() {
                 </View>
             </SettingsSection>
 
-            <SettingsSection card={false} className="mt-6" contentClassName="gap-3" title="Background">
+            <SettingsSection title="Background">
                 <SettingsRow
-                    title="Liquid Glass"
-                    description="Use the native translucent glass background."
-                    control={<Checkbox $checked={settings$.appearance.background.glassEnabled} />}
-                />
+                    label="Liquid Glass"
+                    description="Use the native translucent glass background.">
+                  <Checkbox $checked={settings$.appearance.background.glassEnabled} />
+                </SettingsRow>
                 <SettingsRow
-                    title="Background Color"
-                    description="Supports alpha, for example #00000044 or rgba(0, 0, 0, 0.27)."
-                    align="center"
-                    control={
-                        <View className="w-44">
-                            <View className="mb-2 flex-row items-center justify-end gap-2">
-                                <View
-                                    className="h-5 w-5 rounded border border-border-primary"
-                                    style={{ backgroundColor: background.color || "transparent" }}
-                                />
-                            </View>
-                            <TextInput
-                                value={background.color}
-                                onChangeText={(value) => settings$.appearance.background.color.set(value.trim())}
-                                placeholder="#00000044"
-                                autoCapitalize="none"
-                                autoCorrect={false}
-                                className="h-9 rounded-md border border-border-primary bg-background-secondary px-2 text-sm text-text-primary"
-                            />
-                        </View>
-                    }
-                />
+                    label="Background Color"
+                    description="Supports alpha, for example #00000044 or rgba(0, 0, 0, 0.27).">
+                  <View className="w-44">
+                      <View className="mb-2 flex-row items-center justify-end gap-2">
+                          <View
+                              className="h-5 w-5 rounded border border-border-primary"
+                              style={{ backgroundColor: background.color || "transparent" }}
+                          />
+                      </View>
+                      <TextInput
+                          value={background.color}
+                          onChangeText={(value) => settings$.appearance.background.color.set(value.trim())}
+                          placeholder="#00000044"
+                          autoCapitalize="none"
+                          autoCorrect={false}
+                          className="h-9 rounded-md border border-border-primary bg-background-secondary px-2 text-sm text-text-primary"
+                      />
+                  </View>
+                </SettingsRow>
             </SettingsSection>
 
         </>

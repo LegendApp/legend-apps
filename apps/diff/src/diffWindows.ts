@@ -1,7 +1,7 @@
 import { AppRegistry } from "react-native";
 import { createElement, type ComponentType } from "react";
 import type { DiffViewerWindowProps } from "./DiffViewerWindow";
-import { createSettingsWindowOptions } from "@legendapp/spark/settings/window";
+import { createSettingsWindowOptions } from "@legendapp/spark/ui/settings";
 import { createWindowsNavigator, openWindow, WindowProvider, type WindowsConfig } from "@legendapp/spark/windows";
 import { openOrShowWindow } from "@legend-apps/runtime-utils";
 import type { WindowBounds } from "@legendapp/spark/windows";

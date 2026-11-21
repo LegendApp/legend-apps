@@ -27,9 +27,9 @@ mock.module("@legend-apps/presentation", () => ({ NativeVideoView: "video" }));
 mock.module("../compilerRuntime", () => ({ runtimeHost() {}, compilerRuntime$: observable({}), changeCompilerRuntime() {}, resolveCompilerRuntime() {}, downloadCompilerRuntime() {}, setCustomCompilerRuntime() {} }));
 mock.module("@legendapp/spark/processes", () => ({ runCommand() {} }));
 mock.module("@legendapp/spark/dialogs", () => ({ openFileDialog() {} }));
-mock.module("@legendapp/spark/settings/window", () => ({
-  SettingsSection: ({ title, description, headerRight, children }) => <section title={title} description={description}>{headerRight}{children}</section>,
-  SettingsRow: ({ title, description, control }) => <row title={title} description={description}>{control}</row>,
+mock.module("@legendapp/spark/ui/settings", () => ({
+  SettingsSection: ({ title, children }) => <section title={title}>{children}</section>,
+  SettingsRow: ({ label, description, children }) => <row label={label} description={description}>{children}</row>,
 }));
 const { EffectsSettingsPage } = await import("../EffectsSettingsPage");
 const { EffectInstallStatus } = await import("../EffectInstallStatus");
@@ -49,6 +49,7 @@ const url = "https://legend.so/slides/effects/catalog.json";
 const ok = value => ({ timedOut: false, stdout: JSON.stringify({ success: true, ...value }), stderr: "" });
 const turn = () => new Promise(done => setTimeout(done, 0));
 const section = (renderer, title) => renderer.root.findAll(node => node.type === "section" && node.props.title === title)[0];
+const sectionDescription = (node) => node.findAll(child => child.type === "text")[0].props.children;
 const button = (node, label) => node.findAll(child => child.type === "pressable" && child.props.accessibilityLabel === label)[0];
 async function render() {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -84,9 +85,9 @@ test("lists packs with previews, versions and state, and installs updates with p
   const renderer = await render();
   try {
     const backgrounds = section(renderer, "Backgrounds");
-    expect(backgrounds.props.description).toBe("Update available · 1.0.0 · Latest 2.0.0 · aurora title");
-    expect(section(renderer, "Charts").props.description).toBe("Installed · 1.0.0 · bars title");
-    expect(section(renderer, "Media").props.description).toBe("Not installed · Latest 1.0.0");
+    expect(sectionDescription(backgrounds)).toBe("Update available · 1.0.0 · Latest 2.0.0 · aurora title");
+    expect(sectionDescription(section(renderer, "Charts"))).toBe("Installed · 1.0.0 · bars title");
+    expect(sectionDescription(section(renderer, "Media"))).toBe("Not installed · Latest 1.0.0");
     expect(section(renderer, "Examples")).toBeUndefined();
     expect(button(section(renderer, "Charts"), "Install")).toBeUndefined();
     expect(backgrounds.findByType("image").props.source.uri).toBe("https://legend.so/previews/aurora.png");
@@ -105,7 +106,7 @@ test("lists packs with previews, versions and state, and installs updates with p
     expect(bar.props.accessibilityLabel).toBe("Updating backgrounds 2.0.0… backgrounds 4 / 10 bytes (40%)");
     expect(button(section(renderer, "Media"), "Install").props.disabled).toBe(true);
     await act(async () => { finish(); await turn(); await turn(); });
-    expect(section(renderer, "Backgrounds").props.description).toStartWith("Installed · 2.0.0");
+    expect(sectionDescription(section(renderer, "Backgrounds"))).toStartWith("Installed · 2.0.0");
     expect(renderer.root.findByProps({ accessibilityRole: "progressbar" }).props.accessibilityLabel).toBe("Updated backgrounds 2.0.0. It is available offline. backgrounds 10 / 10 bytes (100%)");
     expect(effectRequests$.source.peek()).toBe("settings");
     expect(loaded).toEqual(["/deck.mdx"]);
@@ -154,7 +155,7 @@ test("removal asks first, runs under the compiler's lease and reports failures",
     respond = () => { delete files[`${effects}/charts/active.json`]; return ok({}); };
     await act(async () => { alerts[0][2][1].onPress(); await turn(); await turn(); });
     expect(commands.at(-1)).toEqual(["--remove-effect", "charts"]);
-    expect(section(renderer, "Charts").props.description).toBe("Not installed · Latest 1.0.0 · bars title");
+    expect(sectionDescription(section(renderer, "Charts"))).toBe("Not installed · Latest 1.0.0 · bars title");
     respond = () => ({ timedOut: false, stdout: JSON.stringify({ success: false, errors: ["Another effect installation is running."] }), stderr: "" });
     await act(async () => { button(section(renderer, "Media"), "Install").props.onPress(); await turn(); await turn(); });
     expect(renderer.root.findAll(node => node.type === "row" && node.props.description === "Another effect installation is running.")).toHaveLength(1);
@@ -167,13 +168,13 @@ test("offline shows installed packs and presenting blocks changes", async () => 
   const renderer = await render();
   try {
     expect(renderer.root.findAll(node => node.type === "section").map(node => node.props.title)).toEqual(["Effect Packs", "Backgrounds", "Charts"]);
-    expect(section(renderer, "Backgrounds").props.description).toBe("Installed · 1.0.0");
-    expect(renderer.root.findAll(node => node.type === "row" && node.props.title === "Catalog unavailable")[0].props.description).toContain("503");
-    expect(renderer.root.findAll(node => node.type === "row" && node.props.title === "Presenting")).toHaveLength(1);
+    expect(sectionDescription(section(renderer, "Backgrounds"))).toBe("Installed · 1.0.0");
+    expect(renderer.root.findAll(node => node.type === "row" && node.props.label === "Catalog unavailable")[0].props.description).toContain("503");
+    expect(renderer.root.findAll(node => node.type === "row" && node.props.label === "Presenting")).toHaveLength(1);
     expect(button(section(renderer, "Charts"), "Remove").props.disabled).toBe(true);
     respond = args => args[0] === "--effect-catalog" ? ok({ catalog, url }) : ok({});
     await act(async () => { button(renderer.root, "Try Again").props.onPress(); await turn(); });
-    expect(section(renderer, "Media").props.description).toBe("Not installed · Latest 1.0.0");
+    expect(sectionDescription(section(renderer, "Media"))).toBe("Not installed · Latest 1.0.0");
   } finally { await act(() => renderer.unmount()); }
 });
 test("Open Folder creates the effects directory before opening it", async () => {
@@ -199,7 +200,7 @@ test("a late catalog response cannot replace a newer retry", async () => {
     expect(section(renderer, "Media")).toBeDefined();
     await act(async () => { replies[0](ok({ success: false, errors: ["stale"] })); await turn(); });
     expect(section(renderer, "Media")).toBeDefined();
-    expect(renderer.root.findAll(node => node.type === "row" && node.props.title === "Catalog unavailable")).toHaveLength(0);
+    expect(renderer.root.findAll(node => node.type === "row" && node.props.label === "Catalog unavailable")).toHaveLength(0);
   } finally { await act(() => renderer.unmount()); }
 });
 test("failed compiler output does not expose progress JSON as an error", async () => {
@@ -224,12 +225,12 @@ test("incompatible releases and dependencies stay visible without install action
   try {
     for (const title of ["Backgrounds", "Charts", "Media"]) {
       const row = section(renderer, title);
-      expect(row.props.description).toContain("Incompatible with this app");
+      expect(sectionDescription(row)).toContain("Incompatible with this app");
       expect(button(row, "Install")).toBeUndefined();
       expect(button(row, "Update to 2.0.0")).toBeUndefined();
     }
-    expect(section(renderer, "Backgrounds").props.description).toContain("host API 3");
-    expect(section(renderer, "Charts").props.description).toContain("future-engine");
+    expect(sectionDescription(section(renderer, "Backgrounds"))).toContain("host API 3");
+    expect(sectionDescription(section(renderer, "Charts"))).toContain("future-engine");
     expect(button(section(renderer, "Backgrounds"), "Remove")).toBeDefined();
     expect(commands).toEqual([["--effect-catalog"]]);
   } finally { await act(async () => renderer.unmount()); }

@@ -1,6 +1,6 @@
 import { useValue } from "@legendapp/state/react";
 import { useCallback } from "react";
-import { View } from "react-native";
+import { Text, View } from "react-native";
 import { Button } from "../components/Button";
 import { Checkbox } from "../components/Checkbox";
 import { useToast } from "../components/Toast";
@@ -36,33 +36,29 @@ export function AppleMusicSettingsContent() {
 
     return (
         <>
-            <SettingsSection
-                title="Apple Music"
-                description="Uses MusicKit directly on this Mac—no Legend backend or manually managed developer token."
-            >
+            <SettingsSection title="Apple Music">
+              <Text className="px-3 py-2 text-sm text-text-secondary">Uses MusicKit directly on this Mac—no Legend backend or manually managed developer token.</Text>
                 <SettingsRow
-                    title="Enable Apple Music"
-                    description="Makes Apple Music available to search and AI playlist generation."
-                    control={<Checkbox checked={enabled} onChange={(value) => settings$.providers.appleMusic.enabled.set(value)} />}
-                />
+                    label="Enable Apple Music"
+                    description="Makes Apple Music available to search and AI playlist generation.">
+                  <Checkbox checked={enabled} onChange={(value) => settings$.providers.appleMusic.enabled.set(value)} />
+                </SettingsRow>
             </SettingsSection>
             <SettingsSection title="Connection">
                 <SettingsRow
-                    title={status.authenticated ? status.displayName || "Apple Music" : "Not connected"}
+                    label={status.authenticated ? status.displayName || "Apple Music" : "Not connected"}
                     description={status.error ?? (status.authenticated
                         ? `${status.detail}. MusicKit authorization and playback are ready.`
-                        : "Connect your Apple Music account. macOS may ask for Media & Apple Music access.")}
-                    control={(
-                        <View className="flex-row gap-2">
-                            <Button size="small" variant="accent" disabled={!enabled || status.isLoading} onClick={handleConnect}>
-                                {status.authenticated ? "Reconnect" : "Connect"}
-                            </Button>
-                            <Button size="small" variant="secondary" disabled={!status.authenticated} onClick={handleDisconnect}>
-                                Disconnect
-                            </Button>
-                        </View>
-                    )}
-                />
+                        : "Connect your Apple Music account. macOS may ask for Media & Apple Music access.")}>
+                  <View className="flex-row gap-2">
+                      <Button size="small" variant="accent" disabled={!enabled || status.isLoading} onClick={handleConnect}>
+                          {status.authenticated ? "Reconnect" : "Connect"}
+                      </Button>
+                      <Button size="small" variant="secondary" disabled={!status.authenticated} onClick={handleDisconnect}>
+                          Disconnect
+                      </Button>
+                  </View>
+                </SettingsRow>
             </SettingsSection>
         </>
     );

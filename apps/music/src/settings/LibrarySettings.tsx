@@ -5,7 +5,7 @@ import { Text, View } from "react-native";
 import { Button } from "../components/Button";
 import { SkiaSpinner } from "../components/SkiaSpinner";
 import { openFileDialog } from "@legendapp/spark/dialogs";
-import { SettingsPage, SettingsSection } from "./components";
+import { SettingsSection } from "./components";
 import {
     librarySettings$,
     localMusicState$,
@@ -23,14 +23,6 @@ const normalizeLibraryPath = (path: string): string => {
     const withoutPrefix = path.startsWith("file://") ? path.replace("file://", "") : path;
     const trimmed = withoutPrefix.replace(/\/+$/, "");
     return trimmed.length > 0 ? trimmed : withoutPrefix;
-};
-
-export const LibrarySettings = function LibrarySettings() {
-    return (
-        <SettingsPage>
-            <LibrarySettingsContent />
-        </SettingsPage>
-    );
 };
 
 export function LibrarySettingsContent() {
@@ -132,7 +124,7 @@ export function LibrarySettingsContent() {
 
     return (
         <>
-            <SettingsSection title="Library Paths" first>
+            <SettingsSection title="Library Paths">
                 {librarySettings.paths.length > 0 ? (
                     <View className="flex flex-col gap-2">
                         {librarySettings.paths.map((path, index) => {

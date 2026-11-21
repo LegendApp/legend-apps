@@ -12,16 +12,15 @@ jest.mock("@legend-apps/reorder-controls", () => ({
   DraggableItem: ({ children }: { children: ReactNode }) => children,
   DroppableZone: ({ children }: { children: ReactNode }) => children,
 }));
-jest.mock("@legend-apps/design-system", () => ({ SwitchControl: "SwitchControl" }));
 jest.mock("@legendapp/spark/ui", () => ({ Button: "Button", Select: "Select", SegmentedControl: "SegmentedControl", TextInput: "TextInput" }));
 jest.mock("@legendapp/spark/shortcuts/commands", () => ({ HotkeyBindingsSettingsContent: "HotkeyBindingsSettingsContent", normalizeHotkeyBindings: (bindings: string[]) => bindings }));
 // The shared settings window: every page's content in one list, as the other Legend apps use it.
-jest.mock("@legendapp/spark/settings/window", () => ({
-  VirtualizedSettingsWindow: ({ pages }: { pages: { id: string; title: string; render(): ReactNode }[] }) =>
-    pages.map(page => mockH("page-section", { key: page.id, title: page.title }, page.render())),
+jest.mock("@legendapp/spark/ui/settings", () => ({
+  VirtualizedSettingsWindow: ({ children }: { children: ReactNode }) => children,
+  SettingsPage: ({ children, title }: { children: ReactNode; title: string }) => mockH("page-section", { title }, children),
   SettingsSection: ({ children, title }: { children?: ReactNode; title?: string | null }) => mockH("section-box", { title }, children),
-  SettingsRow: ({ title, control }: { title: string; control: ReactNode }) => mockH("settings-row", { title }, control),
-  SettingsCard: ({ children }: { children: ReactNode }) => mockH("settings-card", null, children),
+  SettingsRow: ({ label, children }: { label: string; children: ReactNode }) => mockH("settings-row", { label }, children),
+  SettingsSwitchRow: "settings-switch-row",
 }));
 
 let mockStore: GitSettingsStore;
@@ -59,9 +58,9 @@ describe("Settings window", () => {
     const pages = named(renderer, "page-section").map(node => node.props.title);
     expect(pages).toEqual(["General", "Layout", "Panels", "Theme", "Toolbar", "Context Menus", "Keyboard", "Customize with AI"]);
     // Every page shows its content (import/export, AI and docs stay reachable in the list).
-    const rows = named(renderer, "settings-row").map(node => node.props.title);
+    const rows = [...named(renderer, "settings-row"), ...named(renderer, "settings-switch-row")].map(node => node.props.label);
     expect(rows).toEqual(expect.arrayContaining(["Preset", "Import…", "Export…", "Active Layout", "Wrap", "Font", "Display", "Menu", "Request"]));
-    expect(named(renderer, "SwitchControl").length).toBeGreaterThan(5);
+    expect(named(renderer, "settings-switch-row").length).toBeGreaterThan(5);
     // No two-segment Off/On stand-ins.
     expect(named(renderer, "SegmentedControl", props => props.accessibilityLabel !== "Appearance")).toEqual([]);
   });

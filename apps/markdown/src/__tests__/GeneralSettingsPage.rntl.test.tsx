@@ -1,6 +1,6 @@
 import { fireEvent, render, type RenderResult } from "@testing-library/react-native";
 import React from "react";
-import { GeneralSettingsPage } from "../settings/GeneralSettingsPage";
+import { GeneralSettingsContent } from "../settings/GeneralSettingsPage";
 
 const mockSettings = {
   autosave: "enabled",
@@ -55,7 +55,7 @@ function switchControl(view: RenderResult) {
   return view.getByLabelText("Autosave");
 }
 
-describe("GeneralSettingsPage", () => {
+describe("GeneralSettingsContent", () => {
   beforeEach(() => {
     mockSettings.autosave = "enabled";
     mockSettings.formattingToolbarMode = "selection";
@@ -66,7 +66,7 @@ describe("GeneralSettingsPage", () => {
   });
 
   it("renders toolbar customization sections for top bottom and floating toolbars", async () => {
-    const view = await render(<GeneralSettingsPage />);
+    const view = await render(<GeneralSettingsContent />);
 
     expect(view.getByText("Top and Bottom Toolbars")).toBeTruthy();
     expect(view.getByText("Floating Toolbar")).toBeTruthy();
@@ -76,7 +76,7 @@ describe("GeneralSettingsPage", () => {
   });
 
   it("updates startup autosave and toolbar mode settings", async () => {
-    const view = await render(<GeneralSettingsPage />);
+    const view = await render(<GeneralSettingsContent />);
 
     expect(segmentedSelected(view, "New")).toBe(true);
     expect(switchControl(view).props.accessibilityState?.checked).toBe(true);
@@ -87,7 +87,7 @@ describe("GeneralSettingsPage", () => {
     await fireEvent(lastOption.control, "valueChange", { nativeEvent: { value: lastOption.value } });
     await fireEvent(switchControl(view), "valueChange", false);
     await fireEvent(bottomOption.control, "valueChange", { nativeEvent: { value: bottomOption.value } });
-    await view.rerender(<GeneralSettingsPage />);
+    await view.rerender(<GeneralSettingsContent />);
 
     expect(mockSetMarkdownStartupBehaviorSetting).toHaveBeenCalledWith("lastDocument");
     expect(mockSetMarkdownAutosaveSetting).toHaveBeenCalledWith("disabled");

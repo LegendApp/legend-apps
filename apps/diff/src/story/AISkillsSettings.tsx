@@ -1,7 +1,7 @@
 import { useValue } from "@legendapp/state/react";
 import { revealInFileManager } from "@legendapp/spark/files";
 import { showWindow } from "@legendapp/spark/windows";
-import { SettingsSection } from "@legendapp/spark/settings/window";
+import { SettingsSection } from "@legendapp/spark/ui/settings";
 import { useState } from "react";
 import { SegmentedControl } from "@legendapp/spark/ui";
 import { Pressable, Text, TextInput, View } from "react-native";
@@ -81,7 +81,7 @@ export function AISkillsSettings() {
   const selected = state?.entries.find(entry => skillId(entry) === selectedId)
     ?? state?.active.find(entry => entry.name === (requested.windowId === windowId ? requested.skillName : "change-story")) ?? state?.active[0];
   return <>
-    <SettingsSection first title="AI Skills">
+    <SettingsSection title="AI Skills">
       <View className="gap-3 p-4">
         <Text className="text-sm text-text-secondary">Repository skills override user skills, which override built-ins with the same name. Reloads follow file changes.</Text>
         {context?.repoRoot ? <Text selectable className="text-xs text-text-secondary">Repository: {context.repoRoot}</Text> : <Text className="text-xs text-text-secondary">Open a repository diff to see its skills.</Text>}

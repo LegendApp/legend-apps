@@ -40,6 +40,8 @@ class ValueXY {
 }
 
 module.exports = {
+  DynamicColorMacOS: ({ light }) => light,
+  PlatformColor: (name) => name,
   UIManager: { hasViewManagerConfig: () => true },
   TurboModuleRegistry: { get: jest.fn(() => null), getEnforcing: jest.fn(() => ({})) },
   NativeEventEmitter: class { addListener() { return { remove() {} }; } },

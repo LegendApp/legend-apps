@@ -4,7 +4,7 @@ import { $TextInput } from "@legendapp/state/react-native";
 import { View } from "react-native";
 import { Checkbox } from "../components/Checkbox";
 import { Select } from "../components/Select";
-import { SettingsPage, SettingsRow, SettingsSection } from "./components";
+import { SettingsRow, SettingsSection } from "./components";
 import {
     OVERLAY_MAX_DISPLAY_DURATION_SECONDS,
     OVERLAY_MIN_DISPLAY_DURATION_SECONDS,
@@ -22,14 +22,6 @@ const horizontalOptions = [
     { value: "center", label: "Center" },
     { value: "right", label: "Right" },
 ];
-
-export const OverlaySettings = function OverlaySettings() {
-    return (
-        <SettingsPage>
-            <OverlaySettingsContent />
-        </SettingsPage>
-    );
-};
 
 export function OverlaySettingsContent() {
     const durationSeconds$ = settings$.overlay.displayDurationSeconds;
@@ -54,52 +46,46 @@ export function OverlaySettingsContent() {
 
     return (
         <>
-            <SettingsSection title="Overlay Options" first>
+            <SettingsSection title="Overlay Options">
                 <SettingsRow
-                    title="Enable overlay"
-                    description="Show the current song overlay when a new track begins"
-                    control={<Checkbox $checked={settings$.overlay.enabled} />}
-                />
+                    label="Enable overlay"
+                    description="Show the current song overlay when a new track begins">
+                  <Checkbox $checked={settings$.overlay.enabled} />
+                </SettingsRow>
 
                 <SettingsRow
-                    title="Display duration"
-                    description={`Number of seconds the overlay remains visible (${OVERLAY_MIN_DISPLAY_DURATION_SECONDS} - ${OVERLAY_MAX_DISPLAY_DURATION_SECONDS})`}
-                    control={
-                        <$TextInput
-                            $value={durationText$}
-                            keyboardType="numeric"
-                            className="bg-background-primary text-text-primary border border-border-primary rounded-md px-3 py-1.5 w-20 text-center"
-                            accessibilityLabel="Overlay display duration"
-                        />
-                    }
-                    controlWrapperClassName="ml-6"
-                />
+                    label="Display duration"
+                    description={`Number of seconds the overlay remains visible (${OVERLAY_MIN_DISPLAY_DURATION_SECONDS} - ${OVERLAY_MAX_DISPLAY_DURATION_SECONDS})`}>
+                  <$TextInput
+                      $value={durationText$}
+                      keyboardType="numeric"
+                      className="bg-background-primary text-text-primary border border-border-primary rounded-md px-3 py-1.5 w-20 text-center"
+                      accessibilityLabel="Overlay display duration"
+                  />
+                </SettingsRow>
 
                 <SettingsRow
-                    title="Position"
-                    description="Choose where the overlay appears on screen."
-                    control={
-                        <View className=" gap-3">
-                            <View className="w-32">
-                                <Select
-                                    options={verticalOptions}
-                                    value$={settings$.overlay.position.vertical}
-                                    disabled={!overlayEnabled}
-                                    triggerClassName="px-2"
-                                />
-                            </View>
-                            <View className="w-32">
-                                <Select
-                                    options={horizontalOptions}
-                                    value$={settings$.overlay.position.horizontal}
-                                    disabled={!overlayEnabled}
-                                    triggerClassName="px-2"
-                                />
-                            </View>
-                        </View>
-                    }
-                    controlWrapperClassName="ml-6"
-                />
+                    label="Position"
+                    description="Choose where the overlay appears on screen.">
+                  <View className=" gap-3">
+                      <View className="w-32">
+                          <Select
+                              options={verticalOptions}
+                              value$={settings$.overlay.position.vertical}
+                              disabled={!overlayEnabled}
+                              triggerClassName="px-2"
+                          />
+                      </View>
+                      <View className="w-32">
+                          <Select
+                              options={horizontalOptions}
+                              value$={settings$.overlay.position.horizontal}
+                              disabled={!overlayEnabled}
+                              triggerClassName="px-2"
+                          />
+                      </View>
+                  </View>
+                </SettingsRow>
             </SettingsSection>
         </>
     );

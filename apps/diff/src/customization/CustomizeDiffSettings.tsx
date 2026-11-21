@@ -1,7 +1,6 @@
-import { SwitchControl } from "@legend-apps/design-system";
 import { useValue } from "@legendapp/state/react";
 import { getAICommandAvailability } from "@legendapp/spark/ai";
-import { SettingsRow, SettingsSection } from "@legendapp/spark/settings/window";
+import { SettingsRow, SettingsSection, SettingsSwitchRow } from "@legendapp/spark/ui/settings";
 import { useEffect, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 import { diffCustomization, getDiffCustomizationSettingsTextColor } from "./diffCustomizationRuntime";
@@ -49,12 +48,12 @@ export function CustomizeDiffSettings() {
   }
 
   return <>
-    <SettingsSection first title={null}>
+    <SettingsSection>
       <Text style={settingsTextStyle} className={`mx-4 my-3 text-sm${settingsTextColor ? "" : " text-text-secondary"}`}>Describe a change to Diff’s viewer, start screen, or Customize App text color. Try it with sample data, then keep or revert it.</Text>
-      <SettingsRow title="AI tool" description="Uses your installed, signed-in command-line tool." control={
+      <SettingsRow label="AI tool" description="Uses your installed, signed-in command-line tool.">
         <View className="flex-row gap-2">{(["codex", "claude"] as const).map(tool => <Action key={tool} title={`${state.history.tool === tool && availability?.[tool] ? "✓ " : ""}${tool === "codex" ? "Codex" : "Claude"}`}
-          disabled={busy || !availability?.[tool]} onPress={() => diffCustomization.setPreferences({ tool })} />)}</View>
-      } />
+        disabled={busy || !availability?.[tool]} onPress={() => diffCustomization.setPreferences({ tool })} />)}</View>
+      </SettingsRow>
       {availability && !availability[state.history.tool] ? <View className="mx-4 my-2 flex-row items-center gap-3">
         <Text style={settingsTextStyle} className={`flex-1 text-sm${settingsTextColor ? "" : " text-text-secondary"}`}>Install Codex or Claude and sign in to generate changes.</Text>
         <Action title="Check Again" disabled={busy} onPress={() => setAvailabilityRequest(value => value + 1)} />
@@ -85,8 +84,12 @@ export function CustomizeDiffSettings() {
           <Action title="Revert" disabled={state.status === "applying"} onPress={() => { void diffCustomization.revert(); }} />
         </View>
       </View> : null}
-      <SettingsRow title="Automatically keep changes" description="Keep newly generated changes after the preview renders successfully. Saved versions remain available."
-        control={<SwitchControl accessibilityLabel="Automatically keep changes" checked={state.history.autoKeep} onChange={autoKeep => diffCustomization.setPreferences({ autoKeep })} />} />
+      <SettingsSwitchRow
+        label="Automatically keep changes"
+        description="Keep newly generated changes after the preview renders successfully. Saved versions remain available."
+        value={state.history.autoKeep}
+        onValueChange={autoKeep => diffCustomization.setPreferences({ autoKeep })}
+      />
     </SettingsSection>
     <SettingsSection title="Changes">
       <View className="gap-3 p-4">

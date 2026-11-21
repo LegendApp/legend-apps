@@ -5,7 +5,7 @@ import { Text, View } from "react-native";
 import { Checkbox } from "../components/Checkbox";
 import { DragDropProvider, DraggableItem, DroppableZone } from "../components/dnd";
 import { usePlaybackControlLayout } from "../hooks/useUIControls";
-import { SettingsPage, SettingsRow, SettingsSection } from "./components";
+import { SettingsRow, SettingsSection } from "./components";
 import { SUPPORT_PLAYLISTS } from "../systems/constants";
 import { Icon } from "../systems/Icon";
 import { type PlaybackControlId, settings$, type UIControlLayout } from "../systems/Settings";
@@ -95,14 +95,6 @@ const PLAYBACK_CONTROL_MAP = Object.fromEntries(
 
 const PLAYBACK_DRAG_ZONE_ID = "customize-playback-controls";
 
-export function CustomizeUISettings() {
-    return (
-        <SettingsPage>
-            <CustomizeUISettingsContent />
-        </SettingsPage>
-    );
-}
-
 export function CustomizeUISettingsContent() {
     const playbackLayout = usePlaybackControlLayout();
 
@@ -116,16 +108,13 @@ export function CustomizeUISettingsContent() {
         <>
             <DragDropProvider>
                 <View className="flex flex-col gap-8">
-                    <SettingsSection
-                        title="Playback Controls"
-                        description="Drag controls between Shown and Hidden to curate the playback toolbar."
-                        first
-                    >
+                    <SettingsSection title="Playback Controls">
+                      <Text className="px-3 py-2 text-sm text-text-secondary">Drag controls between Shown and Hidden to curate the playback toolbar.</Text>
                         <SettingsRow
-                            title="Enable playback controls"
-                            description="Show the playback toolbar beneath the Now Playing area."
-                            control={<Checkbox $checked={settings$.ui.playbackControlsEnabled} />}
-                        />
+                            label="Enable playback controls"
+                            description="Show the playback toolbar beneath the Now Playing area.">
+                          <Checkbox $checked={settings$.ui.playbackControlsEnabled} />
+                        </SettingsRow>
                         <ControlLayoutEditor layout={normalizedPlaybackLayout} definitions={PLAYBACK_CONTROL_MAP} />
                     </SettingsSection>
                 </View>

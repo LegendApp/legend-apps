@@ -1,5 +1,5 @@
-import { SelectControl, SwitchControl } from "@legend-apps/design-system";
-import { SettingsRow, SettingsSection } from "@legendapp/spark/settings/window";
+import { SelectControl } from "@legend-apps/design-system";
+import { SettingsRow, SettingsSection, SettingsSwitchRow, SettingsSelectRow } from "@legendapp/spark/ui/settings";
 import {
   ensureSyntaxTheme,
   getAvailableSyntaxThemes,
@@ -43,30 +43,22 @@ export function SourceTypographySettingsRows<FontFamily extends string = SourceF
 }: SourceTypographySettingsRowsProps<FontFamily>) {
   return (
     <>
-      <SettingsRow
-        align="center"
-        control={(
-          <SelectControl
-            accessibilityLabel={fontAccessibilityLabel}
-            onChange={onFontFamilyChange}
-            options={fontFamilyOptions}
-            value={fontFamily}
-          />
-        )}
-        title="Font"
-      />
-      <SettingsRow
-        align="center"
-        control={(
-          <SelectControl
-            accessibilityLabel={fontSizeAccessibilityLabel}
-            onChange={onFontSizeChange}
-            options={fontSizeOptions}
-            value={fontSize}
-          />
-        )}
-        title="Font size"
-      />
+      <SettingsRow label="Font">
+        <SelectControl
+          accessibilityLabel={fontAccessibilityLabel}
+          onChange={onFontFamilyChange}
+          options={fontFamilyOptions}
+          value={fontFamily}
+        />
+      </SettingsRow>
+      <SettingsRow label="Font size">
+        <SelectControl
+          accessibilityLabel={fontSizeAccessibilityLabel}
+          onChange={onFontSizeChange}
+          options={fontSizeOptions}
+          value={fontSize}
+        />
+      </SettingsRow>
     </>
   );
 }
@@ -81,23 +73,16 @@ export function SourceSyntaxToggleSettingsRows({
   syntaxHighlightingEnabled,
 }: SourceSyntaxToggleSettingsRowsProps) {
   return (
-    <SettingsRow
-      align="center"
-      control={(
-        <SwitchControl
-          accessibilityLabel="Syntax highlighting"
-          checked={syntaxHighlightingEnabled}
-          onChange={onSyntaxHighlightingChange}
-        />
-      )}
-      title="Syntax highlighting"
+    <SettingsSwitchRow
+      label="Syntax highlighting"
+      value={syntaxHighlightingEnabled}
+      onValueChange={onSyntaxHighlightingChange}
     />
   );
 }
 
 export type SyntaxThemeSelectorSectionProps = {
   description?: string | null;
-  first?: boolean;
   onThemeChange: (theme: string) => void | Promise<void>;
   rowDescription?: string | null;
   rowTitle?: string;
@@ -115,7 +100,6 @@ function optionLabel(theme: SyntaxThemeAssetEntry) {
 
 export function SyntaxThemeSelectorSection({
   description,
-  first = false,
   onThemeChange,
   rowDescription,
   rowTitle = "Syntax Theme",
@@ -153,18 +137,12 @@ export function SyntaxThemeSelectorSection({
 
   const content = (
     <>
-      <SettingsRow
-        align="center"
-        control={(
-          <SelectControl
-            accessibilityLabel={rowTitle}
-            onChange={selectTheme}
-            options={themeOptions}
-            value={selectedThemeValue}
-          />
-        )}
+      <SettingsSelectRow
         description={themeDescription ?? undefined}
-        title={rowTitle}
+        label={rowTitle}
+        options={themeOptions}
+        value={selectedThemeValue}
+        onValueChange={selectTheme}
       />
       {message ? (
         <Text className="px-1 text-text-secondary" style={styles.message}>{message}</Text>
@@ -177,13 +155,8 @@ export function SyntaxThemeSelectorSection({
   }
 
   return (
-    <SettingsSection
-      card={false}
-      contentClassName="gap-3"
-      description={description ?? "Choose the theme used for syntax colors in source views."}
-      first={first}
-      title={title ?? "Source"}
-    >
+    <SettingsSection title={title ?? "Source"}>
+      <Text className="px-3 py-2 text-sm text-text-secondary">{description ?? "Choose the theme used for syntax colors in source views."}</Text>
       {content}
     </SettingsSection>
   );

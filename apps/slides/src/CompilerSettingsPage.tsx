@@ -1,5 +1,5 @@
 import { useValue } from "@legendapp/state/react";
-import { SettingsRow, SettingsSection } from "@legendapp/spark/settings/window";
+import { SettingsRow, SettingsSection } from "@legendapp/spark/ui/settings";
 import { useEffect } from "react";
 import { Text, View } from "react-native";
 import { compilerRuntime$, resolveCompilerRuntime } from "./compilerRuntime";
@@ -18,20 +18,22 @@ export function CompilerSettingsPage() {
   const summary = status === "checking" ? "Looking for Bun or Node…"
     : runtime ? `${runtime.kind === "bun" ? "Bun" : "Node"} ${runtime.version} (${sourceLabel[runtime.source]})`
     : "No runtime found. Decks can't compile until you download Bun or choose your own.";
-  return <SettingsSection first title="Deck Compiler">
-    <SettingsRow title="JavaScript Runtime" description={runtime?.path ?? "Legend Slides compiles decks with Bun 1.3+ or Node 22+."}
-      controlWrapperClassName={status === "downloading" ? "w-64 items-stretch" : undefined}
-      control={status === "downloading" ? <CompilerRuntimeProgress /> : <Text className="text-sm text-foreground" style={{ maxWidth: 260 }}>{summary}</Text>} />
-    {status === "error" && <SettingsRow title="Download Failed" description={error} control={null} />}
-    <SettingsRow title="Bundled Download" description={`Install Bun ${pinnedBun.version} from GitHub into Application Support. Verified with a SHA-256 checksum built into the app.`}
-      control={<View className="flex-row gap-2">
+  return <SettingsSection title="Deck Compiler">
+    <SettingsRow label="JavaScript Runtime" description={runtime?.path ?? "Legend Slides compiles decks with Bun 1.3+ or Node 22+."}>
+      {status === "downloading" ? <View className="w-64"><CompilerRuntimeProgress /></View> : <Text className="text-sm text-foreground" style={{ maxWidth: 260 }}>{summary}</Text>}
+    </SettingsRow>
+    {status === "error" && <SettingsRow label="Download Failed" description={error} />}
+    <SettingsRow label="Bundled Download" description={`Install Bun ${pinnedBun.version} from GitHub into Application Support. Verified with a SHA-256 checksum built into the app.`}>
+      <View className="flex-row gap-2">
         <RuntimeButton title={runtime?.source === "downloaded" ? "Reinstall" : status === "error" ? "Try Again" : "Download Bun"} disabled={busy} onPress={() => void downloadRuntimeAndRetry(runtime?.source === "downloaded")} />
-      </View>} />
-    <SettingsRow title="Use My Own" description={customPath ? `Using ${customPath}` : "Pick a bun or node executable instead of automatic detection."}
-      control={<View className="flex-row gap-2">
+      </View>
+    </SettingsRow>
+    <SettingsRow label="Use My Own" description={customPath ? `Using ${customPath}` : "Pick a bun or node executable instead of automatic detection."}>
+      <View className="flex-row gap-2">
         <RuntimeButton title="Choose…" disabled={busy} onPress={() => void chooseOwnRuntime()} />
         {customPath ? <RuntimeButton title="Automatic" disabled={busy} onPress={() => void automaticRuntimeAndRetry()} /> : null}
         <RuntimeButton title="Detect Again" disabled={busy} onPress={() => void detectRuntimeAndRetry()} />
-      </View>} />
+      </View>
+    </SettingsRow>
   </SettingsSection>;
 }

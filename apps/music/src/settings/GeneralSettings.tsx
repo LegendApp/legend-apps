@@ -4,20 +4,12 @@ import { Linking, Text, View } from "react-native";
 
 import { Button } from "../components/Button";
 import { Checkbox } from "../components/Checkbox";
-import { SettingsPage, SettingsRow, SettingsSection } from "./components";
+import { SettingsRow, SettingsSection } from "./components";
 import { Icon } from "../systems/Icon";
 import { globalHotkeyStatus$ } from "../systems/GlobalHotkey";
 import { AI_SOURCE_IDS, normalizeAISources, settings$, type MusicProviderId } from "../systems/Settings";
 import { state$ } from "../systems/State";
 import packageJson from "../../package.json";
-
-export const GeneralSettings = function GeneralSettings() {
-    return (
-        <SettingsPage>
-            <GeneralSettingsContent />
-        </SettingsPage>
-    );
-};
 
 export function GeneralSettingsContent() {
     const globalHotkeyEnabled = useValue(settings$.general.globalHotkeyEnabled);
@@ -32,98 +24,73 @@ export function GeneralSettingsContent() {
         if (nextSources.length > 0) settings$.ai.defaultSources.set(nextSources);
     };
 
-    // const playlistStyleOptions = [
-    //     { value: "compact", label: "Compact" },
-    //     { value: "comfortable", label: "Comfortable" },
-    // ];
-
     return (
         <>
-            <SettingsSection title="Appearance" first>
-                {/* <SettingsRow
-                    title="Playlist Style"
-                    description="Choose how playlist items are displayed"
-                    control={
-                        <Select
-                            value$={settings$.general.playlistStyle}
-                            options={playlistStyleOptions}
-                            placeholder="Select style..."
-                            triggerClassName="px-3"
-                        />
-                    }
-                    controlWrapperClassName="w-40 ml-6"
-                /> */}
-
+            <SettingsSection title="Appearance">
                 <SettingsRow
-                    title="Display Hints"
-                    description="Toggle contextual hints like the media library status bar"
-                    control={<Checkbox $checked={settings$.general.showHints} />}
-                />
+                    label="Display Hints"
+                    description="Toggle contextual hints like the media library status bar">
+                  <Checkbox $checked={settings$.general.showHints} />
+                </SettingsRow>
                 <SettingsRow
-                    title="Show Titlebar on Hover"
-                    description="Reveal macOS window controls when hovering near the top edge"
-                    control={<Checkbox $checked={settings$.general.showTitleBarOnHover} />}
-                />
+                    label="Show Titlebar on Hover"
+                    description="Reveal macOS window controls when hovering near the top edge">
+                  <Checkbox $checked={settings$.general.showTitleBarOnHover} />
+                </SettingsRow>
             </SettingsSection>
 
             <SettingsSection title="AI playlists">
                 <SettingsRow
-                    title="Show AI toolbar"
-                    description="Show source, Auto, and Prompt controls beneath the playlist."
-                    control={<Checkbox $checked={settings$.ai.toolbarEnabled} />}
-                />
+                    label="Show AI toolbar"
+                    description="Show source, Auto, and Prompt controls beneath the playlist.">
+                  <Checkbox $checked={settings$.ai.toolbarEnabled} />
+                </SettingsRow>
                 <SettingsRow
-                    title="Default music sources"
-                    description="Playlists use these sources unless you choose an override in the playlist toolbar. Local copies are always preferred."
-                    align="start"
-                    control={(
-                        <View className="w-44 gap-2">
-                            <Checkbox
-                                checked={defaultAISources.includes("local")}
-                                disabled={defaultAISources.length === 1 && defaultAISources[0] === "local"}
-                                label="Local Music"
-                                onChange={(checked) => toggleDefaultAISource("local", checked)}
-                            />
-                            <Checkbox
-                                checked={defaultAISources.includes("spotify")}
-                                disabled={defaultAISources.length === 1 && defaultAISources[0] === "spotify"}
-                                label="Spotify"
-                                onChange={(checked) => toggleDefaultAISource("spotify", checked)}
-                            />
-                            <Checkbox
-                                checked={defaultAISources.includes("appleMusic")}
-                                disabled={defaultAISources.length === 1 && defaultAISources[0] === "appleMusic"}
-                                label="Apple Music"
-                                onChange={(checked) => toggleDefaultAISource("appleMusic", checked)}
-                            />
-                        </View>
-                    )}
-                />
+                    label="Default music sources"
+                    description="Playlists use these sources unless you choose an override in the playlist toolbar. Local copies are always preferred.">
+                  <View className="w-44 gap-2">
+                      <Checkbox
+                          checked={defaultAISources.includes("local")}
+                          disabled={defaultAISources.length === 1 && defaultAISources[0] === "local"}
+                          label="Local Music"
+                          onChange={(checked) => toggleDefaultAISource("local", checked)}
+                      />
+                      <Checkbox
+                          checked={defaultAISources.includes("spotify")}
+                          disabled={defaultAISources.length === 1 && defaultAISources[0] === "spotify"}
+                          label="Spotify"
+                          onChange={(checked) => toggleDefaultAISource("spotify", checked)}
+                      />
+                      <Checkbox
+                          checked={defaultAISources.includes("appleMusic")}
+                          disabled={defaultAISources.length === 1 && defaultAISources[0] === "appleMusic"}
+                          label="Apple Music"
+                          onChange={(checked) => toggleDefaultAISource("appleMusic", checked)}
+                      />
+                  </View>
+                </SettingsRow>
             </SettingsSection>
 
             <SettingsSection title="Shortcuts">
                 <SettingsRow
-                    title="Global Hotkey"
-                    description="Show the main window from anywhere"
-                    align="center"
-                    control={
-                        <View className="flex-col items-end gap-2">
-                            <View className="flex-row items-center gap-3">
-                                <Checkbox $checked={settings$.general.globalHotkeyEnabled} />
-                                <HotkeyCapture
-                                    value={globalHotkey}
-                                    onChange={(next) => settings$.general.globalHotkey.set(next)}
-                                    onCaptureChange={(isCapturing) => state$.listeningForKeyPress.set(isCapturing)}
-                                    disabled={!globalHotkeyEnabled}
-                                    className={globalHotkeyError ? "border-red-400" : undefined}
-                                />
-                            </View>
-                            {globalHotkeyError ? (
-                                <Text className="text-xs text-red-200">{globalHotkeyError}</Text>
-                            ) : null}
-                        </View>
-                    }
-                />
+                    label="Global Hotkey"
+                    description="Show the main window from anywhere">
+                  <View className="flex-col items-end gap-2">
+                      <View className="flex-row items-center gap-3">
+                          <Checkbox $checked={settings$.general.globalHotkeyEnabled} />
+                          <HotkeyCapture
+                              value={globalHotkey}
+                              onChange={(next) => settings$.general.globalHotkey.set(next)}
+                              onCaptureChange={(isCapturing) => state$.listeningForKeyPress.set(isCapturing)}
+                              disabled={!globalHotkeyEnabled}
+                              className={globalHotkeyError ? "border-red-400" : undefined}
+                          />
+                      </View>
+                      {globalHotkeyError ? (
+                          <Text className="text-xs text-red-200">{globalHotkeyError}</Text>
+                      ) : null}
+                  </View>
+                </SettingsRow>
             </SettingsSection>
 
             <SettingsSection title="About">

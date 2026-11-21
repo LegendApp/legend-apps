@@ -2,16 +2,8 @@ import { useValue } from "@legendapp/state/react";
 import { Linking, Text, View } from "react-native";
 
 import { Button } from "../components/Button";
-import { SettingsCard, SettingsPage, SettingsSection } from "./components";
+import { SettingsSection } from "./components";
 import { settings$ } from "../systems/Settings";
-
-export function AccountSettings() {
-    return (
-        <SettingsPage>
-            <AccountSettingsContent />
-        </SettingsPage>
-    );
-}
 
 export function AccountSettingsContent() {
     const isRegistered = useValue(settings$.registration.isRegistered);
@@ -34,7 +26,7 @@ export function AccountSettingsContent() {
     if (isRegistered) {
         return (
             <>
-                <SettingsCard className="flex flex-col gap-6 border-green-400/30 bg-green-500/20">
+                <View className="rounded-xl border border-border-primary bg-background-secondary p-4 flex flex-col gap-6 border-green-400/30 bg-green-500/20">
                     <Text className="text-2xl font-semibold text-white">✅ Registered</Text>
                     <Text className="text-white/90 text-lg leading-relaxed">
                         Thank you for supporting Legend Music! Your registration helps us continue developing amazing
@@ -48,9 +40,9 @@ export function AccountSettingsContent() {
                             You have a standalone Legend Music registration.
                         </Text>
                     ) : null}
-                </SettingsCard>
+                </View>
 
-                <SettingsCard className="flex flex-col gap-4">
+                <View className="rounded-xl border border-border-primary bg-background-secondary p-4 flex flex-col gap-4">
                     <Text className="text-white font-semibold text-lg">Need Help?</Text>
                     <Text className="text-white/80 text-base leading-relaxed">
                         If you have any questions or need support, we're here to help.
@@ -61,7 +53,7 @@ export function AccountSettingsContent() {
                     >
                         <Text className="text-background-inverse font-semibold">Contact Support</Text>
                     </Button>
-                </SettingsCard>
+                </View>
             </>
         );
     }
@@ -69,9 +61,9 @@ export function AccountSettingsContent() {
     return (
         <>
             <SettingsSection
-                title="Legend Music is Free & Open Source"
-                description="Legend Music is completely free to use and open source. Your support helps us dedicate more time to improving the app and other Legend tools."
-            />
+                title="Legend Music is Free & Open Source">
+              <Text className="px-3 py-2 text-sm text-text-secondary">Legend Music is completely free to use and open source. Your support helps us dedicate more time to improving the app and other Legend tools.</Text>
+            </SettingsSection>
 
             <SettingsSection title="Support Options">
                 <View className="flex flex-col gap-4 rounded-xl border border-blue-400/30 bg-gradient-to-r from-blue-500/15 to-purple-500/15 px-6 py-6">

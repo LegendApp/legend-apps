@@ -92,14 +92,15 @@ jest.mock("@legendapp/spark/ui", () => {
   };
 });
 
-jest.mock("@legendapp/spark/settings/window", () => {
+jest.mock("@legendapp/spark/ui/settings", () => {
   const React = require("react");
   const { View } = require("react-native");
 
   return {
     __esModule: true,
     createSettingsWindowOptions: (options = {}) => options,
-    SettingsRow: (props) => React.createElement(View, props, props.control),
+    SettingsRow: (props) => React.createElement(View, props, props.children),
+    SettingsSwitchRow: View,
     SettingsSection: (props) => React.createElement(View, props, props.children),
     SettingsWindow: (props) => React.createElement(View, props),
     VirtualizedSettingsWindow: (props) => React.createElement(View, props),

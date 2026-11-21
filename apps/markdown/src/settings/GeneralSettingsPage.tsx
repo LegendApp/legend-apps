@@ -1,12 +1,8 @@
 import {
-  SegmentedOptions,
-  SwitchControl,
-} from "@legend-apps/design-system";
-import {
-  SettingsPage,
-  SettingsRow,
   SettingsSection,
-} from "@legendapp/spark/settings/window";
+  SettingsSegmentedRow,
+  SettingsSwitchRow,
+} from "@legendapp/spark/ui/settings";
 import {
   setMarkdownAutosaveSetting,
   setMarkdownStartupBehaviorSetting,
@@ -31,14 +27,6 @@ const formattingToolbarModeOptions = [
   { label: "Hidden", value: "hidden" },
 ] as const satisfies readonly { label: string; value: MarkdownFormattingToolbarModeSetting }[];
 
-export function GeneralSettingsPage() {
-  return (
-    <SettingsPage>
-      <GeneralSettingsContent />
-    </SettingsPage>
-  );
-}
-
 export function GeneralSettingsContent() {
   const startupBehavior = useMarkdownStartupBehaviorSetting();
   const autosave = useMarkdownAutosaveSetting();
@@ -46,50 +34,29 @@ export function GeneralSettingsContent() {
 
   return (
     <>
-      <SettingsSection
-        first
-        title="Editor"
-      >
-        <SettingsRow
-          align="center"
-          control={(
-            <SegmentedOptions
-              onChange={setMarkdownStartupBehaviorSetting}
-              options={startupBehaviorOptions}
-              value={startupBehavior}
-            />
-          )}
+      <SettingsSection title="Editor">
+        <SettingsSegmentedRow
           description="Choose the document that appears when Markdown starts."
-          title="Startup"
+          label="Startup"
+          options={startupBehaviorOptions}
+          value={startupBehavior}
+          onValueChange={value => setMarkdownStartupBehaviorSetting(value as MarkdownStartupBehaviorSetting)}
         />
-        <SettingsRow
-          align="center"
-          control={(
-            <SwitchControl
-              accessibilityLabel="Autosave"
-              checked={autosave === "enabled"}
-              onChange={(checked) => setMarkdownAutosaveSetting(checked ? "enabled" : "disabled")}
-            />
-          )}
+        <SettingsSwitchRow
           description="Save file-backed documents automatically while you edit."
-          title="Autosave"
+          label="Autosave"
+          value={autosave === "enabled"}
+          onValueChange={(checked) => setMarkdownAutosaveSetting(checked ? "enabled" : "disabled")}
         />
-        <SettingsRow
-          align="center"
-          control={(
-            <SegmentedOptions
-              onChange={setMarkdownFormattingToolbarModeSetting}
-              options={formattingToolbarModeOptions}
-              value={formattingToolbarMode}
-            />
-          )}
+        <SettingsSegmentedRow
           description="Pick where formatting controls appear while editing."
-          title="Formatting Toolbar"
+          label="Formatting Toolbar"
+          options={formattingToolbarModeOptions}
+          value={formattingToolbarMode}
+          onValueChange={value => setMarkdownFormattingToolbarModeSetting(value as MarkdownFormattingToolbarModeSetting)}
         />
       </SettingsSection>
-      <SettingsSection
-        title="Toolbar Layout"
-      >
+      <SettingsSection title="Toolbar Layout">
         <ToolbarLayoutEditor
           description="Choose the controls and order used by the top and bottom toolbars."
           layoutId="top"

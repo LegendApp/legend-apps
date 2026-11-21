@@ -86,6 +86,6 @@ export async function openSettingsWindow(root: string | null, page?: import("./s
   settingsModule().settingsTarget$.assign({ root, ...page ? { page } : {} });
   const existing = await getWindow(settingsWindowId).catch(() => null);
   if (existing) { await showWindow(settingsWindowId, { focus: true }); return; }
-  const { createSettingsWindowOptions } = require("@legendapp/spark/settings/window") as typeof import("@legendapp/spark/settings/window");
+  const { createSettingsWindowOptions } = require("@legendapp/spark/ui/settings") as typeof import("@legendapp/spark/ui/settings");
   await openWindow({ ...createSettingsWindowOptions({ title: "Settings" }), id: settingsWindowId, component: "GitSettingsWindow" } as Parameters<typeof openWindow>[0]);
 }

@@ -1,8 +1,8 @@
 import {
+  SettingsPage,
   SettingsSection,
   VirtualizedSettingsWindow,
-  type SettingsWindowPage,
-} from "@legendapp/spark/settings/window";
+} from "@legendapp/spark/ui/settings";
 import {
   SourceSyntaxToggleSettingsRows,
   SourceTypographySettingsRows,
@@ -22,8 +22,6 @@ import {
   useCodeSyntaxThemeSetting,
 } from "./codeSettings";
 
-type CodeSettingsPage = "appearance";
-
 function AppearanceSettingsContent() {
   const fontFamily = useCodeFontFamilySetting();
   const fontSize = useCodeFontSizeSetting();
@@ -31,10 +29,7 @@ function AppearanceSettingsContent() {
   const selectedSyntaxTheme = useCodeSyntaxThemeSetting();
 
   return (
-    <SettingsSection
-      first
-      title={null}
-    >
+    <SettingsSection>
       <SourceTypographySettingsRows
         fontAccessibilityLabel="Code font"
         fontFamily={fontFamily}
@@ -59,24 +54,18 @@ function AppearanceSettingsContent() {
   );
 }
 
-const pages: SettingsWindowPage<CodeSettingsPage>[] = [
-  {
-    id: "appearance",
-    render: () => <AppearanceSettingsContent />,
-    title: "Appearance",
-  },
-];
-
 export function SettingsWindow() {
   const syntaxTheme = useCodeSyntaxTheme();
 
   return (
     <VirtualizedSettingsWindow
       appearance={syntaxTheme.appearance}
-      estimatedItemSize={360}
-      pages={pages}
       windowId={codeSettingsWindowIdentifier}
-    />
+    >
+      <SettingsPage id="appearance" title="Appearance" icon="paintbrush">
+        <AppearanceSettingsContent />
+      </SettingsPage>
+    </VirtualizedSettingsWindow>
   );
 }
 

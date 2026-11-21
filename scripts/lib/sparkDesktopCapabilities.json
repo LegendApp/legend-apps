@@ -76,7 +76,7 @@
   },
   "@legend-apps/settings-window": {
     "package": "@legendapp/spark-settings-ui",
-    "import": "@legendapp/spark/settings/window",
+    "import": "@legendapp/spark/ui/settings",
     "directory": "settings-ui"
   },
   "@legend-apps/classnames": {

@@ -3,14 +3,14 @@ import { Text, TextInput, View } from "react-native";
 import { TransitionSettingsPage } from "./TransitionSettingsPage";
 import { CompilerSettingsPage } from "./CompilerSettingsPage";
 import { EffectsSettingsPage } from "./EffectsSettingsPage";
-import { SelectControl, SwitchControl } from "@legend-apps/design-system";
+import { SelectControl } from "@legend-apps/design-system";
 import {
   SettingsRow,
   SettingsSection,
   SettingsPage,
   SettingsWindow as SharedSettingsWindow,
-  type SettingsWindowPage,
-} from "@legendapp/spark/settings/window";
+  SettingsSwitchRow,
+} from "@legendapp/spark/ui/settings";
 import {
   usePresentationNotesFontSizeSetting,
   setPresentationNotesFontSizeSetting,
@@ -28,40 +28,26 @@ import {
 import { normalizePresenterColor } from "./presenterAppearance";
 import { slidesSettingsWindowIdentifier } from "./slidesWindows";
 
-type SlidesSettingsPage = "appearance" | "timer" | "transitions" | "effects" | "compiler";
-
 function TimerSettingsPage() {
   const presentationTimerStartsOnSecondSlide = usePresentationTimerStartsOnSecondSlideSetting();
   const rehearsalTimerPausesWhileEditing = useRehearsalTimerPausesWhileEditingSetting();
 
   return (
     <>
-      <SettingsSection first title="Presentation">
-        <SettingsRow
-          align="center"
-          control={(
-            <SwitchControl
-              accessibilityLabel="Start timer on slide 2"
-              checked={presentationTimerStartsOnSecondSlide}
-              onChange={setPresentationTimerStartsOnSecondSlideSetting}
-            />
-          )}
+      <SettingsSection title="Presentation">
+        <SettingsSwitchRow
           description="Wait on the title slide, then start or restart the timer when advancing from slide 1 to slide 2."
-          title="Start Timer on Slide 2"
+          label="Start Timer on Slide 2"
+          value={presentationTimerStartsOnSecondSlide}
+          onValueChange={setPresentationTimerStartsOnSecondSlideSetting}
         />
       </SettingsSection>
       <SettingsSection title="Rehearsal">
-        <SettingsRow
-          align="center"
-          control={(
-            <SwitchControl
-              accessibilityLabel="Pause timer while editing notes"
-              checked={rehearsalTimerPausesWhileEditing}
-              onChange={setRehearsalTimerPausesWhileEditingSetting}
-            />
-          )}
+        <SettingsSwitchRow
           description="Pause when speaker-note editing begins and continue on the next slide navigation."
-          title="Pause Timer While Editing Notes"
+          label="Pause Timer While Editing Notes"
+          value={rehearsalTimerPausesWhileEditing}
+          onValueChange={setRehearsalTimerPausesWhileEditingSetting}
         />
       </SettingsSection>
     </>
@@ -86,16 +72,20 @@ function AppearanceSettingsContent() {
   const fontSize = usePresentationNotesFontSizeSetting();
   const textColor = usePresenterTextColorSetting();
   const inactiveColor = usePresenterInactiveColorSetting();
-  return <SettingsSection first title={null}>
-    <SettingsRow title="Presentation Notes Width" description="Maximum width of the centered notes column."
-      control={<SelectControl accessibilityLabel="Presentation notes width" value={width} onChange={setPresentationNotesWidthSetting}
-        options={[600, 800, 1000, 1200, 1600, 2400].map(value => ({ value, label: `${value} pt` }))} />} />
-    <SettingsRow title="Presentation Notes Font Size" description="Text size in the notes viewer and editor (12–40 pt)."
-      control={<NotesFontSizeInput key={fontSize} value={fontSize} />} />
-    <SettingsRow title="Presenter Text Color" description="Text color for the current step and notes without a step number."
-      control={<PresenterColorInput key={textColor} label="Presenter text color" value={textColor} onChange={setPresenterTextColorSetting} />} />
-    <SettingsRow title="Presenter Inactive Color" description="Text color for notes belonging to other steps."
-      control={<PresenterColorInput key={inactiveColor} label="Presenter inactive color" value={inactiveColor} onChange={setPresenterInactiveColorSetting} />} />
+  return <SettingsSection>
+    <SettingsRow label="Presentation Notes Width" description="Maximum width of the centered notes column.">
+      <SelectControl accessibilityLabel="Presentation notes width" value={width} onChange={setPresentationNotesWidthSetting}
+      options={[600, 800, 1000, 1200, 1600, 2400].map(value => ({ value, label: `${value} pt` }))} />
+    </SettingsRow>
+    <SettingsRow label="Presentation Notes Font Size" description="Text size in the notes viewer and editor (12–40 pt).">
+      <NotesFontSizeInput key={fontSize} value={fontSize} />
+    </SettingsRow>
+    <SettingsRow label="Presenter Text Color" description="Text color for the current step and notes without a step number.">
+      <PresenterColorInput key={textColor} label="Presenter text color" value={textColor} onChange={setPresenterTextColorSetting} />
+    </SettingsRow>
+    <SettingsRow label="Presenter Inactive Color" description="Text color for notes belonging to other steps.">
+      <PresenterColorInput key={inactiveColor} label="Presenter inactive color" value={inactiveColor} onChange={setPresenterInactiveColorSetting} />
+    </SettingsRow>
   </SettingsSection>;
 }
 
@@ -114,24 +104,28 @@ function PresenterColorInput({ label, value, onChange }: { label: string; value:
   </View>;
 }
 
-const pageContent: SettingsWindowPage<SlidesSettingsPage>[] = [{
-  id: "appearance", title: "Appearance", render: () => <AppearanceSettingsContent />,
-}, {
-  id: "timer",
-  render: () => <TimerSettingsPage />,
-  title: "Timer",
-}, { id: "transitions", title: "Transitions", render: () => <TransitionSettingsPage /> },
-  { id: "effects", title: "Effects", render: () => <EffectsSettingsPage /> },
-  { id: "compiler", title: "Compiler", render: () => <CompilerSettingsPage /> }];
-const pages = pageContent.map(page => ({ ...page, render: () => <SettingsPage key={page.id}><Text className="mb-5 text-xl font-semibold text-text-primary">{page.title}</Text>{page.render()}</SettingsPage> }));
-
 export function SettingsWindow() {
   return (
     <SharedSettingsWindow
       appearance="dark"
-      pages={pages}
       windowId={slidesSettingsWindowIdentifier}
-    />
+    >
+      <SettingsPage id="appearance" title="Appearance" icon="paintbrush">
+        <AppearanceSettingsContent />
+      </SettingsPage>
+      <SettingsPage id="timer" title="Timer" icon="timer">
+        <TimerSettingsPage />
+      </SettingsPage>
+      <SettingsPage id="transitions" title="Transitions" icon="rectangle.on.rectangle">
+        <TransitionSettingsPage />
+      </SettingsPage>
+      <SettingsPage id="effects" title="Effects" icon="wand.and.stars">
+        <EffectsSettingsPage />
+      </SettingsPage>
+      <SettingsPage id="compiler" title="Compiler" icon="hammer">
+        <CompilerSettingsPage />
+      </SettingsPage>
+    </SharedSettingsWindow>
   );
 }
 

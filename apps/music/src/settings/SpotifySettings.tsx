@@ -42,38 +42,31 @@ export function SpotifySettingsContent() {
 
     return (
         <>
-            <SettingsSection
-                title="Spotify"
-                description="Search your catalog, browse playlists, and play tracks through Spotify Web Playback. Premium is required for playback."
-            >
+            <SettingsSection title="Spotify">
+              <Text className="px-3 py-2 text-sm text-text-secondary">Search your catalog, browse playlists, and play tracks through Spotify Web Playback. Premium is required for playback.</Text>
                 <SettingsRow
-                    title="Enable Spotify"
-                    description="Makes Spotify available to search and AI playlist generation."
-                    control={<Checkbox checked={enabled} onChange={(value) => settings$.providers.spotify.enabled.set(value)} />}
-                />
+                    label="Enable Spotify"
+                    description="Makes Spotify available to search and AI playlist generation.">
+                  <Checkbox checked={enabled} onChange={(value) => settings$.providers.spotify.enabled.set(value)} />
+                </SettingsRow>
                 <SettingsRow
-                    title="Client ID"
-                    description="Personal integration: create your own Spotify developer app and paste its Client ID here."
-                    className="flex-col items-stretch gap-3"
-                    contentClassName="pr-0"
-                    controlWrapperClassName="ml-0 w-full"
-                    control={(
-                        <View className="w-full flex-row items-center gap-2">
-                            <TextInput
-                                value={clientId ?? ""}
-                                onChangeText={(value) => settings$.providers.spotify.clientId.set(value.trim())}
-                                placeholder="Spotify Client ID"
-                                placeholderTextColor="rgba(255,255,255,0.35)"
-                                autoCapitalize="none"
-                                autoCorrect={false}
-                                className="flex-1 rounded-md border border-border-primary bg-background-tertiary px-3 py-2 text-sm text-text-primary"
-                            />
-                            <Button size="small" variant="secondary" onClick={() => Linking.openURL("https://developer.spotify.com/dashboard")}>
-                                Dashboard
-                            </Button>
-                        </View>
-                    )}
-                />
+                    label="Client ID"
+                    description="Personal integration: create your own Spotify developer app and paste its Client ID here.">
+                  <View className="w-64 flex-row items-center gap-2">
+                      <TextInput
+                          value={clientId ?? ""}
+                          onChangeText={(value) => settings$.providers.spotify.clientId.set(value.trim())}
+                          placeholder="Spotify Client ID"
+                          placeholderTextColor="rgba(255,255,255,0.35)"
+                          autoCapitalize="none"
+                          autoCorrect={false}
+                          className="flex-1 rounded-md border border-border-primary bg-background-tertiary px-3 py-2 text-sm text-text-primary"
+                      />
+                      <Button size="small" variant="secondary" onClick={() => Linking.openURL("https://developer.spotify.com/dashboard")}>
+                          Dashboard
+                      </Button>
+                  </View>
+                </SettingsRow>
                 <View className="gap-1 rounded-md border border-border-primary bg-background-tertiary p-3">
                     <Text className="text-xs font-semibold text-text-primary">Create your Spotify key</Text>
                     <Text className="text-xs leading-relaxed text-text-secondary">
@@ -89,21 +82,19 @@ export function SpotifySettingsContent() {
             </SettingsSection>
             <SettingsSection title="Connection">
                 <SettingsRow
-                    title={status.authenticated ? status.displayName || "Connected" : "Not connected"}
+                    label={status.authenticated ? status.displayName || "Connected" : "Not connected"}
                     description={status.error ?? (status.authenticated
                         ? `${status.detail}. ${player.isReady ? "Playback device ready." : "Playback device starts when the main window is open."}`
-                        : "Connect a Spotify Premium account after entering your Client ID.")}
-                    control={(
-                        <View className="flex-row gap-2">
-                            <Button size="small" variant="accent" disabled={!enabled || status.isLoading} onClick={handleConnect}>
-                                {status.authenticated ? "Reconnect" : "Connect"}
-                            </Button>
-                            <Button size="small" variant="secondary" disabled={!status.authenticated} onClick={handleDisconnect}>
-                                Disconnect
-                            </Button>
-                        </View>
-                    )}
-                />
+                        : "Connect a Spotify Premium account after entering your Client ID.")}>
+                  <View className="flex-row gap-2">
+                      <Button size="small" variant="accent" disabled={!enabled || status.isLoading} onClick={handleConnect}>
+                          {status.authenticated ? "Reconnect" : "Connect"}
+                      </Button>
+                      <Button size="small" variant="secondary" disabled={!status.authenticated} onClick={handleDisconnect}>
+                          Disconnect
+                      </Button>
+                  </View>
+                </SettingsRow>
                 {player.error ? <Text className="text-xs leading-relaxed text-red-300">{player.error}</Text> : null}
             </SettingsSection>
         </>
