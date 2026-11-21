@@ -123,28 +123,28 @@ export function AppearanceSettingsContent() {
           value={selectedFontFamily}
           onValueChange={value => setMarkdownFontFamilySetting(value as MarkdownFontFamilySetting)}
         />
-        <SettingsSegmentedRow
+        <SettingsSelectRow
           description="Adjust the base text size for the editor."
           label="Font Size"
           options={fontSizeOptions}
           value={selectedFontSize}
           onValueChange={value => setMarkdownFontSizeSetting(value as MarkdownFontSizeSetting)}
         />
-        <SettingsSegmentedRow
+        <SettingsSelectRow
           description="Change vertical rhythm for dense editing or slower reading."
           label="Line Height"
           options={lineHeightOptions}
           value={selectedLineHeight}
           onValueChange={value => setMarkdownLineHeightSetting(value as MarkdownLineHeightSetting)}
         />
-        <SettingsSegmentedRow
+        <SettingsSelectRow
           description="Set the maximum width used by the document body."
           label="Maximum Width"
           options={contentWidthOptions}
           value={selectedContentWidth}
           onValueChange={value => setMarkdownContentWidthSetting(value as MarkdownContentWidthSetting)}
         />
-        <SettingsSegmentedRow
+        <SettingsSelectRow
           description="Control the outer padding and spacing between blocks."
           label="Density"
           options={densityOptions}
