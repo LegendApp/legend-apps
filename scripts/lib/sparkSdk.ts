@@ -35,6 +35,11 @@ export function preservePreviousSparkInstall(project: string) {
     if (fs.existsSync(backup)) throw new Error(`Cannot preserve old Spark install: ${backup} already exists. Move ${previous} before preparing this app.`);
     fs.mkdirSync(path.dirname(backup), { recursive: true });
     fs.renameSync(previous, backup);
-    if (name === "node_modules") fs.rmSync(path.join(project, ".spark/native-selection.json"), { force: true });
+    if (name === "node_modules") {
+      fs.rmSync(path.join(project, ".spark/native-selection.json"), { force: true });
+      for (const host of fs.readdirSync(project, { withFileTypes: true })) {
+        if (host.isDirectory()) fs.rmSync(path.join(project, host.name, ".spark/DerivedData"), { recursive: true, force: true });
+      }
+    }
   }
 }

@@ -151,6 +151,21 @@ function catalogInstallMismatches(project: string) {
   return [...mismatches];
 }
 
+function sparkNestedDependencyMismatches(project: string) {
+  const lock = path.join(project, "bun.lock");
+  if (!fs.existsSync(lock)) return [];
+  const packages: Record<string, [string]> = JSON.parse(fs.readFileSync(lock, "utf8")).packages ?? {};
+  const spark = path.join(project, "node_modules/@legendapp/spark");
+  return Object.entries(packages).flatMap(([key, entry]) => {
+    if (!key.startsWith("@legendapp/spark/")) return [];
+    const name = key.slice("@legendapp/spark/".length);
+    const resolution = (entry as [string])[0];
+    const version = resolution.slice(resolution.lastIndexOf("@") + 1);
+    const manifest = path.join(spark, "node_modules", name, "package.json");
+    return fs.existsSync(manifest) && JSON.parse(fs.readFileSync(manifest, "utf8")).version === version ? [] : [name];
+  });
+}
+
 export function acquireInstallLock(project: string, timeoutMs = 60_000) {
   const lock = path.join(project, ".legend-install.lock");
   const owner = `${process.pid}-${randomUUID()}`;
@@ -218,7 +233,8 @@ function installUnlocked(options: InstallOptions, execute: typeof runInstall): "
   const hash = sparkInstallHash(project, options.repoRoot);
   const nodeModules = path.join(project, "node_modules");
   const stamp = path.join(nodeModules, ".legend-install-stamp");
-  if (!options.force && fs.existsSync(stamp) && fs.readFileSync(stamp, "utf8").trim() === hash && !catalogInstallMismatches(project).length) {
+  if (!options.force && fs.existsSync(stamp) && fs.readFileSync(stamp, "utf8").trim() === hash &&
+    !catalogInstallMismatches(project).length && !sparkNestedDependencyMismatches(project).length) {
     console.log(`${appId}: dependencies unchanged; skipping Bun install.`);
     return "skipped";
   }
@@ -229,14 +245,18 @@ function installUnlocked(options: InstallOptions, execute: typeof runInstall): "
   // A failed install must not leave a previously valid stamp behind.
   fs.rmSync(stamp, { force: true });
   const inputs = sparkInstallHash(project, options.repoRoot, false);
+  const staleSpark = sparkNestedDependencyMismatches(project).length > 0;
   try {
     for (const link of catalogInstallMismatches(project)) {
       try { if (fs.lstatSync(link).isSymbolicLink()) fs.unlinkSync(link); }
       catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
     }
-    execute(["install", "--linker", "hoisted"], options);
+    if (staleSpark) fs.rmSync(path.join(nodeModules, "@legendapp/spark"), { recursive: true, force: true });
+    execute(["install", "--linker", "hoisted", "--prefer-offline"], options);
     const mismatches = catalogInstallMismatches(project);
     if (mismatches.length) throw new SparkInstallError(`${appId}: catalog dependencies still resolve incorrectly: ${mismatches.map(link => path.relative(project, link)).join(", ")}.`);
+    const nestedMismatches = sparkNestedDependencyMismatches(project);
+    if (nestedMismatches.length) throw new SparkInstallError(`${appId}: Spark nested dependencies still resolve incorrectly: ${nestedMismatches.join(", ")}.`);
     fs.mkdirSync(nodeModules, { recursive: true });
     fs.writeFileSync(stamp, `${inputs === sparkInstallHash(project, options.repoRoot, false) ? sparkInstallHash(project, options.repoRoot) : hash}\n`);
   } catch (error) {

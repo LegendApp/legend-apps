@@ -486,11 +486,19 @@ test("preparing a shared consumer preserves old installs without leaving a shado
     fs.writeFileSync(path.join(project, "bun.lock"), "old lock");
     fs.mkdirSync(path.join(project, ".spark"));
     fs.writeFileSync(path.join(project, ".spark/native-selection.json"), "stale native roots");
+    for (const host of ["debug-host", "music-host"]) {
+      const derivedData = path.join(project, host, ".spark/DerivedData");
+      fs.mkdirSync(derivedData, { recursive: true });
+      fs.writeFileSync(path.join(derivedData, "module-cache"), "stale modules");
+    }
     preservePreviousSparkInstall(project);
     preservePreviousSparkInstall(project);
     const backup = path.join(root, ".legacy-installs/example");
     assert.equal(fs.existsSync(path.join(project, "node_modules")), false);
     assert.equal(fs.existsSync(path.join(project, ".spark/native-selection.json")), false);
+    for (const host of ["debug-host", "music-host"]) {
+      assert.equal(fs.existsSync(path.join(project, host, ".spark/DerivedData")), false);
+    }
     assert.equal(fs.readFileSync(path.join(backup, "node_modules/source.js"), "utf8"), "old source");
     assert.equal(fs.readFileSync(path.join(backup, "bun.lock"), "utf8"), "old lock");
     fs.mkdirSync(path.join(project, "node_modules/.cache"), { recursive: true });

@@ -17,7 +17,7 @@ function fixture(t: TestContext) {
     fs.mkdirSync(path.dirname(location), { recursive: true });
     fs.writeFileSync(location, typeof content === "string" ? content : JSON.stringify(content));
   };
-  write("project/bun.lock", "shared lock");
+  write("project/bun.lock", { packages: {} });
   write("project/bunfig.toml", '[install]\nlinker = "hoisted"\n');
   write("apps/example/package.json", { name: "example" });
   write("apps/example/src/index.ts", "app source");
@@ -195,7 +195,7 @@ test("plain install writes a stamp, skips unchanged inputs, and reinstalls chang
   assert.equal(installSparkWorkspace(f.options, execute), "installed");
   assert.equal(fs.readFileSync(f.stamp, "utf8").trim(), f.hash());
   assert.equal(installSparkWorkspace(f.options, execute), "skipped");
-  assert.deepEqual(calls, [["install", "--linker", "hoisted"]]);
+  assert.deepEqual(calls, [["install", "--linker", "hoisted", "--prefer-offline"]]);
   f.write("packages/local/src/new.ts", "new");
   assert.equal(installSparkWorkspace(f.options, execute), "installed");
   assert.equal(calls.length, 2);
@@ -259,6 +259,27 @@ test("catalog version mismatches in workspace links force Bun to relink them", t
     fs.symlinkSync(path.relative(path.dirname(appLink), path.join(f.project, "node_modules/.bun/spark-new")), appLink);
   }), "installed");
   assert.equal(JSON.parse(fs.readFileSync(path.join(appLink, "package.json"), "utf8")).version, "0.0.5");
+  assert.equal(installSparkWorkspace({ ...f.options, offline: true }, () => assert.fail("unexpected install")), "skipped");
+});
+
+test("a missing nested Spark lock dependency removes Spark and reinstalls it", t => {
+  const f = fixture(t);
+  const sdk = "project/node_modules/@legendapp/spark";
+  f.write(`${sdk}/package.json`, { name: "@legendapp/spark", version: "0.0.5" });
+  f.write("project/node_modules/ws/package.json", { name: "ws", version: "7.5.14" });
+  f.write("project/bun.lock", { packages: {
+    "@legendapp/spark": ["@legendapp/spark@0.0.5", "", { dependencies: { ws: "8.21.0" } }],
+    "@legendapp/spark/ws": ["ws@8.21.0", "", {}],
+  } });
+  fs.mkdirSync(path.join(f.project, "node_modules"), { recursive: true });
+  fs.writeFileSync(f.stamp, f.hash());
+
+  assert.equal(installSparkWorkspace(f.options, args => {
+    assert.deepEqual(args, ["install", "--linker", "hoisted", "--prefer-offline"]);
+    assert.equal(fs.existsSync(path.join(f.project, sdk)), false);
+    f.write(`${sdk}/package.json`, { name: "@legendapp/spark", version: "0.0.5" });
+    f.write(`${sdk}/node_modules/ws/package.json`, { name: "ws", version: "8.21.0" });
+  }), "installed");
   assert.equal(installSparkWorkspace({ ...f.options, offline: true }, () => assert.fail("unexpected install")), "skipped");
 });
 
@@ -809,7 +830,7 @@ test("live workspaces invalidate on package metadata, not new source files", t =
 test("stamp includes the lock Bun writes during installation", t => {
   const f = fixture(t);
   fs.rmSync(path.join(f.project, "bun.lock"));
-  installSparkWorkspace(f.options, () => f.write("project/bun.lock", "installed lock"));
+  installSparkWorkspace(f.options, () => f.write("project/bun.lock", { packages: {} }));
   assert.equal(installSparkWorkspace({ ...f.options, offline: true }, () => { throw new Error("must skip"); }), "skipped");
 });
 
