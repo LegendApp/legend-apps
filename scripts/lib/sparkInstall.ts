@@ -154,7 +154,7 @@ function catalogInstallMismatches(project: string) {
 function sparkNestedDependencyMismatches(project: string) {
   const lock = path.join(project, "bun.lock");
   if (!fs.existsSync(lock)) return [];
-  const packages: Record<string, [string]> = JSON.parse(fs.readFileSync(lock, "utf8")).packages ?? {};
+  const packages: Record<string, [string]> = (Bun.JSONC.parse(fs.readFileSync(lock, "utf8")) as { packages?: Record<string, [string]> }).packages ?? {};
   const spark = path.join(project, "node_modules/@legendapp/spark");
   return Object.entries(packages).flatMap(([key, entry]) => {
     if (!key.startsWith("@legendapp/spark/")) return [];

@@ -52,6 +52,14 @@ test("verified cloned dependencies receive the normal stamp and work offline", t
   assert.throws(() => installSparkWorkspace({ ...f.options, offline: true }, execute), /dependencies changed/);
 });
 
+test("Spark install checks accept trailing commas in bun.lock", t => {
+  const f = fixture(t);
+  f.write("project/bun.lock", '{"packages": {},}\n');
+  let installs = 0;
+  assert.equal(installSparkWorkspace(f.options, () => { installs++; }), "installed");
+  assert.equal(installs, 1);
+});
+
 test("unverified or missing dependencies cannot receive a cloned-install stamp", t => {
   const f = fixture(t);
   const lockHash = createHash("sha256").update(fs.readFileSync(path.join(f.project, "bun.lock"))).digest("hex");
