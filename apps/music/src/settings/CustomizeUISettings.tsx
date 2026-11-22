@@ -1,11 +1,10 @@
-import { useObserveEffect } from "@legendapp/state/react";
+import { useObserveEffect, useValue } from "@legendapp/state/react";
 import { Fragment, useMemo } from "react";
 import { Text, View } from "react-native";
 
-import { Checkbox } from "../components/Checkbox";
 import { DragDropProvider, DraggableItem, DroppableZone } from "../components/dnd";
 import { usePlaybackControlLayout } from "../hooks/useUIControls";
-import { SettingsRow, SettingsSection } from "./components";
+import { SettingsSection, SettingsSwitchRow } from "./components";
 import { SUPPORT_PLAYLISTS } from "../systems/constants";
 import { Icon } from "../systems/Icon";
 import { type PlaybackControlId, settings$, type UIControlLayout } from "../systems/Settings";
@@ -96,6 +95,7 @@ const PLAYBACK_CONTROL_MAP = Object.fromEntries(
 const PLAYBACK_DRAG_ZONE_ID = "customize-playback-controls";
 
 export function CustomizeUISettingsContent() {
+    const playbackControlsEnabled = useValue(settings$.ui.playbackControlsEnabled);
     const playbackLayout = usePlaybackControlLayout();
 
     useObserveEffect(() => {
@@ -110,11 +110,12 @@ export function CustomizeUISettingsContent() {
                 <View className="flex flex-col gap-8">
                     <SettingsSection title="Playback Controls">
                       <Text className="px-3 py-2 text-sm text-text-secondary">Drag controls between Shown and Hidden to curate the playback toolbar.</Text>
-                        <SettingsRow
+                        <SettingsSwitchRow
                             label="Enable playback controls"
-                            description="Show the playback toolbar beneath the Now Playing area.">
-                          <Checkbox $checked={settings$.ui.playbackControlsEnabled} />
-                        </SettingsRow>
+                            description="Show the playback toolbar beneath the Now Playing area."
+                            value={playbackControlsEnabled}
+                            onValueChange={(value) => settings$.ui.playbackControlsEnabled.set(value)}
+                        />
                         <ControlLayoutEditor layout={normalizedPlaybackLayout} definitions={PLAYBACK_CONTROL_MAP} />
                     </SettingsSection>
                 </View>

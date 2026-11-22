@@ -2,12 +2,11 @@ import { useValue } from "@legendapp/state/react";
 import { useCallback } from "react";
 import { Text, View } from "react-native";
 import { Button } from "../components/Button";
-import { Checkbox } from "../components/Checkbox";
 import { useToast } from "../components/Toast";
 import { appleMusicProvider, appleMusicStatus$ } from "../providers/appleMusic/provider";
 import { refreshProviderPlaylists } from "../providers/registry";
 import { settings$ } from "../systems/Settings";
-import { SettingsRow, SettingsSection } from "./components";
+import { SettingsRow, SettingsSection, SettingsSwitchRow } from "./components";
 
 export function AppleMusicSettingsContent() {
     const showToast = useToast();
@@ -38,11 +37,12 @@ export function AppleMusicSettingsContent() {
         <>
             <SettingsSection title="Apple Music">
               <Text className="px-3 py-2 text-sm text-text-secondary">Uses MusicKit directly on this Mac—no Legend backend or manually managed developer token.</Text>
-                <SettingsRow
+                <SettingsSwitchRow
                     label="Enable Apple Music"
-                    description="Makes Apple Music available to search and AI playlist generation.">
-                  <Checkbox checked={enabled} onChange={(value) => settings$.providers.appleMusic.enabled.set(value)} />
-                </SettingsRow>
+                    description="Makes Apple Music available to search and AI playlist generation."
+                    value={enabled}
+                    onValueChange={(value) => settings$.providers.appleMusic.enabled.set(value)}
+                />
             </SettingsSection>
             <SettingsSection title="Connection">
                 <SettingsRow

@@ -24,6 +24,11 @@ export type RepeatMode = "off" | "all" | "one";
 
 export type MusicProviderId = "local" | "spotify" | "appleMusic";
 export const AI_SOURCE_IDS = ["local", "spotify", "appleMusic"] as const satisfies readonly MusicProviderId[];
+export const AI_SOURCE_LABELS: Record<MusicProviderId, string> = {
+    local: "Local Music",
+    spotify: "Spotify",
+    appleMusic: "Apple Music",
+};
 export type AITrackSources = MusicProviderId[];
 
 export interface AISettingsConfig {

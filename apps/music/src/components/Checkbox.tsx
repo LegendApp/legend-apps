@@ -56,7 +56,7 @@ export function Checkbox({
                         : "bg-background-secondary border-border-primary",
                 )}
             >
-                {isChecked && <Icon name="checkmark" color="#FFF" size={13} yOffset={-5} />}
+                {isChecked && <Icon name="checkmark" color="#FFF" size={13} />}
             </View>
             {label && <Text className={cn("text-text-primary", labelClassName)}>{label}</Text>}
         </Button>

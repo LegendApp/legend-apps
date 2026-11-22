@@ -14,6 +14,7 @@ import { spotifyStatus$ } from "../providers/spotify/provider";
 import { appleMusicStatus$ } from "../providers/appleMusic/provider";
 import {
     AI_SOURCE_IDS,
+    AI_SOURCE_LABELS,
     normalizeAISources,
     settings$,
     type AITrackSources,
@@ -39,14 +40,8 @@ type AIToolState =
     | { status: "available" }
     | { message: string; status: "unavailable" };
 
-const SOURCE_LABELS: Record<MusicProviderId, string> = {
-    local: "Local Music",
-    spotify: "Spotify",
-    appleMusic: "Apple Music",
-};
-
 function sourceSummary(sources: readonly MusicProviderId[]): string {
-    return sources.map((source) => SOURCE_LABELS[source].replace(" Music", "")).join(" + ");
+    return sources.map((source) => AI_SOURCE_LABELS[source].replace(" Music", "")).join(" + ");
 }
 
 function SourceChoices({
@@ -77,7 +72,7 @@ function SourceChoices({
                     <Checkbox
                         checked={sources.includes(source)}
                         disabled={disabled}
-                        label={SOURCE_LABELS[source]}
+                        label={AI_SOURCE_LABELS[source]}
                         onChange={(checked) => onToggle(source, checked)}
                     />
                     <Text className="ml-7 text-xs text-text-tertiary">{details[source]}</Text>

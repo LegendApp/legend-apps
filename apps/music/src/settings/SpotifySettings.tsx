@@ -2,7 +2,6 @@ import { useValue } from "@legendapp/state/react";
 import { useCallback } from "react";
 import { Linking, Text, TextInput, View } from "react-native";
 import { Button } from "../components/Button";
-import { Checkbox } from "../components/Checkbox";
 import { useToast } from "../components/Toast";
 import { refreshProviderPlaylists } from "../providers/registry";
 import {
@@ -12,7 +11,7 @@ import {
     spotifyWebPlayer$,
 } from "../providers/spotify/provider";
 import { settings$ } from "../systems/Settings";
-import { SettingsRow, SettingsSection } from "./components";
+import { SettingsRow, SettingsSection, SettingsSwitchRow } from "./components";
 
 export function SpotifySettingsContent() {
     const showToast = useToast();
@@ -44,11 +43,12 @@ export function SpotifySettingsContent() {
         <>
             <SettingsSection title="Spotify">
               <Text className="px-3 py-2 text-sm text-text-secondary">Search your catalog, browse playlists, and play tracks through Spotify Web Playback. Premium is required for playback.</Text>
-                <SettingsRow
+                <SettingsSwitchRow
                     label="Enable Spotify"
-                    description="Makes Spotify available to search and AI playlist generation.">
-                  <Checkbox checked={enabled} onChange={(value) => settings$.providers.spotify.enabled.set(value)} />
-                </SettingsRow>
+                    description="Makes Spotify available to search and AI playlist generation."
+                    value={enabled}
+                    onValueChange={(value) => settings$.providers.spotify.enabled.set(value)}
+                />
                 <SettingsRow
                     label="Client ID"
                     description="Personal integration: create your own Spotify developer app and paste its Client ID here.">

@@ -2,9 +2,8 @@ import { isNumber, linked } from "@legendapp/state";
 import { useObservable, useValue } from "@legendapp/state/react";
 import { $TextInput } from "@legendapp/state/react-native";
 import { View } from "react-native";
-import { Checkbox } from "../components/Checkbox";
 import { Select } from "../components/Select";
-import { SettingsRow, SettingsSection } from "./components";
+import { SettingsRow, SettingsSection, SettingsSwitchRow } from "./components";
 import {
     OVERLAY_MAX_DISPLAY_DURATION_SECONDS,
     OVERLAY_MIN_DISPLAY_DURATION_SECONDS,
@@ -47,11 +46,12 @@ export function OverlaySettingsContent() {
     return (
         <>
             <SettingsSection title="Overlay Options">
-                <SettingsRow
+                <SettingsSwitchRow
                     label="Enable overlay"
-                    description="Show the current song overlay when a new track begins">
-                  <Checkbox $checked={settings$.overlay.enabled} />
-                </SettingsRow>
+                    description="Show the current song overlay when a new track begins"
+                    value={overlayEnabled}
+                    onValueChange={(value) => settings$.overlay.enabled.set(value)}
+                />
 
                 <SettingsRow
                     label="Display duration"

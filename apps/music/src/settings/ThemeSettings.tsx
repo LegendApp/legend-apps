@@ -2,8 +2,7 @@ import { useValue } from "@legendapp/state/react";
 import { useEffect } from "react";
 import { Text, TextInput, View } from "react-native";
 import { Button } from "../components/Button";
-import { Checkbox } from "../components/Checkbox";
-import { SettingsRow, SettingsSection } from "./components";
+import { SettingsRow, SettingsSection, SettingsSwitchRow } from "./components";
 import {
     defaultMusicAppearance,
     ensureMusicAppearanceSettings,
@@ -66,11 +65,12 @@ export function ThemeSettingsContent() {
             </SettingsSection>
 
             <SettingsSection title="Background">
-                <SettingsRow
+                <SettingsSwitchRow
                     label="Liquid Glass"
-                    description="Use the native translucent glass background.">
-                  <Checkbox $checked={settings$.appearance.background.glassEnabled} />
-                </SettingsRow>
+                    description="Use the native translucent glass background."
+                    value={background.glassEnabled}
+                    onValueChange={(value) => settings$.appearance.background.glassEnabled.set(value)}
+                />
                 <SettingsRow
                     label="Background Color"
                     description="Supports alpha, for example #00000044 or rgba(0, 0, 0, 0.27).">

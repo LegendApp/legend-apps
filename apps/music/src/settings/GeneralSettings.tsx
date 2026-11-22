@@ -3,93 +3,93 @@ import { HotkeyCapture } from "@legendapp/spark/shortcuts/commands";
 import { Linking, Text, View } from "react-native";
 
 import { Button } from "../components/Button";
-import { Checkbox } from "../components/Checkbox";
-import { SettingsRow, SettingsSection } from "./components";
-import { Icon } from "../systems/Icon";
+import { SettingsRow, SettingsSection, SettingsSwitchRow } from "./components";
 import { globalHotkeyStatus$ } from "../systems/GlobalHotkey";
-import { AI_SOURCE_IDS, normalizeAISources, settings$, type MusicProviderId } from "../systems/Settings";
+import { AI_SOURCE_IDS, AI_SOURCE_LABELS, normalizeAISources, settings$, type MusicProviderId } from "../systems/Settings";
 import { state$ } from "../systems/State";
 import packageJson from "../../package.json";
 
 export function GeneralSettingsContent() {
+    const showHints = useValue(settings$.general.showHints);
+    const showTitleBarOnHover = useValue(settings$.general.showTitleBarOnHover);
     const globalHotkeyEnabled = useValue(settings$.general.globalHotkeyEnabled);
     const globalHotkey = useValue(settings$.general.globalHotkey);
     const globalHotkeyError = useValue(globalHotkeyStatus$.error);
+    const aiToolbarEnabled = useValue(settings$.ai.toolbarEnabled);
     const defaultAISources = normalizeAISources(useValue(settings$.ai.defaultSources));
 
     const toggleDefaultAISource = (source: MusicProviderId, checked: boolean) => {
+        const currentSources = normalizeAISources(settings$.ai.defaultSources.peek());
         const nextSources = checked
-            ? AI_SOURCE_IDS.filter((candidate) => candidate === source || defaultAISources.includes(candidate))
-            : defaultAISources.filter((candidate) => candidate !== source);
+            ? AI_SOURCE_IDS.filter((candidate) => candidate === source || currentSources.includes(candidate))
+            : currentSources.filter((candidate) => candidate !== source);
         if (nextSources.length > 0) settings$.ai.defaultSources.set(nextSources);
     };
 
     return (
         <>
             <SettingsSection title="Appearance">
-                <SettingsRow
+                <SettingsSwitchRow
                     label="Display Hints"
-                    description="Toggle contextual hints like the media library status bar">
-                  <Checkbox $checked={settings$.general.showHints} />
-                </SettingsRow>
-                <SettingsRow
+                    description="Toggle contextual hints like the media library status bar"
+                    value={showHints}
+                    onValueChange={(value) => settings$.general.showHints.set(value)}
+                />
+                <SettingsSwitchRow
                     label="Show Titlebar on Hover"
-                    description="Reveal macOS window controls when hovering near the top edge">
-                  <Checkbox $checked={settings$.general.showTitleBarOnHover} />
-                </SettingsRow>
+                    description="Reveal macOS window controls when hovering near the top edge"
+                    value={showTitleBarOnHover}
+                    onValueChange={(value) => settings$.general.showTitleBarOnHover.set(value)}
+                />
             </SettingsSection>
 
             <SettingsSection title="AI playlists">
-                <SettingsRow
+                <SettingsSwitchRow
                     label="Show AI toolbar"
-                    description="Show source, Auto, and Prompt controls beneath the playlist.">
-                  <Checkbox $checked={settings$.ai.toolbarEnabled} />
-                </SettingsRow>
-                <SettingsRow
-                    label="Default music sources"
-                    description="Playlists use these sources unless you choose an override in the playlist toolbar. Local copies are always preferred.">
-                  <View className="w-44 gap-2">
-                      <Checkbox
-                          checked={defaultAISources.includes("local")}
-                          disabled={defaultAISources.length === 1 && defaultAISources[0] === "local"}
-                          label="Local Music"
-                          onChange={(checked) => toggleDefaultAISource("local", checked)}
-                      />
-                      <Checkbox
-                          checked={defaultAISources.includes("spotify")}
-                          disabled={defaultAISources.length === 1 && defaultAISources[0] === "spotify"}
-                          label="Spotify"
-                          onChange={(checked) => toggleDefaultAISource("spotify", checked)}
-                      />
-                      <Checkbox
-                          checked={defaultAISources.includes("appleMusic")}
-                          disabled={defaultAISources.length === 1 && defaultAISources[0] === "appleMusic"}
-                          label="Apple Music"
-                          onChange={(checked) => toggleDefaultAISource("appleMusic", checked)}
-                      />
-                  </View>
-                </SettingsRow>
+                    description="Show source, Auto, and Prompt controls beneath the playlist."
+                    value={aiToolbarEnabled}
+                    onValueChange={(value) => settings$.ai.toolbarEnabled.set(value)}
+                />
+            </SettingsSection>
+
+            <SettingsSection title="Default music sources">
+                <Text className="px-3 py-2 text-sm text-text-secondary">
+                    Playlists use these sources unless you choose an override in the playlist toolbar. Local copies are always preferred.
+                </Text>
+                {AI_SOURCE_IDS.map((source) => {
+                    const enabled = defaultAISources.includes(source);
+                    return (
+                        <SettingsSwitchRow
+                            key={source}
+                            label={AI_SOURCE_LABELS[source]}
+                            value={enabled}
+                            disabled={enabled && defaultAISources.length === 1}
+                            onValueChange={(value) => toggleDefaultAISource(source, value)}
+                        />
+                    );
+                })}
             </SettingsSection>
 
             <SettingsSection title="Shortcuts">
-                <SettingsRow
+                <SettingsSwitchRow
                     label="Global Hotkey"
-                    description="Show the main window from anywhere">
-                  <View className="flex-col items-end gap-2">
-                      <View className="flex-row items-center gap-3">
-                          <Checkbox $checked={settings$.general.globalHotkeyEnabled} />
-                          <HotkeyCapture
-                              value={globalHotkey}
-                              onChange={(next) => settings$.general.globalHotkey.set(next)}
-                              onCaptureChange={(isCapturing) => state$.listeningForKeyPress.set(isCapturing)}
-                              disabled={!globalHotkeyEnabled}
-                              className={globalHotkeyError ? "border-red-400" : undefined}
-                          />
-                      </View>
-                      {globalHotkeyError ? (
-                          <Text className="text-xs text-red-200">{globalHotkeyError}</Text>
-                      ) : null}
-                  </View>
+                    description="Show the main window from anywhere"
+                    value={globalHotkeyEnabled}
+                    onValueChange={(value) => settings$.general.globalHotkeyEnabled.set(value)}
+                />
+                <SettingsRow label="Shortcut">
+                    <View className="flex-col items-end gap-2">
+                        <HotkeyCapture
+                            value={globalHotkey}
+                            onChange={(next) => settings$.general.globalHotkey.set(next)}
+                            onCaptureChange={(isCapturing) => state$.listeningForKeyPress.set(isCapturing)}
+                            disabled={!globalHotkeyEnabled}
+                            className={globalHotkeyError ? "border-red-400" : undefined}
+                        />
+                        {globalHotkeyError ? (
+                            <Text className="text-xs text-red-200">{globalHotkeyError}</Text>
+                        ) : null}
+                    </View>
                 </SettingsRow>
             </SettingsSection>
 
