@@ -18,6 +18,8 @@ import { requestCodeViewerFile, dispatchCodeViewerMenu, codeAutomaticPairs$ } fr
 registerCodeWindows();
 installCodeBenchmarkHook();
 
+const openingCodeFiles = new Map<string, Promise<void>>();
+
 declare global {
   var __legendCodeBenchmarkOpenFile: ((filePath: string) => Promise<void>) | undefined;
   var __legendCodeBenchmarkCloseFile: (() => Promise<void>) | undefined;
@@ -44,7 +46,18 @@ if (__DEV__) {
 async function openCodeFileInViewer(filePath: string) {
   const viewer = requestCodeViewerFile(filePath);
   if (viewer) await focusCodeViewerWindow(viewer.windowId);
-  else await openCodeViewerWindow({ files: [filePath] });
+  else {
+    let opening = openingCodeFiles.get(filePath);
+    if (!opening) {
+      opening = openCodeViewerWindow({ files: [filePath] }).then(() => {});
+      openingCodeFiles.set(filePath, opening);
+    }
+    try {
+      await opening;
+    } finally {
+      if (openingCodeFiles.get(filePath) === opening) openingCodeFiles.delete(filePath);
+    }
+  }
 }
 
 async function openCodeViewerForSelectedFile(controller: DocumentAppController) {
@@ -85,7 +98,8 @@ async function openRecentCodeDocument(path: string, controller: DocumentAppContr
 async function openInitialCodeViewer(launchArguments: string[] | undefined, controller: DocumentAppController) {
   const launchFile = getLaunchCodeFile(launchArguments);
   try {
-    await openCodeViewerWindow({ launchArguments });
+    if (launchFile) await openCodeFileInViewer(launchFile);
+    else await openCodeViewerWindow({ launchArguments });
   } catch (error) {
     if (!error || typeof error !== "object" || !("code" in error) || error.code !== "E_ALREADY_EXISTS") throw error;
     if (launchFile) requestCodeViewerFile(launchFile);
