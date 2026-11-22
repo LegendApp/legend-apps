@@ -18,22 +18,24 @@ const windowsConfig = {
         options: {
             title: "",
             transparent: true,
+            // Spark applies this color to the native content view as well as the window.
+            backgroundColor: "#00000000",
             hasShadow: false,
-            ...{
-                size: {
-                    width: OVERLAY_WINDOW_WIDTH_COMPACT,
-                    height: OVERLAY_WINDOW_HEIGHT_COMPACT
-                },
-                minSize: {
-                    width: OVERLAY_WINDOW_WIDTH_COMPACT,
-                    height: OVERLAY_WINDOW_HEIGHT_COMPACT
-                },
-                kind: "overlay",
-                titleBarStyle: "borderless"
+            size: {
+                width: OVERLAY_WINDOW_WIDTH_COMPACT,
+                height: OVERLAY_WINDOW_HEIGHT_COMPACT,
             },
+            minSize: {
+                width: OVERLAY_WINDOW_WIDTH_COMPACT,
+                height: OVERLAY_WINDOW_HEIGHT_COMPACT,
+            },
+            kind: "overlay",
+            titleBarStyle: "borderless",
             macos: {
-                level: "status"
-            }
+                level: "status",
+                panelStyle: "nonactivating",
+                titleBar: { contentLayout: "fullSize", transparent: true },
+            },
         },
     },
 } satisfies WindowsConfig;

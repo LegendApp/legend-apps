@@ -92,25 +92,12 @@ export const CurrentSongOverlayWindowManager = () => {
             const current = (await listWindows()).find(window => window.id === OVERLAY_WINDOW_ID);
             if (current) await setWindowBounds(OVERLAY_WINDOW_ID, { displayId: display.id, x, y, width: windowWidth, height: windowHeight }, { macos: { durationMs: frameAnimationDurationMs } });
             else {
-            await WindowsNavigator.open(OVERLAY_WINDOW_KEY, {
-                options: {
-                    position: { displayId: display.id, x, y },
-                    ...{
-                        kind: "overlay",
-                        titleBarStyle: "borderless",
-                        size: {
-                            width: windowWidth,
-                            height: windowHeight
-                        },
-                        macos: {
-                            panelStyle: "nonactivating",
-                            titleBar: {
-                                contentLayout: "fullSize"
-                            }
-                        }
-                    }
-                }
-            });
+                await WindowsNavigator.open(OVERLAY_WINDOW_KEY, {
+                    options: {
+                        position: { displayId: display.id, x, y },
+                        size: { width: windowWidth, height: windowHeight },
+                    },
+                });
             }
             previousDimensionsRef.current = { width: windowWidth, height: windowHeight };
         }
