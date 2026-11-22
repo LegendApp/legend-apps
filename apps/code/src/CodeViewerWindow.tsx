@@ -151,7 +151,7 @@ export function CodeViewerWindow({ files, folders, launchArguments, preparedDocu
   }, [syntaxTheme.appearance, syntaxTheme.background, tabs.active, windowId]);
 
   const content = (
-    <View style={styles.root}>
+    <View style={StyleSheet.absoluteFill}>
       <DocumentTabBar
         activePath={tabs.active}
         colors={workspaceColors}
