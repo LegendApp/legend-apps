@@ -5,14 +5,20 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { rootDir } from "./apps";
-import { runCommand } from "./run";
-import { runSharedDebugMetro } from "./sparkDevServer";
+import { localSparkStatusPath } from "./localSpark.cjs";
+import type { runCommand } from "./run";
+import { matchingMetro, runSharedDebugMetro } from "./sparkDevServer";
 
 const project = path.join(rootDir, "shell/.legend/spark/slides");
 
-async function metro(root: string | undefined = project, body: string | null = "packager-status:running") {
+async function metro(root: string | undefined = project, body: string | null = "packager-status:running", localSpark?: string) {
   let requests = 0;
   const server = createServer((request, response) => {
+    if (request.url === localSparkStatusPath) {
+      if (localSpark) response.setHeader("X-Legend-Spark-Local", encodeURIComponent(localSpark));
+      response.writeHead(localSpark ? 204 : 404).end();
+      return;
+    }
     requests++;
     assert.equal(request.url, "/status");
     if (body === null) return;
@@ -49,6 +55,21 @@ test("rerunning Slides opens the app twice against the same live server and pres
     assert.deepEqual(calls, Array.from({ length: 2 }, () => ["bun", ["scripts/open-app.ts", "slides", "macos",
       "--port", String(existing.port), "--", "/tmp/my deck.mdx", "--preview"], { cwd: rootDir, env }]));
   } finally { await existing.close(); }
+});
+
+test("switching the Spark source requires restarting an existing Metro", async () => {
+  const local = "/tmp/local Spark";
+  const existing = await metro(project, "packager-status:running", local);
+  const published = await metro();
+  try {
+    assert.equal(await matchingMetro(project, existing.port, false, local), true);
+    await assert.rejects(matchingMetro(project, existing.port, false), /different Spark source/);
+    await assert.rejects(matchingMetro(project, existing.port, false, "/tmp/another"), /different Spark source/);
+    await assert.rejects(matchingMetro(project, published.port, false, local), /different Spark source/);
+  } finally {
+    await existing.close();
+    await published.close();
+  }
 });
 
 test("start and --no-open reuse Metro without launching an app or another dev session", async () => {

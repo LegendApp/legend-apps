@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { assertPublishedSpark } from "./lib/localSpark.cjs";
 import { distributionArchitectures } from "./lib/distributionArchitectures";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
@@ -17,6 +18,7 @@ function runScript(script: string, args: string[]) {
 }
 
 async function main() {
+  assertPublishedSpark();
   const [action, requestedApp, ...extraArgs] = process.argv.slice(2);
   if (action !== "package" && action !== "release") {
     throw new Error("Expected package or release.");

@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import fs from "node:fs";
 import path from "node:path";
 import { resolveDevServerPort, rootDir } from "./apps";
+import { localSparkStatusPath } from "./localSpark.cjs";
 import { runCommand } from "./run";
 
 function canonicalRoot(root: string) {
@@ -10,7 +11,7 @@ function canonicalRoot(root: string) {
   catch { return path.resolve(root); }
 }
 
-export async function matchingMetro(project: string, port: number, https: boolean) {
+export async function matchingMetro(project: string, port: number, https: boolean, localSpark = process.env.LEGEND_SPARK_LOCAL) {
   const url = `${https ? "https" : "http"}://127.0.0.1:${port}/status`;
   let response: Response;
   let status: string;
@@ -28,6 +29,11 @@ export async function matchingMetro(project: string, port: number, https: boolea
   }
   if (canonicalRoot(decodeURI(root)) !== canonicalRoot(project)) {
     throw new Error(`Port ${port} serves ${decodeURI(root)}, not ${project}. Stop that server or choose --port.`);
+  }
+  const spark = await fetch(new URL(localSparkStatusPath, url), { signal: AbortSignal.timeout(2000), redirect: "error" });
+  await spark.body?.cancel();
+  if (spark.headers.get("X-Legend-Spark-Local") !== (localSpark ? encodeURIComponent(path.resolve(rootDir, localSpark)) : null)) {
+    throw new Error(`Metro on port ${port} uses a different Spark source. Stop it before changing LEGEND_SPARK_LOCAL.`);
   }
   return true;
 }

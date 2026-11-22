@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { assertPublishedSpark } from "./lib/localSpark.cjs";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 
@@ -19,6 +20,7 @@ function sparkLockEntries(source: string) {
 }
 const registryVersion = /^(?:[~^]?\d+\.\d+\.\d+(?:-[\w.-]+)?(?:\+[\w.-]+)?|latest|next)$/;
 try {
+  if (!staged) assertPublishedSpark();
   const manifest = JSON.parse(read("package.json"));
   const previousSource = staged ? committed("package.json") : undefined;
   const previous = previousSource ? JSON.parse(previousSource) : undefined;

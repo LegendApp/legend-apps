@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { assertPublishedSpark } from "./lib/localSpark.cjs";
 import { runSharedDebugMetro } from "./lib/sparkDevServer";
 import path from "node:path";
 import { createRequire } from "node:module";
@@ -35,6 +36,7 @@ if (installOptions.offline) {
 let cli = "";
 const buildArgs = ["build", action === "build-release" ? "--release" : "--dev", ...(action === "run" ? [] : actionTail)];
 try {
+  if (mode === "release" || process.env.CI) assertPublishedSpark();
   if (installOptions.offline) assertSparkOfflineArgs(action === "run" ? actionArgs : actionTail);
   if (["install", "build", "build-release", "run", "start", "pods"].includes(action)) {
     installSparkWorkspace({ project: rootDir, appId, env, ...installOptions });

@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { assertPublishedSpark } from "./lib/localSpark.cjs";
 import { assertDistributionArchitecture } from "./lib/distributionArchitectures";
 import { sparkWorkspace } from "./lib/sparkWorkspaces";
 import { signMacOSAppInsideOut } from "./lib/macosCodeSign";
@@ -329,6 +330,7 @@ function generateArchitectureAppcast(
 }
 
 async function main() {
+  assertPublishedSpark();
   const [appId, ...args] = process.argv.slice(2);
   if (appId === "--help" || appId === "-h" || args.includes("--help") || args.includes("-h")) {
     console.log("Usage: bun run package:macos <app> [arm|x86|all] [--skip-build] [--skip-sign] [--skip-notarize] [--skip-smoke] [--skip-appcast]\nSlides supports arm only and must be packaged on Apple Silicon.");

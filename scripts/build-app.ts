@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { assertPublishedSpark } from "./lib/localSpark.cjs";
 import { sparkWorkspace } from "./lib/sparkWorkspaces";
 import { signSlidesCompiler } from "./lib/slidesCompiler";
 import { spawnSync } from "node:child_process";
@@ -156,6 +157,7 @@ async function buildOne(appId: string, platform: Platform, args: string[] = []) 
     throw new Error(`Unexpected build arguments for ${platform}: ${args.join(" ")}`);
   }
 
+  assertPublishedSpark();
   const generated = writeGeneratedConfig(manifest, platform, "release");
   runPlatformCommand(appId, platform, "release", [], {
     LEGEND_APP_CONFIG: generated.configPath,

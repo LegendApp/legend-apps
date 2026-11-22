@@ -246,9 +246,23 @@ Generated per-app native workspaces and configuration live under
 The committed Spark catalog and lockfile select the published npm SDK. Native
 workspace preparation reads that installed SDK and does not need a sibling
 `legend-spark` checkout. Update the root catalog pin and lockfile together when
-upgrading Spark. Local SDK selection is no longer supported.
+upgrading Spark.
 
-Enable the staged dependency check with `git config core.hooksPath .githooks`.
+To try local Spark JavaScript or TypeScript in a macOS Debug app, stop its Metro
+server and start it with a Spark checkout:
+
+```sh
+LEGEND_SPARK_LOCAL=/path/to/legend-spark bun music run macos
+```
+
+Metro watches the checkout's packages. Restart Metro without the variable to
+return to published source. Bun installs, the Spark CLI, native autolinking,
+and the Debug host continue using the pinned SDK and release prebuilds.
+Changes to native modules, codegen specs, or native dependencies need a matching
+SDK and a native rebuild. CI, release, distribution, and push checks require
+`LEGEND_SPARK_LOCAL` to be unset.
+
+Enable the commit and push checks with `git config core.hooksPath .githooks`.
 It permits local test overrides in the working tree and rejects staging them.
 `bun run verify:spark-dependency` checks the working tree directly.
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { assertPublishedSpark } from "./lib/localSpark.cjs";
 import { assertDistributionArchitecture } from "./lib/distributionArchitectures";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -331,6 +332,7 @@ function findDeltaFiles(distDir: string, assetStem: string) {
 }
 
 async function main() {
+  assertPublishedSpark();
   const [appId, ...args] = process.argv.slice(2);
   if (!appId) {
     throw new Error("Usage: bun scripts/github-release-app.ts <app> [arm|x86|all] [--notes-file <path>] [--allow-dirty] [--verify-only]");
