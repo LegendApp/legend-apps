@@ -22,9 +22,11 @@ export type DocumentTabBarProps = {
   sidebarOpen: boolean;
   paths: readonly string[];
   style?: StyleProp<ViewStyle>;
+  /** The chrome theme's title bar height; the bar fills it. */
+  titleBarHeight: number;
 };
 
-export function DocumentTabBar({ activePath, colors, onClose, onSelect, onToggleSidebar, sidebarOpen, paths, style }: DocumentTabBarProps) {
+export function DocumentTabBar({ activePath, colors, onClose, onSelect, onToggleSidebar, sidebarOpen, paths, style, titleBarHeight }: DocumentTabBarProps) {
   const scroll = useRef<ScrollView>(null);
   const frames = useRef(new Map<string, { width: number; x: number }>());
   const [scrollWidth, setScrollWidth] = useState(0);
@@ -49,7 +51,7 @@ export function DocumentTabBar({ activePath, colors, onClose, onSelect, onToggle
 
   return (
     // The title bar is transparent, so leave room for the traffic lights while the sidebar is hidden.
-    <View onLayout={event => setBarWidth(event.nativeEvent.layout.width)} style={[styles.root, { borderColor: colors.border, paddingLeft: leadingInset }, style]}>
+    <View onLayout={event => setBarWidth(event.nativeEvent.layout.width)} style={[styles.root, { borderColor: colors.border, height: titleBarHeight, paddingLeft: leadingInset }, style]}>
       {onToggleSidebar ? <SidebarToggle colors={colors} label={sidebarOpen ? "Hide Sidebar" : "Show Sidebar"} onPress={onToggleSidebar} /> : null}
       <ScrollView
         contentContainerStyle={styles.tabs}
@@ -154,7 +156,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     gap,
-    height: 36,
   },
   scroll: {
     flexGrow: 0,
@@ -170,7 +171,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderRadius: 7,
     flexDirection: "row",
-    height: 28,
+    height: 26,
     paddingHorizontal: 20,
   },
   tabs: {

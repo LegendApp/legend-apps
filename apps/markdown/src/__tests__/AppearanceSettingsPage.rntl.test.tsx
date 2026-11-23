@@ -1,6 +1,7 @@
 import { fireEvent, render } from "@testing-library/react-native";
 import React from "react";
 import {
+  getMarkdownChromeTheme,
   getMarkdownContentWidthSetting,
   getMarkdownDocumentDensitySetting,
   getMarkdownFontSizeSetting,
@@ -35,6 +36,17 @@ it("keeps Font segmented and exposes the longer choices in borderless native men
   }
 
   const segments = view.container.queryAll((node) => node.type === "NativeSegmentedControl");
-  expect(segments.map((control) => control.props.accessibilityLabel)).toEqual(["Font"]);
+  expect(segments.map((control) => control.props.accessibilityLabel)).toEqual(["Title Bar", "Font"]);
+  await view.unmount();
+});
+
+it("edits the chrome theme's title bar height", async () => {
+  const view = await render(<AppearanceSettingsContent />);
+  const [titleBar] = view.container.queryAll((node) => node.type === "NativeSegmentedControl" && node.props.accessibilityLabel === "Title Bar");
+  expect(getMarkdownChromeTheme()).toEqual({ titleBarHeight: 36 });
+
+  await fireEvent(titleBar, "valueChange", { nativeEvent: { value: "52" } });
+
+  expect(getMarkdownChromeTheme()).toEqual({ titleBarHeight: 52 });
   await view.unmount();
 });

@@ -53,6 +53,7 @@ import {
   setMarkdownSidebarOpenSetting,
   useMarkdownAppearanceSettings,
   useMarkdownAutosaveSetting,
+  useMarkdownChromeTheme,
   useMarkdownDisplayThemeSetting,
   useMarkdownFormattingToolbarModeSetting,
   useMarkdownLayoutThemeSetting,
@@ -66,8 +67,6 @@ import { MarkdownLinkPopover } from "./MarkdownLinkPopover";
 import { loadMarkdownUserThemesSync } from "./userThemes";
 import { untitledMarkdownAdapter } from "./untitledMarkdownAdapter";
 import { refreshMarkdownEditorMenuState } from "./markdownEditorActions";
-
-const TITLEBAR_HEIGHT = 52;
 
 type MarkdownDocumentSession = ReturnType<typeof useMarkdownDocumentSession>;
 type MarkdownFormattingToolbarMode = ReturnType<typeof useMarkdownFormattingToolbarModeSetting>;
@@ -137,6 +136,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
   const formattingToolbarMode = useMarkdownFormattingToolbarModeSetting();
   const autosave = useMarkdownAutosaveSetting();
   const appearanceSettings = useMarkdownAppearanceSettings();
+  const { titleBarHeight } = useMarkdownChromeTheme();
   const markdownStyle = useMemo(
     () => getMarkdownStyleForAppearance(displayTheme, layoutTheme, appearanceSettings),
     [appearanceSettings, displayTheme, layoutTheme],
@@ -147,10 +147,10 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
       ...layout,
       content: {
         ...layout.content,
-        verticalPadding: Math.max(TITLEBAR_HEIGHT + 12, layout.content?.verticalPadding ?? 48),
+        verticalPadding: Math.max(titleBarHeight + 12, layout.content?.verticalPadding ?? 48),
       },
     };
-  }, [appearanceSettings, layoutTheme]);
+  }, [appearanceSettings, layoutTheme, titleBarHeight]);
   const measurementSignature = useMemo(
     () => getMarkdownMeasurementSignature(markdownLayout, markdownStyle),
     [markdownLayout, markdownStyle],
@@ -293,7 +293,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
 
   const content = (
     <View style={styles.root}>
-      {findVisible && <View style={styles.topChrome} className="flex-row items-center gap-3 border-b border-border bg-background px-4 py-2">
+      {findVisible && <View style={{ marginTop: titleBarHeight }} className="flex-row items-center gap-3 border-b border-border bg-background px-4 py-2">
         <TextInput accessibilityLabel="Find in document" autoFocus className="flex-1 text-foreground"
           value={findQuery} onChangeText={setFindQuery} onSubmitEditing={() => { void find(); }} placeholder="Find…" />
         <Pressable accessibilityRole="button" accessibilityLabel="Previous match" onPress={() => { void find(true); }}><Text className="text-foreground">Previous</Text></Pressable>
@@ -307,11 +307,10 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
         dangerColor={displayTheme.colors.danger}
         foregroundColor={displayTheme.colors.foreground}
         formattingToolbarMode={formattingToolbarMode}
-        insetTopChrome={!findVisible}
+        topChromeInset={findVisible ? 0 : titleBarHeight}
         isLinkPopoverOpen={isLinkPopoverOpen}
         markdownLayout={markdownLayout}
         markdownStyle={markdownStyle}
-        mutedColor={displayTheme.colors.muted}
         onApplyLink={applyLink}
         onCancelLink={() => setIsLinkPopoverOpen(false)}
         onInsertLink={insertLink}
@@ -319,7 +318,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
         session={session}
         theme={displayTheme.markdownDocument}
       />
-      <View pointerEvents="box-none" style={styles.titlebar}>
+      <View pointerEvents="box-none" style={[styles.titlebar, { height: titleBarHeight }]}>
         <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
           <GlassView glassStyle="clear" style={styles.glass} />
           <View style={[StyleSheet.absoluteFillObject, backgroundStyle, { opacity: 0.8 }]} />
@@ -332,7 +331,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
           onToggleSidebar={workspace.state.sidebarOpen ? undefined : workspace.toggleSidebar}
           sidebarOpen={workspace.state.sidebarOpen}
           paths={workspace.state.tabs.paths}
-          style={styles.tabBar}
+          titleBarHeight={titleBarHeight}
         />
       </View>
     </View>
@@ -356,6 +355,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
             onError={handleError}
             onOpenFile={path => { switchToFile(path).catch(handleError); }}
             onToggleSidebar={workspace.toggleSidebar}
+            titleBarHeight={titleBarHeight}
           />
         )}
         sidebarCollapsed={!workspace.state.sidebarOpen}
@@ -400,12 +400,11 @@ type MarkdownEditorSessionContentProps = {
   dangerColor: string;
   foregroundColor: string;
   formattingToolbarMode: MarkdownFormattingToolbarMode;
-  /** Insets banners and the top toolbar when the find bar is hidden. */
-  insetTopChrome: boolean;
+  /** Insets banners and the top toolbar below the title bar; 0 while the find bar shows. */
+  topChromeInset: number;
   isLinkPopoverOpen: boolean;
   markdownLayout: MarkdownDocumentProps["markdownLayout"];
   markdownStyle: MarkdownDocumentProps["markdownStyle"];
-  mutedColor: string;
   onApplyLink: (url: string) => void;
   onCancelLink: () => void;
   onInsertLink: () => void;
@@ -420,17 +419,16 @@ function MarkdownEditorSessionContent({
   dangerColor,
   foregroundColor,
   formattingToolbarMode,
-  insetTopChrome,
   isLinkPopoverOpen,
   markdownLayout,
   markdownStyle,
-  mutedColor,
   onApplyLink,
   onCancelLink,
   onInsertLink,
   renderSelectionToolbar,
   session,
   theme,
+  topChromeInset,
 }: MarkdownEditorSessionContentProps) {
   const filename = useValue(session.sessionState$.filename);
   const documentSource = useValue(session.sessionState$.documentSource);
@@ -443,19 +441,13 @@ function MarkdownEditorSessionContent({
   }
 
   return (
-    <View style={[styles.root, backgroundStyle, insetTopChrome && hasTopChrome && styles.topChromePadding]}>
+    <View style={[styles.root, backgroundStyle, hasTopChrome && { paddingTop: topChromeInset }]}>
       <MarkdownConflictBanner color={foregroundColor} session={session} />
       <MarkdownSessionError color={dangerColor} session={session} />
       {formattingToolbarMode === "top" ? (
         <MarkdownFormattingToolbar commandsRef={session.documentCommandsRef} onInsertLink={onInsertLink} />
       ) : null}
       <View style={styles.documentFrame}>
-        <MarkdownUntitledPlaceholder
-          foregroundColor={foregroundColor}
-          isUntitledDocument={isUntitledDocument}
-          mutedColor={mutedColor}
-          session={session}
-        />
         <MarkdownDocumentSurface
           preserveEditingOnBlur={isLinkPopoverOpen}
           autosaveEnabled={autosaveEnabled}
@@ -531,32 +523,6 @@ function MarkdownSessionError({
   return <Text style={[styles.error, { color }]}>{lastError}</Text>;
 }
 
-function MarkdownUntitledPlaceholder({
-  foregroundColor,
-  isUntitledDocument,
-  mutedColor,
-  session,
-}: {
-  foregroundColor: string;
-  isUntitledDocument: boolean;
-  mutedColor: string;
-  session: MarkdownDocumentSession;
-}) {
-  const isDirty = useValue(session.sessionState$.isDirty);
-  const lastError = useValue(session.sessionState$.lastError);
-
-  if (!isUntitledDocument || isDirty || lastError) {
-    return null;
-  }
-
-  return (
-    <View pointerEvents="none" style={styles.placeholder}>
-      <Text style={[styles.placeholderTitle, { color: foregroundColor }]}>Untitled</Text>
-      <Text style={[styles.placeholderText, { color: mutedColor }]}>Start writing</Text>
-    </View>
-  );
-}
-
 type MarkdownDocumentSurfaceProps = {
   preserveEditingOnBlur: boolean;
   autosaveEnabled: boolean;
@@ -624,13 +590,8 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: TITLEBAR_HEIGHT,
     justifyContent: "center",
     overflow: "hidden",
-  },
-  tabBar: {
-    // Fills the band, so the bar's hairline is the title bar's bottom edge.
-    height: TITLEBAR_HEIGHT,
   },
   glass: {
     // Keep the rounded glass edges outside the clipped titlebar band.
@@ -639,12 +600,6 @@ const styles = StyleSheet.create({
     bottom: -48,
     left: -48,
     right: -48,
-  },
-  topChrome: {
-    marginTop: TITLEBAR_HEIGHT,
-  },
-  topChromePadding: {
-    paddingTop: TITLEBAR_HEIGHT,
   },
   document: {
     flex: 1,
@@ -659,21 +614,6 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: 0,
     zIndex: 1,
-  },
-  placeholder: {
-    left: 40,
-    position: "absolute",
-    top: TITLEBAR_HEIGHT + 12,
-    zIndex: 1,
-  },
-  placeholderText: {
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  placeholderTitle: {
-    fontSize: 22,
-    fontWeight: "600",
-    lineHeight: 30,
   },
   error: {
     fontSize: 13,

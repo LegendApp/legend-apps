@@ -2,8 +2,6 @@ import { SFSymbol } from "@legendapp/spark/ui/symbol";
 import { useState } from "react";
 import { Pressable, StyleSheet } from "react-native";
 
-/** A unified toolbar's title bar; its traffic lights are centered in it. */
-export const titleBarHeight = 52;
 /** Clears the traffic lights, so the sidebar toggle keeps one position whether the sidebar shows or not. */
 export const trafficLightsWidth = 80;
 
@@ -26,7 +24,7 @@ export function SidebarToggle({ colors, label, onPress }: { colors: { foreground
       onPress={onPress}
       style={({ pressed }) => [styles.toggle, (hovered || pressed) && { backgroundColor: withAlpha(colors.foreground, pressed ? 0.12 : 0.07) }]}
     >
-      <SFSymbol color={colors.muted} name="sidebar.left" size={16} />
+      <SFSymbol color={colors.muted} name="sidebar.left" size={18} />
     </Pressable>
   );
 }

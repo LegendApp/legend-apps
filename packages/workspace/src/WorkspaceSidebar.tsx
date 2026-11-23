@@ -3,7 +3,7 @@ import { SFSymbol } from "@legendapp/spark/ui/symbol";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { flattenWorkspaceTree, getPathName, listWorkspaceDirectory, type DirectoryListing, type WorkspaceTreeRow } from "./fileTree";
-import { SidebarToggle, titleBarHeight, trafficLightsWidth, withAlpha } from "./titleBar";
+import { SidebarToggle, trafficLightsWidth, withAlpha } from "./titleBar";
 
 /** Concrete colors: SF Symbols do not take PlatformColor. `primary` tints folder symbols. */
 export type WorkspaceColors = { border: string; foreground: string; muted: string; primary?: string; selection: string };
@@ -22,12 +22,15 @@ export type WorkspaceSidebarProps = {
   onOpenFile: (path: string) => void;
   /** Shows the sidebar toggle beside the traffic lights, where the title bar's toggle sits while the sidebar is hidden. */
   onToggleSidebar?: () => void;
+  /** The chrome theme's title bar height; the list starts below it. */
+  titleBarHeight: number;
 };
 
-const rowHeight = 26;
+const rowHeight = 24;
+const sectionHeight = 26;
 const indentation = 16;
 
-export function WorkspaceSidebar({ activePath, colors, files, folders, isDocumentPath, onAddFile, onAddFolder, onError, onOpenFile, onToggleSidebar }: WorkspaceSidebarProps) {
+export function WorkspaceSidebar({ activePath, colors, files, folders, isDocumentPath, onAddFile, onAddFolder, onError, onOpenFile, onToggleSidebar, titleBarHeight }: WorkspaceSidebarProps) {
   const [listings, setListings] = useState<ReadonlyMap<string, DirectoryListing>>(new Map());
   // Root folders start expanded and other directories collapsed; a toggle flips that.
   const [toggled, setToggled] = useState<ReadonlySet<string>>(new Set());
@@ -60,7 +63,7 @@ export function WorkspaceSidebar({ activePath, colors, files, folders, isDocumen
 
   return (
     <View style={styles.root}>
-      <View style={styles.header}>
+      <View style={[styles.header, { height: titleBarHeight }]}>
         {onToggleSidebar ? <SidebarToggle colors={colors} label="Hide Sidebar" onPress={onToggleSidebar} /> : null}
       </View>
       <Sidebar
@@ -72,7 +75,7 @@ export function WorkspaceSidebar({ activePath, colors, files, folders, isDocumen
         {rows.map(row => {
           const header = row.depth === 0 && row.isDirectory && folders.includes(row.path);
           return (
-            <SidebarItem id={row.path} key={row.path} rowHeight={header ? 28 : rowHeight} selectable={!row.isDirectory && openable(row)}>
+            <SidebarItem id={row.path} key={row.path} rowHeight={header ? sectionHeight : rowHeight} selectable={!row.isDirectory && openable(row)}>
               {header
                 ? <SectionHeader colors={colors} row={row} onPress={() => toggle(row.path)} />
                 : <TreeRow colors={colors} openable={openable(row)} row={row} onToggle={() => toggle(row.path)} />}
@@ -124,7 +127,7 @@ function TreeRow({ colors, onToggle, openable, row }: { colors: WorkspaceColors;
     </>
   );
   // Roots of a folder section sit at depth 1; loose files sit at depth 0 beside them.
-  const style = [styles.row, { paddingLeft: 4 + Math.max(0, row.depth - 1) * indentation }];
+  const style = [styles.row, { paddingLeft: Math.max(0, row.depth - 1) * indentation }];
   return row.isDirectory
     ? <Pressable accessibilityLabel={row.name} accessibilityRole="button" accessibilityState={{ expanded: row.expanded }} onPress={onToggle} style={style}>{content}</Pressable>
     : <View accessibilityLabel={row.name} accessibilityState={{ disabled: !openable }} accessible style={style}>{content}</View>;
@@ -151,14 +154,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     height: rowHeight,
     justifyContent: "center",
-    width: 16,
+    width: 14,
   },
   footer: {
     flexDirection: "row",
     gap: 2,
-    paddingBottom: 8,
-    paddingHorizontal: 10,
-    paddingTop: 4,
+    paddingBottom: 6,
+    paddingHorizontal: 8,
+    paddingTop: 2,
   },
   footerButton: {
     alignItems: "center",
@@ -169,7 +172,6 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: "row",
-    height: titleBarHeight,
     alignItems: "center",
     paddingLeft: trafficLightsWidth,
   },
@@ -177,8 +179,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     height: rowHeight,
     justifyContent: "center",
-    marginRight: 6,
-    width: 18,
+    marginRight: 5,
+    width: 16,
   },
   list: {
     flex: 1,
@@ -199,11 +201,11 @@ const styles = StyleSheet.create({
   section: {
     alignItems: "center",
     flexDirection: "row",
-    height: 28,
+    height: sectionHeight,
     justifyContent: "space-between",
-    paddingLeft: 8,
-    paddingRight: 10,
-    paddingTop: 6,
+    paddingLeft: 6,
+    paddingRight: 8,
+    paddingTop: 4,
   },
   sectionTitle: {
     flexShrink: 1,

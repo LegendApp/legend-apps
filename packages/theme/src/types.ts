@@ -69,6 +69,12 @@ export type LegendDisplayTheme = LegendDisplayThemeFile & {
   markdownStyle: MarkdownStyle;
 };
 
+/** Window chrome metrics, independent of display and layout themes. */
+export type LegendChromeTheme = {
+  /** Height of the title bar band, in points. */
+  titleBarHeight: number;
+};
+
 export type MarkdownLayoutThemeName = "default" | (string & {});
 
 export type MarkdownLayoutThemeTypography = {

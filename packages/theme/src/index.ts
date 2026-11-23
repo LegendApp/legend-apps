@@ -2,6 +2,7 @@ import { Appearance, type ColorSchemeName, useColorScheme } from "react-native";
 
 import { generatedDisplayThemeFiles, generatedMarkdownLayoutThemeFiles } from "./generatedThemes";
 import type {
+  LegendChromeTheme,
   LegendDisplayTheme,
   LegendDisplayThemeAppearance,
   LegendDisplayThemeFonts,
@@ -19,6 +20,7 @@ export {
 } from "./appTheme";
 
 export type {
+  LegendChromeTheme,
   LegendDisplayTheme,
   LegendDisplayThemeAppearance,
   LegendDisplayThemeBackground,
@@ -593,6 +595,8 @@ export function loadUserMarkdownLayoutThemeFilesSync({
 
   return { directoryUri: directory.uri, issues, themes };
 }
+
+export const defaultLegendChromeTheme: LegendChromeTheme = { titleBarHeight: 36 };
 
 export function getLegendDisplayTheme(themeName: string | null | undefined): LegendDisplayTheme {
   return legendDisplayThemeMap.get((themeName ?? "") as LegendDisplayThemeName) ?? legendDisplayThemeMap.get("light") as LegendDisplayTheme;

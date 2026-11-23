@@ -11,7 +11,7 @@ const paths = ["/x/a.md", "/x/b.md", "/x/c.md"];
 describe("DocumentTabBar", () => {
   let renderer: ReactTestRenderer;
   const render = (props: Partial<React.ComponentProps<typeof DocumentTabBar>> = {}) => act(async () => {
-    renderer = create(<DocumentTabBar activePath="/x/b.md" colors={colors} onClose={jest.fn()} onSelect={jest.fn()} paths={paths} sidebarOpen {...props} />);
+    renderer = create(<DocumentTabBar activePath="/x/b.md" colors={colors} onClose={jest.fn()} onSelect={jest.fn()} paths={paths} sidebarOpen titleBarHeight={36} {...props} />);
   });
   const tabs = () => renderer.root.findAll(node => node.type === ("Pressable" as never) && node.props.accessibilityRole === "tab");
   const flat = (style: unknown): Record<string, unknown> => Array.isArray(style) ? Object.assign({}, ...style.map(flat)) : (style && typeof style === "object" ? style as Record<string, unknown> : {});
@@ -28,6 +28,11 @@ describe("DocumentTabBar", () => {
     expect(tabs().map(tab => flat(tab.props.style).width)).toEqual([115, 115, 115]);
     await layout(renderer.root.findByType("View" as never), 200);
     expect(flat(tabs()[0].props.style).width).toBe(110);
+  });
+
+  it("fills the chrome theme's title bar height", async () => {
+    await render({ titleBarHeight: 44 });
+    expect(flat(renderer.root.findByType("View" as never).props.style).height).toBe(44);
   });
 
   it("marks the active tab, shows its close button only, and separates inactive neighbours", async () => {
