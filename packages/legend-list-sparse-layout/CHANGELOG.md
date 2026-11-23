@@ -434,4 +434,4 @@ Initial release! Major changes if you're coming from a beta version:
 
 - Item hooks like `useRecyclingState` are no longer render props, but can be imported directly from `@legendapp/list`.
 
-<!-- sparse-k14-390r-32c462af -->
+<!-- sparse-k14-390r3-fc80ab10 -->

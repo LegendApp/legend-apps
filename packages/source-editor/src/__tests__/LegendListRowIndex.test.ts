@@ -5,7 +5,7 @@ import { runInNewContext } from "node:vm";
 // Exercise the shipped container's memoization without mounting a ScrollView.
 // Retained source rows deliberately keep their object identity after a splice.
 test.each(["react-native.js", "react-native.mjs", "react-native.web.js", "react-native.web.mjs", "react.js", "react.mjs"])(
-  "%s refreshes retained rows when their assigned index changes", (bundle) => {
+  "%s refreshes retained rows on index changes and data revisions", (bundle) => {
     const source = readFileSync(resolve(__dirname, "../../../legend-list-sparse-layout", bundle), "utf8");
     const start = source.indexOf("var Container = typedMemo(");
     const end = source.indexOf("// src/components/ContainerSlot", start);
@@ -55,12 +55,9 @@ test.each(["react-native.js", "react-native.mjs", "react-native.web.js", "react-
     expect(getRenderedItem).toHaveBeenCalledTimes(1);
     expect(subscriptions.has("containerDataVersion0")).toBe(true);
     signals.set("containerItemIndex0", 4); // insert a line before the retained row
-    // The current list publishes moved retained rows through its data revision.
-    signals.set("containerDataVersion0", 1);
     draw();
     expect(getRenderedItem).toHaveBeenCalledTimes(2);
-    signals.set("containerItemIndex0", 3); // undo the insertion
-    signals.set("containerDataVersion0", 2);
+    signals.set("containerDataVersion0", 1);
     draw();
     expect(getRenderedItem).toHaveBeenCalledTimes(3);
   },

@@ -1,4 +1,4 @@
-/* sparse-k14-390r-32c462af */
+/* sparse-k14-390r3-fc80ab10 */
 import * as React3 from 'react';
 import { forwardRef, useReducer, useEffect, createContext, useRef, useMemo, useCallback, useImperativeHandle, useLayoutEffect, useState, useContext } from 'react';
 import { useSyncExternalStore } from 'use-sync-external-store/shim';
@@ -7724,6 +7724,9 @@ function reconcileLayoutStorePinnedIndices(ctx, options) {
       const start = Math.max(0, Math.min(startIndex, endIndex));
       const end = Math.min(options.dataLength - 1, Math.max(startIndex, endIndex));
       if (start <= end) {
+        for (let index = start; index <= end; index++) {
+          getId(ctx.state, index);
+        }
         didMaterializeFixedSizes = materializeFixedLayoutStoreRange(ctx, start, end) || didMaterializeFixedSizes;
         materializeLayoutStoreRange(ctx, start, end);
       }
@@ -8387,6 +8390,14 @@ function calculateItemsInView(ctx, params = {}) {
       var _a4;
       return alwaysRenderIndicesSet.has(index) || hasScrollTargetPinnedRange && index >= scrollTargetPinnedStart && index <= scrollTargetPinnedEnd || !!remeasureRows && remeasureRows.get((_a4 = state.idCache[index]) != null ? _a4 : getId(state, index)) === index;
     };
+    if (didMeasureEstimatedLayout && startBuffered !== null && endBuffered !== null) {
+      for (let i = 0; i < numContainers; i++) {
+        const itemIndex = indexByKey.get(peek$(ctx, `containerItemKey${i}`));
+        if (itemIndex !== void 0 && (itemIndex < startBuffered || itemIndex > endBuffered) && !isPinnedRenderIndex(itemIndex) && !state.stickyContainerPool.has(i)) {
+          pendingRemoval.push(i);
+        }
+      }
+    }
     if (startBuffered !== null && endBuffered !== null || alwaysRenderIndicesArr.length || hasScrollTargetPinnedRange || remeasureRows) {
       const allocationStart = startBuffered != null ? startBuffered : 0;
       const allocationEnd = endBuffered != null ? endBuffered : -1;
@@ -13331,7 +13342,8 @@ var ScrollAdjustHandler = class {
             clampToContentContainerMinSize: !scrollTarget || scrollTarget.clampToContentContainerMinSize
           });
         }
-        const adjustment = targetScroll - getObservedScrollOffset(this.ctx);
+        const observed = getObservedScrollOffset(this.ctx);
+        const adjustment = targetScroll - observed;
         if (Math.abs(adjustment) > 0.1 || Math.abs(pending) > 0.1) {
           recordScrollWrite(state, "credit", "relative", adjustment);
           this.applyAdjust(adjustment);

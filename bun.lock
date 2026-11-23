@@ -553,7 +553,7 @@
     },
     "packages/legend-list-sparse-layout": {
       "name": "@legendapp/list",
-      "version": "3.9.0-sparse-k14.32c462af",
+      "version": "3.9.0-sparse-k14.fc80ab10",
       "dependencies": {
         "use-sync-external-store": "^1.5.0",
       },
@@ -1044,7 +1044,7 @@
     "uniwind": "1.6.3",
   },
   "catalog": {
-    "@legendapp/list": "3.9.0-sparse-k14.32c462af",
+    "@legendapp/list": "3.9.0-sparse-k14.fc80ab10",
     "@legendapp/motion": "^2.5.3",
     "@legendapp/spark": "0.0.7",
     "@legendapp/state": "^3.0.0-beta.42",

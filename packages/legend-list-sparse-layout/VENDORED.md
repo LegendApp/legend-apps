@@ -7,11 +7,12 @@ the apps. JavaScript and declarations are copied directly from the source build.
 
 - Repository: `https://github.com/LegendApp/legend-list`
 - Branch: `jmeistrich/sparse-k14-on-380-merge-20261123`
-- Commit: `32c462afa0f7cb4631ca9b0ec82d32d735dda892`
+- Commit: `fc80ab102d5074a0283b5958862d50df3444b07f`
 - Base: released Legend List 3.9.0 (`8edc1a6c5778b71d40b78c346efaff70dc7ed604`)
 - Built: 2026-11-23
-- Runtime marker: `sparse-k14-390r-32c462af` on line 1 of every JavaScript entry
-- Tarball SHA-256: `e3d9e1596c73f177bb90e9c960750894a33972be0686512a4bb126c4f6e725b8`
+- Build marker: `sparse-k14-390r3-fc80ab10` on line 1 of every JavaScript entry
+  and in `LICENSE`, `README.md`, and `CHANGELOG.md`
+- Tarball SHA-256: `c6f14f767e146b95c8cc35b5d65a9749c9933d14770163b3bbfddaf1affca985`
 
 `showImmediately` defaults to false. Sparse item callbacks allow undefined
 items when the source has not loaded the corresponding index.

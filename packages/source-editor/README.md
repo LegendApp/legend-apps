@@ -63,8 +63,8 @@ Implemented foundations:
   UTF-8 scalars and CRLF boundaries are preserved; BOMs are supported.
 - A compact LegendList ID-run index receiving versioned row transactions, with
   no full-text bridge payload or per-file-line JavaScript object allocation.
-  Row objects are created on demand in a bounded cache. The repo's pinned
-  `3.3.5-sparse-layout.67a3cbc9` supports this data-source API.
+  Row objects are created on demand in a bounded cache. The vendored Legend
+  List snapshot supplies this data-source API.
 - Shared native line layout with wrapping, grapheme-aware hit testing, caret
   rectangles, and visible-range drawing. Bounded typesetter chunks avoid the
   observed quadratic behavior when wrapping a single very long line.
