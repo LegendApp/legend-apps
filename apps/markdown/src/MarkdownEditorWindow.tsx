@@ -267,7 +267,6 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
     onSaveDocument: session.saveCurrentDocument,
     onSaveDocumentAs: session.saveCurrentDocumentAs,
     onSaveWorkspace: workspace.saveWorkspace,
-    onToggleSidebar: workspace.toggleSidebar,
     sessionState$: session.sessionState$,
     windowId,
   });
@@ -381,6 +380,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
             titleBarHeight={titleBarHeight}
           />
         )}
+        onSidebarCollapsedChange={collapsed => workspace.setSidebarOpen(!collapsed)}
         sidebarCollapsed={!workspace.state.sidebarOpen}
         sidebarWidth={220}
         style={styles.root}

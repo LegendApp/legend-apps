@@ -33,7 +33,7 @@ jest.mock("@legendapp/spark/windows", () => ({
 }));
 jest.mock("@legendapp/spark/ui/split-view", () => {
     const React = require("react");
-    return { SidebarSplitView: ({ content, sidebar, sidebarCollapsed }: Record<string, unknown>) => React.createElement("SplitView", { sidebarCollapsed }, sidebar, content) };
+    return { SidebarSplitView: ({ content, onSidebarCollapsedChange, sidebar, sidebarCollapsed }: Record<string, unknown>) => React.createElement("SplitView", { onSidebarCollapsedChange, sidebarCollapsed }, sidebar, content) };
 });
 jest.mock("@legend-apps/source-editor", () => {
     const React = require("react");
@@ -293,7 +293,8 @@ describe("Code default editor", () => {
         await act(async () => { toggleSidebarShortcut({} as any); });
         expect(renderer.root.findByType("SplitView" as never).props.sidebarCollapsed).toBe(false);
         await act(async () => { toggleSidebarShortcut({} as any); });
-        await act(async () => menu("toggleSidebar"));
+        // View › Show Sidebar collapses the native split view itself; the window follows it.
+        await act(async () => renderer.root.findByType("SplitView" as never).props.onSidebarCollapsedChange(false));
         expect(renderer.root.findByType("SplitView" as never).props.sidebarCollapsed).toBe(false);
     });
     it("keeps the empty state usable when the dialog cancels or fails, then opens a file", async () => {

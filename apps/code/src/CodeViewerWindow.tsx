@@ -114,7 +114,6 @@ export function CodeViewerWindow({ files, folders, launchArguments, preparedDocu
   useEffect(() => codeViewerWindows.register(windowId, {
     command: (itemId) => {
       if (itemId === "automaticPairs") codeAutomaticPairs$.set(value => !value);
-      if (itemId === "toggleSidebar") workspace.toggleSidebar();
       if (itemId === "saveWorkspace") workspace.saveWorkspace().catch(reportError);
       if (editorCommands.includes(itemId))
         void (activeKey ? editors.current.get(activeKey) : undefined)?.command(itemId).then(completed => { if (completed) setError(null); }).catch(reportError);
@@ -220,6 +219,7 @@ export function CodeViewerWindow({ files, folders, launchArguments, preparedDocu
             titleBarHeight={defaultLegendChromeTheme.titleBarHeight}
           />
         )}
+        onSidebarCollapsedChange={collapsed => workspace.setSidebarOpen(!collapsed)}
         sidebarCollapsed={!sidebarOpen}
         style={styles.root}
       />

@@ -93,7 +93,6 @@ function createMarkdownMenuHandlers(controller: DocumentAppController): MenuHand
     save: dispatchMarkdownEditorMenuAction,
     saveAs: dispatchMarkdownEditorMenuAction,
     saveWorkspace: dispatchMarkdownEditorMenuAction,
-    toggleSidebar: dispatchMarkdownEditorMenuAction,
     revealInFinder: dispatchMarkdownEditorMenuAction,
     undo: dispatchMarkdownEditorMenuAction,
     redo: dispatchMarkdownEditorMenuAction,
