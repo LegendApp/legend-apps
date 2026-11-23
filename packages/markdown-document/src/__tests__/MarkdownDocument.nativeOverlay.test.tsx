@@ -358,6 +358,39 @@ describe("native document text selection", () => {
     await act(async () => renderer.unmount());
   });
 
+  it("sizes an active code row from the editor even when the hidden preview is taller", async () => {
+    const blockId = "d1:b1";
+    const markdown = "```js\nconst selected = true;\n```";
+    const adapter = new NativeOverlayAdapter(snapshot([
+      block("d1:b0", 0, "Before"), { ...block(blockId, 1, markdown), type: "codeBlock" },
+    ]));
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(<MarkdownDocument adapter={adapter} filename="test.md"
+        savePolicy={{ autosave: false }} />);
+    });
+    const frame = { blockId, markdown, height: 100, rowHeight: 120, width: 560, x: 40, y: 80 };
+    const rowStyle = () => flattenStyle(activationView(renderer, blockId).props.style);
+    await act(async () => nativeHost(renderer).props.onBeginEditing({ nativeEvent: {
+      ...frame, height: 0, rowHeight: 20, width: 0,
+    } }));
+    expect(rowStyle().height).toBeUndefined();
+    await act(async () => nativeHost(renderer).props.onEditorFrameChange({ nativeEvent: {
+      ...frame, height: 66, rowHeight: 86,
+    } }));
+    expect(rowStyle().height).toBe(86);
+
+    await act(async () => nativeHost(renderer).props.onEditorFrameChange({ nativeEvent: {
+      ...frame, height: 110, rowHeight: 130,
+    } }));
+    expect(rowStyle().height).toBe(130);
+
+    await act(async () => editorInput(renderer).props.onBlur());
+    await flushPromises();
+    expect(rowStyle().height).toBeUndefined();
+    await act(async () => renderer.unmount());
+  });
+
   it("focuses the code body after a native Enter splits before its opening fence", async () => {
     const markdown = "```ts\nconst selected = true;\n```";
     const adapter = new NativeOverlayAdapter(snapshot([{ ...block("code", 0, markdown), type: "codeBlock" }]));

@@ -316,7 +316,11 @@ export const MarkdownBlockRow = memo(function MarkdownBlockRow({
   const rowPaddingTop = typeof rowStyle.paddingTop === "number" ? rowStyle.paddingTop : 0;
   const rowPaddingBottom = typeof rowStyle.paddingBottom === "number" ? rowStyle.paddingBottom : 0;
   const activeEditorFrame = activeBlock?.editorFrame;
-  const activeEditorRowStyle = activeEditorFrame ? { minHeight: activeEditorFrame.rowHeight } : null;
+  const activeEditorRowStyle = activeEditorFrame
+    ? layoutBlock.type === "codeBlock" && activeEditorFrame.height > 0
+      ? { height: activeEditorFrame.rowHeight }
+      : { minHeight: activeEditorFrame.rowHeight }
+    : null;
   const commentAnchor = rowState?.commentAnchor ?? null;
   const commentBubble = commentAnchor && renderCommentBubble ? renderCommentBubble(commentAnchor) : null;
   const selectionOverlay = isBlockSelected ? (
