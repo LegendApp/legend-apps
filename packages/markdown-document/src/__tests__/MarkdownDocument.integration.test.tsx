@@ -3884,9 +3884,9 @@ describe("MarkdownDocument mounted editing", () => {
     expect(renderer.root.findAll((node) => (
       String(node.type) === "View" && node.props.testID === "markdown-selection-toolbar"
     ))).toHaveLength(1);
-    expect(renderer.root.findByProps({ testID: "legend-list-footer" }).props.style).toEqual(
-      expect.objectContaining({ position: "absolute" }),
-    );
+    const footerStyle = renderer.root.findByProps({ testID: "legend-list-footer" }).props.style;
+    expect(footerStyle).toEqual(expect.objectContaining({ bottom: 0, pointerEvents: "box-none", position: "absolute", top: 0 }));
+    expect(footerStyle).not.toHaveProperty("height");
     expect(onError).not.toHaveBeenCalled();
   });
 

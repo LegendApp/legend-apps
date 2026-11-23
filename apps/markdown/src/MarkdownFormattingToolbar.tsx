@@ -140,6 +140,8 @@ const styles = StyleSheet.create({
   },
   toolbar: {
     borderRadius: 8,
+    // React Native's types omit macOS cursor values; without this the text underneath shows its I-beam.
+    cursor: "default" as ViewStyle["cursor"],
     maxWidth: "100%",
   },
   textIcon: {

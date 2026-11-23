@@ -104,19 +104,18 @@ export const markdownDocumentStyles = StyleSheet.create({
   rowContent: {
     width: "100%",
   },
+  // AppKit clips cursor rects and tracking areas to ancestor bounds, so the toolbar's footer spans the list.
   selectionToolbarFooter: {
-    height: 0,
+    bottom: 0,
     left: 0,
-    overflow: "visible",
+    pointerEvents: "box-none",
     position: "absolute",
     right: 0,
     top: 0,
     zIndex: 20,
   },
   selectionToolbarFooterContent: {
-    height: 0,
-    overflow: "visible",
-    position: "relative",
+    flex: 1,
   },
   statusText: {
     color: "#6b7280",
