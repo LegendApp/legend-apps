@@ -1,3 +1,4 @@
+/* sparse-k14-390r-32c462af */
 'use strict';
 
 var reactNative = require('react-native');

@@ -27,7 +27,7 @@ function createDiffWindowsNavigator() {
         [diffSettingsWindowModuleName]: {
             id: diffSettingsWindowIdentifier,
             component: SettingsWindow,
-            options: createSettingsWindowOptions({ macos: { titleBar: { titleVisibility: "hidden" } } }),
+            options: createSettingsWindowOptions(),
         },
     } satisfies WindowsConfig);
 }

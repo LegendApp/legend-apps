@@ -1,3 +1,4 @@
+/* sparse-k14-390r-32c462af */
 'use strict';
 
 var React = require('react');
@@ -281,7 +282,14 @@ var SectionList = typedMemo(
       ]
     );
     const scrollToLocation = React__namespace.useCallback(
-      ({ sectionIndex, itemIndex, viewOffset, viewPosition, animated }) => {
+      ({
+        sectionIndex,
+        itemIndex,
+        viewOffset,
+        viewPosition,
+        viewPositionFallback,
+        animated
+      }) => {
         var _a, _b, _c;
         const meta = sectionMeta[sectionIndex];
         if (!meta) return;
@@ -291,7 +299,8 @@ var SectionList = typedMemo(
           animated,
           index: target,
           viewOffset,
-          viewPosition
+          viewPosition,
+          viewPositionFallback
         });
       },
       [sectionMeta]

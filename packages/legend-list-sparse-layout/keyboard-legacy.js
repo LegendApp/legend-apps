@@ -1,3 +1,4 @@
+/* sparse-k14-390r-32c462af */
 'use strict';
 
 var React = require('react');
@@ -433,8 +434,9 @@ var KeyboardAvoidingLegendList = typedForwardRef(function KeyboardAvoidingLegend
     const minSizeStyle = horizontal ? { minWidth: alignItemsAtEndMinSize } : { minHeight: alignItemsAtEndMinSize };
     return contentContainerStyleProp ? [contentContainerStyleProp, minSizeStyle] : minSizeStyle;
   }, [alignItemsAtEndMinSize, contentContainerStyleProp, horizontal]);
+  const AnimatedLegendListInternal = reanimated.AnimatedLegendList;
   return /* @__PURE__ */ React__namespace.createElement(
-    reanimated.AnimatedLegendList,
+    AnimatedLegendListInternal,
     {
       ...rest,
       animatedProps,

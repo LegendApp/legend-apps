@@ -1,3 +1,4 @@
+/* sparse-k14-390r-32c462af */
 import * as React from 'react';
 import { useRef, useState, useMemo, useCallback, useEffect } from 'react';
 import { StyleSheet, Platform } from 'react-native';
@@ -412,8 +413,9 @@ var KeyboardAvoidingLegendList = typedForwardRef(function KeyboardAvoidingLegend
     const minSizeStyle = horizontal ? { minWidth: alignItemsAtEndMinSize } : { minHeight: alignItemsAtEndMinSize };
     return contentContainerStyleProp ? [contentContainerStyleProp, minSizeStyle] : minSizeStyle;
   }, [alignItemsAtEndMinSize, contentContainerStyleProp, horizontal]);
+  const AnimatedLegendListInternal = AnimatedLegendList;
   return /* @__PURE__ */ React.createElement(
-    AnimatedLegendList,
+    AnimatedLegendListInternal,
     {
       ...rest,
       animatedProps,

@@ -1,3 +1,82 @@
+## 3.9.0
+
+- Feat: `showImmediately` renders rows on the first commit from an estimated viewport, before layout. It is opt-in; wrong size estimates or an initial scroll target can shift the first frame.
+- Fix: On web, lists following the end stay at the end while rows are measured, including after a large content shrink.
+- Fix: Changing `numColumns` takes effect when the list renders again before layout, as in Strict Mode.
+
+## 3.8.0
+
+- Feat: `maintainVisibleContentPosition.autoscrollToTopThreshold` animates the list to the start after a prepend when the previous offset is at or within the threshold.
+- Fix: In `KeyboardAwareLegendList`, collapsing or deleting a row no longer drops the anchored message or detaches the footer from the rows while the list shrinks, with the keyboard open or closed. #595
+- Fix: Capped chats that trim old rows from the front keep following the end as new rows arrive. #462
+
+## 3.7.3
+
+- Fix: scrollToOffset and scrollToIndex land at their target even when rows above are measured during the scroll.
+- Fix: Pinned sticky headers report their pinned position to measure() after scrolling stops.
+- Fix: While following the end on native, a row re-measure or a taller viewport now lands at the new end in the same pass instead of a frame later.
+- Fix: Ignore NaN item measurements from Fabric measure(), which could loop until "Maximum update depth exceeded".
+- Fix: On web, rows inside a CSS-transformed (scaled) ancestor are measured at their layout size, so they no longer keep a scaled size and leave gaps.
+- Fix: With minimumViewTime, a row becomes viewable only after it has stayed visible for the full time itself. Leaving resets its dwell, and a callback or config replaced during a pending dwell takes effect without another scroll.
+- Fix: On web, pressing Home keeps the list at the top when rows are measured during or after the browser's scroll.
+- Fix: Native sticky headers no longer add a JS listener to the scroll value, whose removal could race iOS native cleanup when sticky headers, data or the list unmount.
+
+## 3.7.2
+
+- Fix: Preserve web row order and focus, and keep pinned rows updated.
+- Fix: End-following, sticky offsets, and edge callbacks after geometry or data changes.
+- Fix: Preserve anchors through prepends and prevent duplicate pending edge requests.
+- Fix: Keep wheel scrolling responsive.
+- Fix: Prevent native geometry corrections from inventing velocity or reversing the render buffer.
+- Perf: Reduce rendering work through directional buffers, reused size estimates, and faster initial indexing.
+
+## 3.7.1
+
+- Fix: Loading callbacks respond reliably to data changes and new scroll gestures.
+- Fix: Lists preserve scroll positions as rows, insets, and viewport sizes change.
+- Fix: iOS lists with `contentInset.top` now rest at and measure from the inset start.
+- Fix: Keyboard dismissal and interrupted scrolling no longer cause jumps or doubled movement.
+- Fix: Rows stay correctly positioned after items are inserted, removed, or reordered.
+- Perf: Lists prepare more rows before the first scroll.
+
+## 3.7.0
+
+- Feat: `LegendListRef` gains `cancelScroll`, `scrollToKey`, `anchorVisibleContent`; state gains `distanceFromEnd`, `isFollowingEnd`.
+- Feat: Expose end-following state and allow following only newly appended items.
+- Feat: `onUserScroll` reports user scroll gestures.
+- Fix: Scroll promises resolve reliably when scrolling finishes or is interrupted.
+- Fix: Lists follow new content smoothly and respect users scrolling away from the end. #563 #568
+- Fix: Scrolling to the end while closing the keyboard moves smoothly in one motion. #557
+- Fix: Row sizing and layout changes preserve visible content and improve viewability accuracy.
+- Perf: Recycled lists reuse rows more efficiently and process appended data faster.
+
+## 3.6.0
+
+- Feat: Add `viewPositionFallback` to align oversized items to the start or end of the viewport during initial or programmatic scrolling, while keeping `viewPosition` alignment for items that fit.
+
+## 3.5.0
+
+- Feat: Add `scrollElement` so web lists can share an ancestor element's scrollbar
+- Fix: Stopping scrolling keeps rows prepared in the last scroll direction instead of shifting the render buffer backward.
+- Perf: Single-column lists do less layout work during initial rendering and scrolling when item sizes and data are unchanged.
+
+## 3.4.0
+
+- Feat: Add `onReady`, called after each initial placement and scroll cycle completes, including cycles restarted by a `dataKey` change.
+- Fix: End-following and animated programmatic scrolling now stay aligned through footer, viewport, and native layout changes, while user dragging cancels queued follow requests.
+- Fix: `onStartReached` and `onEndReached` callbacks now fire reliably after layout and dataset resets, including short lists and gestures that cross a threshold over multiple events.
+- Fix: Numeric `initialScrollIndex` values that target the last row now include the footer when opening at the end.
+- Perf: Fast scrolling now prepares rows in the direction you are moving, including upward and end-aligned scrolling, so the next content is ready sooner.
+
+## 3.3.11
+
+- Fix: `scrollToEnd` and `maintainScrollAtEnd` keep reaching the end as content changes, while scrolling away or requesting another position cancels automatic following.
+- Fix: Switching datasets cancels old scroll requests so they cannot override the new dataset's initial position.
+- Fix: `anchoredEndSpace` shrinks excess blank space as rows are measured instead of waiting for every remaining row.
+- Fix: Resizing the chat composer preserves the combined keyboard and composer spacing.
+- Fix: Web scroll adjustments no longer leave extra padding at the end of the list.
+- Fix: Web row reordering happens sooner when idle and preserves focus, animations, and embedded content state in browsers that support state-preserving moves.
+
 ## 3.3.10
 
 - Fix: Changing `dataKey` no longer loses the new dataset's initial scroll position when React retries a render.
@@ -354,3 +433,5 @@ Major version release with significant performance improvements and architectura
 Initial release! Major changes if you're coming from a beta version:
 
 - Item hooks like `useRecyclingState` are no longer render props, but can be imported directly from `@legendapp/list`.
+
+<!-- sparse-k14-390r-32c462af -->

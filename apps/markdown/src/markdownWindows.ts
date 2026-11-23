@@ -57,7 +57,7 @@ function createMarkdownWindowsNavigator() {
         [settingsWindowModuleName]: {
             component: SettingsWindow,
             id: settingsWindowIdentifier,
-            options: createSettingsWindowOptions({ macos: { titleBar: { titleVisibility: "hidden" } } }),
+            options: createSettingsWindowOptions(),
         },
     } satisfies WindowsConfig;
     return createWindowsNavigator(markdownWindowsConfig);

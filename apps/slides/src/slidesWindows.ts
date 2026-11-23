@@ -101,7 +101,6 @@ const windows = {
         loadComponent: () => import("./SettingsWindow").then((module) => module.SettingsWindow),
         options: createSettingsWindowOptions({
             appearance: "dark",
-            macos: { titleBar: { titleVisibility: "hidden" } },
         }),
     },
 } satisfies WindowsConfig;

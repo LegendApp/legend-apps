@@ -15,6 +15,7 @@ test.each(["react-native.js", "react-native.mjs", "react-native.web.js", "react-
     const slots: { deps: unknown[]; value: unknown }[] = [];
     const react = {
       useRef: () => ({ current: null }),
+      useLayoutEffect: (commit: () => unknown) => { commit(); },
       useMemo: (compute: () => unknown, deps: unknown[]) => {
         const index = cursor++;
         const previous = slots[index];
@@ -34,6 +35,7 @@ test.each(["react-native.js", "react-native.mjs", "react-native.web.js", "react-
       React: react, React2: react, React3: react, React2__namespace: react, React3__namespace: react, React__namespace: react,
       typedMemo: (value: unknown) => value,
       useStateContext: () => ({ state: { props: {} }, viewRefs: new Map() }),
+      useRenderStateContext: (ctx: unknown) => ctx,
       isHorizontalRTL: () => false,
       useArr$: (keys: string[]) => keys.map((key) => { subscriptions.add(key); return signals.get(key); }),
       useContainerMeasurement: () => ({}),
@@ -41,7 +43,11 @@ test.each(["react-native.js", "react-native.mjs", "react-native.web.js", "react-
       PositionView: null, PositionViewSticky: null, ContextContainer: { Provider: null },
     };
     const render = runInNewContext(`${source.slice(start, end)}\nContainer`, context);
-    const getRenderedItem = jest.fn(() => ({ renderedItem: signals.get("containerItemIndex0") }));
+    const getRenderedItem = jest.fn((_key, _id, onReadIndex: () => void) => {
+      onReadIndex();
+      const index = signals.get("containerItemIndex0");
+      return { index, renderedItem: index };
+    });
     const props = { id: 0, itemKey: "four", recycleItems: true, getRenderedItem };
     const draw = () => { cursor = 0; render(props); };
     draw();

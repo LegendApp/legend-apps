@@ -26,8 +26,10 @@ Beyond standard `FlatList` capabilities:
 *   `recycleItems`: (boolean) Toggles item component recycling.
     *   `true`: Reuses item components for optimal performance. Be cautious if your item components contain local state, as it might be reused unexpectedly.
     *   `false` (default): Creates new item components every time. Less performant but safer if items have complex internal state.
-*   `maintainScrollAtEnd`: Keeps the list pinned to the tail when the user is already near the end (within `maintainScrollAtEndThreshold * screen height`). Pass `true` for all triggers, or `{ animated?: boolean, on?: { dataChange?: boolean, layout?: boolean, itemLayout?: boolean } }`; if `on` is omitted, the object form also enables all triggers.
-*   `maintainVisibleContentPosition`: Keeps visible content steady during size/layout changes while scrolling up or when items resize above the viewport (default). Pass `true` or `{ data: true }` to also anchor during data updates; pass `false` to disable; pass `{ size: false }` to opt out of scroll-time stabilization.
+*   `maintainScrollAtEnd`: Keeps the list pinned to the tail when the user is already near the end (within `maintainScrollAtEndThreshold * screen height`). Pass `true` for all triggers, or `{ animated?: boolean, on?: { dataChange?: boolean, dataAppend?: boolean, footerLayout?: boolean, layout?: boolean, itemLayout?: boolean } }`; `dataAppend` follows only additions that preserve existing item keys in order. If `on` is omitted, the object form also enables all triggers.
+*   `onUserScroll` (experimental): Runs once per accepted user gesture, including inferred native accessibility scrolling. See the [API JSDoc](https://github.com/LegendApp/legend-list/blob/main/src/types.base.ts#L376-L394) for supported input, gesture grouping, and native commands that require `cancelScroll()`.
+*   `maintainVisibleContentPosition`: Keeps visible content steady during size/layout changes while scrolling up or when items resize above the viewport (default). Pass `true` or `{ data: true }` to also anchor during data updates; pass `false` to disable JS size/data stabilization; pass `{ size: false }` to opt out of scroll-time stabilization. Native maintainVisibleContentPosition is enabled when either size or data stabilization is enabled. Set `{ data: true, autoscrollToTopThreshold: 100 }` to animate to the start after prepending when the pre-adjustment offset is at or within the threshold.
+*   `showImmediately`: (boolean, opt-in) Renders rows on the first commit from an estimated viewport instead of waiting for layout. Wrong size estimates or an initial scroll target can shift the first frame.
 *   `alignItemsAtEnd`: (boolean) Useful for chat UIs, content smaller than the View will be aligned to the bottom of the list.
 
 ---
@@ -74,7 +76,7 @@ interface UserData {
 }
 
 const LegendListExample = () => {
-    // Optional: Ref for accessing list methods (e.g., scrollTo)
+    // Optional: Ref for accessing list methods (e.g., scrollToIndex)
     const listRef = useRef<LegendListRef | null>(null)
 
     const data = []
@@ -125,9 +127,58 @@ For very large, sparse, or editor-style collections, pass a stable `dataSource` 
 />
 ```
 
-This path keeps ordinary mount, distant jumps, and precise edits proportional to visible, buffered, changed, or previously materialized state rather than total logical length. See the [data-source guide](docs/data-source.md) for the interface, mutation ordering rules, sparse-item behavior, migration examples, and performance boundaries.
+See [v4 sparse layout migration](docs/v4-migration.md) for the deliberate changes to distant offsets, estimates, and state queries.
+
+This path keeps ordinary mount, index-based distant jumps, and precise edits proportional to visible, buffered, changed, or previously materialized state rather than total logical length. Explicit item/key searches and variable-span grids can scan the source; prefer index-based APIs for large sparse sources. See the [data-source guide](docs/data-source.md) for the interface, mutation ordering rules, sparse-item behavior, migration examples, and performance boundaries.
 
 ---
+
+### Paging at reached edges
+
+Inside their thresholds, `onEndReached` and `onStartReached` fire again when the data length changes, or when a new data array arrives and the content size differs from the size at the last callback. A new array with the same length and content size does not re-arm an edge. An empty page that leaves both unchanged does not automatically request another page.
+
+A new user gesture toward an edge can retry unchanged data inside its threshold. If the current array already received a callback for changed content, that delivery counts toward the next gesture; a later gesture can retry it. Keep the data reference stable between updates to preserve that duplicate-callback protection.
+
+While the scroll offset stays unchanged, row measurements, loading footers and other layout changes do not re-arm an already reached edge, even if they temporarily move it outside its hysteresis band. Scroll-offset changes, including MVCP compensation and native clamping, retain the existing distance-based reset behavior. Empty data fires neither callback.
+
+### Native scroll offsets and top insets
+
+`scrollToOffset({ offset })` and `initialScrollOffset` use raw native scroll offsets, like React Native's `ScrollView`. With a vertical iOS `contentInset.top` of `T`, the resting start is `-T`: use `scrollToOffset({ offset: -T })` or `initialScrollOffset={-T}` to request it. An explicit `0` still requests native offset `0`, subject to the reachable content bounds. Omitting the initial target starts at `-T`.
+
+`scrollToEnd()` lands at `-T` when the content plus both insets fits within the viewport. Start thresholds and `distanceFromStart` measure from this resting start.
+
+### Sharing a scrollbar on the web
+
+React DOM lists can use an ancestor element's scrollbar with `scrollElement`:
+
+```tsx
+import { LegendList } from "@legendapp/list/react";
+import { useState } from "react";
+
+function History({ swaps, renderSwap }) {
+    const [scrollElement, setScrollElement] = useState<HTMLDivElement | null>(null);
+
+    return (
+        <div ref={setScrollElement} style={{ height: 600, overflow: "auto" }}>
+            <ProfileHeader />
+            <LegendList
+                data={swaps}
+                renderItem={renderSwap}
+                keyExtractor={(swap) => swap.id}
+                scrollElement={scrollElement}
+            />
+        </div>
+    );
+}
+```
+
+Use a state-backed callback ref so the list receives the element after mounting and whenever it changes. `null` waits for an external element; `undefined` keeps the default list-owned scrollbar. The element must be an ancestor of the list. Keep the list's own height unconstrained so its content contributes to the parent's scroll range.
+
+Multiple lists can share the same element, including lists in separate columns. Each uses the owner's viewport on the scroll axis and its own width/height on the cross axis. Content above the list is accounted for automatically, including preceding content that resizes. `scrollToIndex`, `scrollToOffset`, and `scrollToEnd` remain list-relative and move the shared owner.
+
+`maintainVisibleContentPosition` anchors changes to the list's own rows; it does not freeze the layout of surrounding content. An offscreen list does not pull the owner back into view to apply a measurement correction.
+
+`useWindowScroll` continues to use the browser window. Both modes share the same web implementation; `scrollElement` takes precedence when provided. As with window scrolling, external mode does not configure the owner's scrollbar styling or CSS snapping. It is not supported with `renderScrollComponent`.
 
 ## How to Build
 
@@ -160,3 +211,5 @@ Join us on [Discord](https://discord.gg/tuW2pAffjA) to get involved with the Leg
 ## 👩‍⚖️ License
 
 [MIT](LICENSE)
+
+<!-- sparse-k14-390r-32c462af -->

@@ -12,9 +12,16 @@ function loadBundle(legacyTail = false) {
   let code = readFileSync(bundlePath, "utf8");
   const loop = "i < dataLength && !foundEnd";
   assert.ok(code.includes(loop));
-  if (legacyTail) code = code.replace(loop, "i < dataLength && (!foundEnd || i <= globalThis.__oldBottom)");
-  code = code.replace("function getLayoutOffsetForStore(store, index) {",
-    "function getLayoutOffsetForStore(store, index) { globalThis.__reads++;");
+  if (legacyTail) {
+    const materializedRangeEnd = "if (top === void 0 && layoutStoreMaterializedRange) {";
+    assert.ok(code.includes(materializedRangeEnd));
+    code = code
+      .replace(loop, "i < dataLength && (!foundEnd || i <= globalThis.__oldBottom)")
+      .replace(materializedRangeEnd, "if (top === void 0 && layoutStoreMaterializedRange && i > globalThis.__oldBottom) {");
+  }
+  const getOffset = "function getLayoutOffsetForStore(store, index, consume = false) {";
+  assert.ok(code.includes(getOffset));
+  code = code.replace(getOffset, getOffset + " globalThis.__reads++;");
   code += "\nexports.testAPI = { calculateItemsInView, ScheduledWork, updateItemSizesBatch, onScroll, ScrollAdjustHandler };";
   const native = {
     Platform: { OS: "macos", select: x => x.macos ?? x.native ?? x.default },
@@ -106,7 +113,7 @@ test("far scrollbar jumps stay viewport-sized in both directions", () => {
   }
 });
 
-test("the old tail condition fails the operation bound", () => {
+test("scanning to the previous viewport fails the operation bound", () => {
   const api = loadBundle(true), ctx = createContext(api, 273504);
   try {
     global.__oldBottom = 0;

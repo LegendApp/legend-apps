@@ -146,10 +146,10 @@
   "catalog": {
     "react": "19.2.0",
     "react-native": "0.83.10",
-    "@legendapp/list": "3.3.10-sparse-layout.a6f5ba13",
+    "@legendapp/list": "3.9.0-sparse-k14.32c462af",
     "@legendapp/motion": "^2.5.3",
     "@legendapp/state": "^3.0.0-beta.42",
-    "@legendapp/spark": "0.0.6",
+    "@legendapp/spark": "0.0.7",
     "zod": "^4.6.7"
   },
   "dependencies": {
@@ -210,7 +210,7 @@
     "react-native-macos": "0.83.0",
     "react-native-reanimated": "4.6.0",
     "react-native-webgpu": "0.20.0",
-    "react-native-webview": "https://github.com/LegendApp/legend-spark/releases/download/v0.0.6/react-native-webview-16.0.0-fb06fd26c218.tgz",
+    "react-native-webview": "https://github.com/LegendApp/legend-spark/releases/download/v0.0.7/react-native-webview-16.0.0-fb06fd26c218.tgz",
     "react-native-worklets": "0.12.2",
     "sf-symbols-typescript": "^2.2.0",
     "tailwind-merge": "^3.0.2",
@@ -226,9 +226,9 @@
     "@legendapp/state": "^3.0.0-beta.42",
     "expo": "55.0.32",
     "@expo/cli": "55.0.37",
-    "react-native-nitro-modules": "https://github.com/LegendApp/legend-spark/releases/download/v0.0.6/react-native-nitro-modules-0.37.0-71ddf8c04084.tgz",
-    "react-native-webview": "https://github.com/LegendApp/legend-spark/releases/download/v0.0.6/react-native-webview-16.0.0-fb06fd26c218.tgz",
-    "@op-engineering/op-sqlite": "https://github.com/LegendApp/legend-spark/releases/download/v0.0.6/op-engineering-op-sqlite-18.2.1-afe4b8ce5706.tgz",
+    "react-native-nitro-modules": "https://github.com/LegendApp/legend-spark/releases/download/v0.0.7/react-native-nitro-modules-0.37.0-71ddf8c04084.tgz",
+    "react-native-webview": "https://github.com/LegendApp/legend-spark/releases/download/v0.0.7/react-native-webview-16.0.0-fb06fd26c218.tgz",
+    "@op-engineering/op-sqlite": "https://github.com/LegendApp/legend-spark/releases/download/v0.0.7/op-engineering-op-sqlite-18.2.1-afe4b8ce5706.tgz",
     "expo-asset": "55.0.20",
     "expo-constants": "55.0.17",
     "expo-file-system": "55.0.26",
@@ -268,7 +268,7 @@
     "react-native-enriched-html": "1.1.1",
     "uniwind": "1.6.3",
     "tailwindcss": "4.2.4",
-    "@react-native-runtimes/core": "https://github.com/LegendApp/legend-spark/releases/download/v0.0.6/runtimes-4df45cb5ea74.tgz",
-    "expo-audio": "https://github.com/LegendApp/legend-spark/releases/download/v0.0.6/expo-audio-55.0.18-a8d70b5b39bd.tgz"
+    "@react-native-runtimes/core": "https://github.com/LegendApp/legend-spark/releases/download/v0.0.7/runtimes-4df45cb5ea74.tgz",
+    "expo-audio": "https://github.com/LegendApp/legend-spark/releases/download/v0.0.7/expo-audio-55.0.18-a8d70b5b39bd.tgz"
   }
 }

@@ -1,16 +1,19 @@
 import * as React from 'react';
-import { Key, ReactElement, HTMLAttributes, CSSProperties, Ref, RefAttributes, Dispatch, SetStateAction } from 'react';
+import { Key, ReactElement, Ref, CSSProperties, HTMLAttributes, RefAttributes, Dispatch, SetStateAction } from 'react';
 
 type ScrollEventTarget = Window | HTMLElement;
 
 interface ScrollViewMethods {
     getBoundingClientRect(): DOMRect | null | undefined;
     getCurrentScrollOffset(): number;
+    getRawScrollOffset(): number;
     getMaxScrollOffset(): number;
-    getScrollableNode(): HTMLElement;
+    getScrollableNode(): HTMLElement | null;
     getScrollEventTarget(): ScrollEventTarget | null;
     getScrollResponder(): HTMLElement | null;
     isWindowScroll?(): boolean;
+    getContentNode?(): HTMLElement | null;
+    isScrollInRange?(): boolean;
     scrollBy(x: number, y: number): void;
     scrollTo(options: {
         x?: number;
@@ -27,24 +30,27 @@ interface ScrollViewMethods {
 }
 
 interface MaintainVisibleContentPositionNormalized<ItemT = any> {
+    autoscrollToTopThreshold?: number;
     data: boolean;
     size: boolean;
     shouldRestorePosition?: (item: ItemT, index: number, data: readonly ItemT[]) => boolean;
 }
 
-type ListenerType = "activeStickyIndex" | "alignItemsAtEndPadding" | "anchoredEndSpaceSize" | "containerLayoutEpoch" | "debugComputedScroll" | "debugRawScroll" | "extraData" | "footerSize" | "headerSize" | "lastItemKeys" | "lastPositionUpdate" | "maintainVisibleContentPosition" | "numColumns" | "numContainers" | "numContainersPooled" | "otherAxisSize" | "readyToRender" | "scrollAdjust" | "scrollAdjustPending" | "scrollAdjustUserOffset" | "scrollSize" | "snapToOffsets" | "stylePaddingTop" | "totalSize" | "isAtEnd" | "isAtStart" | "isNearEnd" | "isNearStart" | "isWithinMaintainScrollAtEndThreshold" | "adaptiveRender" | `containerColumn${number}` | `containerDataVersion${number}` | `containerSpan${number}` | `containerItemData${number}` | `containerItemIndex${number}` | `containerItemKey${number}` | `containerLayoutReady${number}` | `containerPosition${number}` | `containerSticky${number}`;
-type LegendListListenerType = Extract<ListenerType, "activeStickyIndex" | "anchoredEndSpaceSize" | "footerSize" | "headerSize" | "isAtEnd" | "isAtStart" | "isNearEnd" | "isNearStart" | "isWithinMaintainScrollAtEndThreshold" | "adaptiveRender" | "lastItemKeys" | "lastPositionUpdate" | "numContainers" | "numContainersPooled" | "otherAxisSize" | "readyToRender" | "snapToOffsets" | "totalSize">;
+type ListenerType = "activeStickyIndex" | "alignItemsAtEndPadding" | "anchoredEndSpaceSize" | "containerLayoutEpoch" | "debugComputedScroll" | "debugRawScroll" | "extraData" | "footerSize" | "headerSize" | "lastItemKeys" | "lastPositionUpdate" | "maintainVisibleContentPosition" | "numColumns" | "numContainers" | "numContainersPooled" | "otherAxisSize" | "readyToRender" | "isScrollActive" | "scrollAdjust" | "scrollAdjustPending" | "scrollAdjustUserOffset" | "scrollSize" | "snapToOffsets" | "stickyLayoutEpoch" | "stickySettle" | "stylePaddingTop" | "totalSize" | "isFollowingEnd" | "isAtEnd" | "isAtStart" | "isNearEnd" | "isNearStart" | "isWithinMaintainScrollAtEndThreshold" | "adaptiveRender" | `containerColumn${number}` | `containerDataVersion${number}` | `containerSpan${number}` | `containerItemData${number}` | `containerItemIndex${number}` | `containerItemKey${number}` | `containerLayoutReady${number}` | `containerPosition${number}` | `containerSticky${number}`;
+type LegendListListenerType = Extract<ListenerType, "activeStickyIndex" | "anchoredEndSpaceSize" | "footerSize" | "headerSize" | "isFollowingEnd" | "isAtEnd" | "isAtStart" | "isNearEnd" | "isNearStart" | "isWithinMaintainScrollAtEndThreshold" | "adaptiveRender" | "lastItemKeys" | "lastPositionUpdate" | "numContainers" | "numContainersPooled" | "otherAxisSize" | "readyToRender" | "snapToOffsets" | "totalSize">;
 type ListenerTypeValueMap = {
     activeStickyIndex: number;
     alignItemsAtEndPadding: number;
     anchoredEndSpaceSize: number;
     containerLayoutEpoch: number;
+    stickyLayoutEpoch: number;
     animatedScrollY: any;
     debugComputedScroll: number;
     debugRawScroll: number;
     extraData: any;
     footerSize: number;
     headerSize: number;
+    isFollowingEnd: boolean;
     isAtEnd: boolean;
     isAtStart: boolean;
     isNearEnd: boolean;
@@ -58,6 +64,7 @@ type ListenerTypeValueMap = {
     numContainersPooled: number;
     otherAxisSize: number;
     readyToRender: boolean;
+    isScrollActive: boolean;
     scrollAdjust: number;
     scrollAdjustPending: number;
     scrollAdjustUserOffset: number;
@@ -66,6 +73,7 @@ type ListenerTypeValueMap = {
         height: number;
     };
     snapToOffsets: number[];
+    stickySettle: number;
     stylePaddingTop: number;
     totalSize: number;
     adaptiveRender: "normal" | "light";
@@ -180,7 +188,11 @@ type DataSourceOperation =
 interface DataSourceMutationBatch {
     /** Source length after every operation in this batch has been applied. */
     length: number;
-    /** Ordered operations whose indexes refer to the result of each preceding operation. */
+    /**
+     * Ordered operations whose indexes refer to the result of each preceding operation.
+     * An empty page may emit `[]` with an incremented revision so later footer size changes
+     * can rearm edge callbacks. A revision alone does not automatically retry an unchanged edge.
+     */
     operations: DataSourceOperation[];
     /** Source length before this atomic batch. */
     previousLength: number;
@@ -300,6 +312,7 @@ interface LegendListSpecificProps<ItemT, TItemType extends string | undefined> {
     extraData?: any;
     /**
      * In case items always have a fixed size, you can provide a function to return it.
+     * Change extraData when the fixed sizes returned by this callback change.
      */
     getFixedItemSize?: (item: ItemT, index: number, type: TItemType) => number | undefined;
     /**
@@ -326,6 +339,8 @@ interface LegendListSpecificProps<ItemT, TItemType extends string | undefined> {
         index: number;
         viewOffset?: number | undefined;
         viewPosition?: number | undefined;
+        /** Alignment used only when the item exceeds the viewport. Omit to preserve viewPosition. */
+        viewPositionFallback?: "start" | "end";
     };
     /**
      * Initial scroll position in pixels.
@@ -370,6 +385,11 @@ interface LegendListSpecificProps<ItemT, TItemType extends string | undefined> {
     /**
      * If true, auto-scrolls to end when new items are added.
      * Use an options object to opt into specific triggers and control whether that scroll is animated.
+     * Setting false pauses maintenance while retaining end-follow intent. Re-enabling resumes
+     * that intent even if content grew beyond the threshold; user or list navigation releases it.
+     * While paused, isFollowingEnd reports the retained intent.
+     * With a native screen reader enabled, unowned accessibility scrolls toward the start
+     * release following. Assistive-tech scrolls during library animations are not detected.
      * @default false
      */
     maintainScrollAtEnd?: boolean | MaintainScrollAtEndOptions;
@@ -380,11 +400,13 @@ interface LegendListSpecificProps<ItemT, TItemType extends string | undefined> {
     maintainScrollAtEndThreshold?: number;
     /**
      * Maintains visibility of content.
-     * - scroll (default: true) stabilizes during size/layout changes while scrolling.
-     * - data (default: false) stabilizes when the data array changes; passing true also sets the RN maintainVisibleContentPosition prop.
+     * - size (default: true) stabilizes during size/layout changes while scrolling.
+     * - data (default: false) stabilizes when the data array changes.
      * - shouldRestorePosition can opt out specific items from data-change anchoring.
+     * - autoscrollToTopThreshold animates to the start after anchoring near the start.
      * - undefined (default) enables scroll stabilization but skips data-change anchoring.
-     * - true enables both behaviors; false disables both.
+     * - true enables both JS behaviors; false disables both.
+     * Native maintainVisibleContentPosition is enabled when either size or data stabilization is enabled.
      */
     maintainVisibleContentPosition?: boolean | MaintainVisibleContentPositionConfig<ItemT>;
     /**
@@ -435,6 +457,12 @@ interface LegendListSpecificProps<ItemT, TItemType extends string | undefined> {
         elapsedTimeInMs: number;
     }) => void;
     /**
+     * Called after layout and initial scrolling complete, including after a
+     * dataKey reset. Unlike onLoad, this runs for each initial placement cycle.
+     * Ordinary data updates do not trigger it unless they restart initial placement.
+     */
+    onReady?: () => void;
+    /**
      * Called when list layout metrics change.
      */
     onMetricsChange?: (metrics: LegendListMetrics) => void;
@@ -470,8 +498,25 @@ interface LegendListSpecificProps<ItemT, TItemType extends string | undefined> {
      */
     onRefresh?: () => void;
     /**
-     * Called when the list scrolls.
+     * Called once per accepted user gesture, in either direction: native drag (including
+     * momentum), web wheel/touch movement, non-repeated scroll keydown, or scrollbar drag.
+     * Wheel input at a boundary is ignored unless navigation is active. Without wheel
+     * momentum metadata, gesture boundaries are inferred from timing, direction and force.
+     * iOS status-bar scrolling emits on native onScrollToTop unless accessibility motion
+     * already reported it during the animation.
+     * With a native screen reader enabled, otherwise unowned scroll motion with stable
+     * content/viewport size is inferred as accessibility input (including focus navigation),
+     * once per burst; motion toward the start releases end following. Library animations
+     * and controller/native-ref command windows mask assistive-tech scrolling.
+     * Native commands bypassing the list and its refs (e.g. Reanimated scrollTo worklets)
+     * cannot be distinguished from accessibility input while a screen reader is on; call
+     * cancelScroll() on the JS thread before that navigation to release end following.
+     * Layout/clamp/MVCP events and commands through the list or its refs do not emit it.
+     * @experimental Native pointer/wheel-only input without a screen reader is not detected.
+     * Web scrollbar detection requires pointer events in a measurable, non-overlay gutter.
      */
+    onUserScroll?: () => void;
+    /** Called when the list scrolls. */
     onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
     /**
      * Called when scrolling reaches the start within onStartReachedThreshold.
@@ -511,6 +556,14 @@ interface LegendListSpecificProps<ItemT, TItemType extends string | undefined> {
      * @default false
      */
     recycleItems?: boolean;
+    /**
+     * Opt-in: mounts items on the first commit on Fabric and web using `estimatedListSize`
+     * or the window size instead of waiting for layout. Best used with known item sizes.
+     * Wrong size estimates or an initial scroll target can shift the first frame once the
+     * measured viewport corrects the range.
+     * @default false
+     */
+    showImmediately?: boolean;
     /**
      * Ref to the underlying ScrollView component.
      */
@@ -556,8 +609,16 @@ interface LegendListSpecificProps<ItemT, TItemType extends string | undefined> {
      */
     useWindowScroll?: boolean;
 }
-type LegendListPropsBase<ItemT, TScrollViewProps = Record<string, any>, TItemType extends string | undefined = string | undefined> = BaseScrollViewProps<TScrollViewProps> & LegendListSpecificProps<ItemT, TItemType> & (LegendListDataMode<ItemT, TItemType> | ChildrenModeProps);
+type ItemEventCallbackKeys = "onFirstVisibleItemChanged" | "onItemSizeChanged" | "onViewableItemsChanged" | "viewabilityConfigCallbackPairs";
+type ItemEventCallbacks<ItemT> = Pick<LegendListSpecificProps<ItemT, string | undefined>, ItemEventCallbackKeys>;
+type LegendListPropsBase<ItemT, TScrollViewProps = Record<string, any>, TItemType extends string | undefined = string | undefined> = BaseScrollViewProps<TScrollViewProps> & LegendListSpecificProps<ItemT, TItemType> & (LegendListArrayDataModeProps<ItemT, TItemType> | ChildrenModeProps);
+type LegendListDataSourcePropsBase<ItemT, TScrollViewProps = Record<string, any>, TItemType extends string | undefined = string | undefined> = BaseScrollViewProps<TScrollViewProps> & Omit<LegendListSpecificProps<ItemT, TItemType>, ItemEventCallbackKeys> & LegendListDataSourceModeProps<ItemT, TItemType> & ItemEventCallbacks<ItemT | undefined>;
 interface MaintainVisibleContentPositionConfig<ItemT = any> {
+    /**
+     * After anchoring, animates to the start if the pre-adjustment offset was at or within this threshold.
+     * Use with `data: true` to animate after prepending rows.
+     */
+    autoscrollToTopThreshold?: number;
     data?: boolean;
     size?: boolean;
     shouldRestorePosition?: (item: ItemT, index: number, data: readonly ItemT[]) => boolean;
@@ -603,6 +664,8 @@ interface AlwaysRenderConfig {
     keys?: string[];
 }
 interface MaintainScrollAtEndOnOptions {
+    /** Follow only additions that preserve every existing item key in order. */
+    dataAppend?: boolean;
     dataChange?: boolean;
     footerLayout?: boolean;
     itemLayout?: boolean;
@@ -644,9 +707,13 @@ type LegendListState$1 = {
     activeStickyIndex: number;
     contentLength: number;
     data: readonly any[];
+    dataKey?: Key;
     elementAtIndex: (index: number) => any;
     end: number;
     endBuffered: number;
+    /** Distance to the physical scroll edge, including the trailing inset. */
+    distanceFromEnd: number;
+    isFollowingEnd: boolean;
     isAtEnd: boolean;
     isAtStart: boolean;
     isNearEnd: boolean;
@@ -656,7 +723,10 @@ type LegendListState$1 = {
     isWithinMaintainScrollAtEndThreshold: boolean;
     getAverageItemSizes: () => Record<string, LegendListAverageItemSize>;
     indexByKey: (key: string) => number | undefined;
-    listen: <T extends LegendListListenerType>(listenerType: T, callback: (value: ListenerTypeValueMap[T]) => void) => () => void;
+    listen: {
+        <T extends Exclude<LegendListListenerType, "isFollowingEnd">>(listenerType: T, callback: (value: Pick<ListenerTypeValueMap, LegendListListenerType>[T]) => void): () => void;
+        <T extends LegendListListenerType>(listenerType: T, callback: (value: Pick<ListenerTypeValueMap, LegendListListenerType>[T]) => void): () => void;
+    };
     listenToPosition: (key: string, callback: (value: number) => void) => () => void;
     positionAtIndex: (index: number) => number;
     positionByKey: (key: string) => number | undefined;
@@ -669,13 +739,44 @@ type LegendListState$1 = {
     startBuffered: number;
 };
 type LegendListRef$1 = {
+    /** Cancels queued and active scrolling, settles its promise, and stops at the observed offset. */
+    cancelScroll(): void;
+    /** Scrolls by stable item identity through prepends; resolves without scrolling if the key is missing or removed. */
+    scrollToKey(params: {
+        key: string;
+        animated?: boolean;
+        viewOffset?: number;
+        viewPosition?: number;
+    }): Promise<void>;
+    /**
+     * Captures an item's key and viewport offset, holding it through layout changes by default.
+     * Omit key to use the first visible item; set hold to false to read without side effects.
+     * Returns undefined before initial placement, during dataset replacement, or if no item is found.
+     * While following at the end, returns the anchor without interrupting end following.
+     */
+    anchorVisibleContent(options?: {
+        key?: string;
+        hold?: boolean;
+    }): {
+        key: string;
+        offset: number;
+    } | undefined;
+    /** Releases waitForInteraction viewability tracking and recalculates the visible items. */
+    recordInteraction?(): void;
     /**
      * Clears internal virtualization caches.
      * @param options - Cache clearing options.
      * @param options.mode - `sizes` clears measurement caches. `full` also clears key/position caches.
+     * @param options.keys - Clears only these items' measurements, for rows whose size changed while the list
+     * could not see it (for example, a row that was selected or expanded while offscreen). Each item keeps its
+     * last size as a prediction (`full` drops it back to the estimate) until it is measured again: a mounted
+     * item is remeasured right away, and a `scrollToOffset` renders the cleared items before its target so the
+     * offset lands on their real sizes. Unknown keys are ignored. Without `keys`, offscreen sizes are refreshed
+     * only best-effort.
      */
     clearCaches(options?: {
         mode?: "sizes" | "full";
+        keys?: readonly string[];
     }): void;
     /**
      * Displays the scroll indicators momentarily.
@@ -711,20 +812,40 @@ type LegendListRef$1 = {
      * @param params - Parameters for scrolling.
      * @param params.animated - If true, animates the scroll. Default: true.
      * @param params.index - The index to scroll to.
+     * @param params.itemOffset - Region start measured from the item's start along the scroll axis. Default: 0 when itemLength is provided.
+     * @param params.itemLength - Region length along the scroll axis. Default: 0 when itemOffset is provided. Omit both to reveal the whole item.
+     * @param params.viewportMargin - Space to keep clear at the start and end of the viewport along the scroll axis.
+     * The region should be within the item. A visible region does not scroll; otherwise its nearest edge aligns inside the margins. A region larger than the available space aligns its start.
      */
     scrollIndexIntoView(params: {
         animated?: boolean | undefined;
         index: number;
+        itemOffset?: number;
+        itemLength?: number;
+        viewportMargin?: {
+            start?: number;
+            end?: number;
+        };
     }): Promise<void>;
     /**
-     * Scrolls a specific index into view.
+     * Scrolls a specific item into view.
      * @param params - Parameters for scrolling.
      * @param params.animated - If true, animates the scroll. Default: true.
      * @param params.item - The item to scroll to.
+     * @param params.itemOffset - Region start measured from the item's start along the scroll axis. Default: 0 when itemLength is provided.
+     * @param params.itemLength - Region length along the scroll axis. Default: 0 when itemOffset is provided. Omit both to reveal the whole item.
+     * @param params.viewportMargin - Space to keep clear at the start and end of the viewport along the scroll axis.
+     * The region should be within the item. A visible region does not scroll; otherwise its nearest edge aligns inside the margins. A region larger than the available space aligns its start.
      */
     scrollItemIntoView(params: {
         animated?: boolean | undefined;
         item: any;
+        itemOffset?: number;
+        itemLength?: number;
+        viewportMargin?: {
+            start?: number;
+            end?: number;
+        };
     }): Promise<void>;
     /**
      * Scrolls to the end of the list.
@@ -746,6 +867,8 @@ type LegendListRef$1 = {
         index: number;
         viewOffset?: number | undefined;
         viewPosition?: number | undefined;
+        /** Alignment used only when the item exceeds the viewport. Omit to preserve viewPosition. */
+        viewPositionFallback?: "start" | "end";
     }): Promise<void>;
     /**
      * Scrolls to a specific item in the list.
@@ -760,6 +883,8 @@ type LegendListRef$1 = {
         item: any;
         viewOffset?: number | undefined;
         viewPosition?: number | undefined;
+        /** Alignment used only when the item exceeds the viewport. Omit to preserve viewPosition. */
+        viewPositionFallback?: "start" | "end";
     }): Promise<void>;
     /**
      * Scrolls to a specific offset in pixels.
@@ -799,6 +924,10 @@ interface ViewToken<ItemT = any> {
 interface ViewAmountToken<ItemT = any> extends ViewToken<ItemT> {
     percentOfScroller: number;
     percentVisible: number;
+    /**
+     * Viewport size used for this measurement, with any integration-reported
+     * occlusion (for example a keyboard) already subtracted.
+     */
     scrollSize: number;
     size: number;
     sizeVisible: number;
@@ -819,13 +948,15 @@ interface OnViewableItemsChangedInfo<ItemT> {
 type OnViewableItemsChanged<ItemT> = ((info: OnViewableItemsChangedInfo<ItemT>) => void) | null;
 interface ViewabilityConfig {
     /**
-     * A unique ID to identify this viewability config
+     * A unique ID to identify this viewability config. Required when using multiple configs.
      */
     id?: string;
     /**
      * Minimum amount of time (in milliseconds) that an item must be physically viewable before the
      * viewability callback will be fired. A high number means that scrolling through content without
-     * stopping will not mark the content as viewable.
+     * stopping will not mark the content as viewable. Reported items leaving view are marked as no
+     * longer viewable immediately. Re-entering items must stay visible for the full duration again.
+     * Infinity prevents new items from becoming viewable without scheduling a timer.
      */
     minimumViewTime?: number | undefined;
     /**
@@ -865,6 +996,8 @@ interface ScrollIndexWithOffset {
     index: number;
     viewOffset?: number;
     viewPosition?: number;
+    /** Alignment used only when the item exceeds the viewport. Omit to preserve viewPosition. */
+    viewPositionFallback?: "start" | "end";
 }
 interface ScrollIndexWithOffsetPosition extends ScrollIndexWithOffset {
     viewPosition?: number;
@@ -891,11 +1024,14 @@ interface LooseScrollViewProps {
         autoscrollToTopThreshold?: number;
         minIndexForVisible: number;
     };
+    onContentSizeChange?: (width: number, height: number) => void;
     onLayout?: (event: LooseLayoutChangeEvent) => void;
     onMomentumScrollBegin?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
     onMomentumScrollEnd?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
     onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
     onScrollBeginDrag?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+    onScrollToTop?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+    onScrollEndDrag?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
     refreshControl?: ReactElement | null;
     removeClippedSubviews?: boolean;
     scrollEventThrottle?: number;
@@ -912,24 +1048,32 @@ type ScrollViewPropsWeb = Omit<LooseScrollViewProps, "style" | "contentContainer
     onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
     onLayout?: (event: LooseLayoutChangeEvent) => void;
 };
-type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
-type LegendListPropsOverrides<ItemT, TItemType extends string | undefined> = DistributiveOmit<LegendListPropsBase<ItemT, ScrollViewPropsWeb, TItemType>, "anchoredEndSpace" | "refScrollView" | "renderScrollComponent" | "ListHeaderComponentStyle" | "ListFooterComponentStyle" | "onRefresh" | "progressViewOffset" | "refreshing"> & {
+type LegendListPropsOverrides<Props> = Omit<Props, "anchoredEndSpace" | "refScrollView" | "renderScrollComponent" | "ListHeaderComponentStyle" | "ListFooterComponentStyle" | "onRefresh" | "progressViewOffset" | "refreshing"> & {
+    /**
+     * Web only: use an ancestor element's scrollbar instead of creating a scrollable list.
+     * Pass a state-backed callback ref value so changes to the element are observed.
+     * null waits for the element to mount; undefined uses the list's own scrollbar.
+     * Takes precedence over useWindowScroll. Not supported with renderScrollComponent.
+     */
+    scrollElement?: HTMLElement | null;
     anchoredEndSpace?: AnchoredEndSpaceConfig;
     refScrollView?: Ref<HTMLElement | ScrollViewMethods>;
     ListHeaderComponentStyle?: CSSProperties | undefined;
     ListFooterComponentStyle?: CSSProperties | undefined;
 };
-type LegendListProps<ItemT = any, TItemType extends string | undefined = string | undefined> = LegendListPropsOverrides<ItemT, TItemType>;
+type LegendListProps<ItemT = any, TItemType extends string | undefined = string | undefined> = LegendListPropsOverrides<LegendListPropsBase<ItemT, ScrollViewPropsWeb, TItemType>>;
+type LegendListDataSourceProps<ItemT = any, TItemType extends string | undefined = string | undefined> = LegendListPropsOverrides<LegendListDataSourcePropsBase<ItemT, ScrollViewPropsWeb, TItemType>>;
 type LegendListRef = Omit<LegendListRef$1, "getAnimatableRef" | "getNativeScrollRef" | "getScrollableNode" | "getScrollResponder"> & {
     getAnimatableRef(): HTMLElement | ScrollViewMethods;
     getNativeScrollRef(): HTMLElement | ScrollViewMethods;
-    getScrollableNode(): HTMLElement;
+    getScrollableNode(): HTMLElement | null;
     getScrollResponder(): HTMLElement | null;
 };
 type LegendListState = Omit<LegendListState$1, "elementAtIndex"> & {
     elementAtIndex: (index: number) => HTMLElement | null | undefined;
 };
 type LegendListComponent = <ItemT = any>(props: LegendListProps<ItemT> & RefAttributes<LegendListRef>) => ReactElement | null;
+type LegendListDataSourceComponent = <ItemT = any>(props: LegendListDataSourceProps<ItemT> & RefAttributes<LegendListRef>) => ReactElement | null;
 
 declare function useAdaptiveRender(): AdaptiveRender;
 declare function useAdaptiveRenderChange(callback: (mode: AdaptiveRender) => void): void;
@@ -944,6 +1088,6 @@ declare function useListScrollSize(): {
 };
 declare function useSyncLayout(): () => void;
 
-declare const LegendList: LegendListComponent;
+declare const LegendList: LegendListDataSourceComponent & LegendListComponent;
 
-export { type AdaptiveRender, type AdaptiveRenderChangeReason, type AdaptiveRenderConfig, type AlwaysRenderConfig, type AnchoredEndSpaceConfig, type ColumnWrapperStyle, type DataSourceMutationBatch, type DataSourceOperation, type Insets, type LayoutRectangle, LegendList, type LegendListArrayDataModeProps, type LegendListAverageItemSize, type LegendListComponent, type LegendListDataMode, type LegendListDataSource, type LegendListDataSourceModeProps, type LegendListDataSourceRenderItemProps, type LegendListMetrics, type LegendListProps, type LegendListRecyclingState, type LegendListRef, type LegendListRenderItemProps, type LegendListState, type MaintainScrollAtEndOnOptions, type MaintainScrollAtEndOptions, type MaintainVisibleContentPositionConfig, type NativeScrollEvent, type NativeSyntheticEvent, type OnViewableItemsChanged, type OnViewableItemsChangedInfo, type ScrollIndexWithOffset, type ScrollIndexWithOffsetAndContentOffset, type ScrollIndexWithOffsetPosition, type StickyHeaderConfig, type StyleProp, type ViewAmountToken, type ViewStyle, type ViewToken, type ViewabilityAmountCallback, type ViewabilityCallback, type ViewabilityConfig, type ViewabilityConfigCallbackPair, type ViewabilityConfigCallbackPairs, useAdaptiveRender, useAdaptiveRenderChange, useIsLastItem, useListScrollSize, useRecyclingEffect, useRecyclingState, useSyncLayout, useViewability, useViewabilityAmount };
+export { type AdaptiveRender, type AdaptiveRenderChangeReason, type AdaptiveRenderConfig, type AlwaysRenderConfig, type AnchoredEndSpaceConfig, type ColumnWrapperStyle, type DataSourceMutationBatch, type DataSourceOperation, type Insets, type LayoutRectangle, LegendList, type LegendListArrayDataModeProps, type LegendListAverageItemSize, type LegendListComponent, type LegendListDataMode, type LegendListDataSource, type LegendListDataSourceComponent, type LegendListDataSourceModeProps, type LegendListDataSourceProps, type LegendListDataSourceRenderItemProps, type LegendListMetrics, type LegendListProps, type LegendListRecyclingState, type LegendListRef, type LegendListRenderItemProps, type LegendListState, type MaintainScrollAtEndOnOptions, type MaintainScrollAtEndOptions, type MaintainVisibleContentPositionConfig, type NativeScrollEvent, type NativeSyntheticEvent, type OnViewableItemsChanged, type OnViewableItemsChangedInfo, type ScrollIndexWithOffset, type ScrollIndexWithOffsetAndContentOffset, type ScrollIndexWithOffsetPosition, type StickyHeaderConfig, type StyleProp, type ViewAmountToken, type ViewStyle, type ViewToken, type ViewabilityAmountCallback, type ViewabilityCallback, type ViewabilityConfig, type ViewabilityConfigCallbackPair, type ViewabilityConfigCallbackPairs, useAdaptiveRender, useAdaptiveRenderChange, useIsLastItem, useListScrollSize, useRecyclingEffect, useRecyclingState, useSyncLayout, useViewability, useViewabilityAmount };

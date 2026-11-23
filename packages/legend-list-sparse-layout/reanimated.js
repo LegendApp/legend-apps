@@ -1,3 +1,4 @@
+/* sparse-k14-390r-32c462af */
 'use strict';
 
 var React = require('react');
@@ -40,7 +41,7 @@ var {
   useStableRenderComponent,
   getComponent
 } = reactNative.internal;
-var { peek$, useStateContext } = reactNative.internal;
+var { peek$, useRenderStateContext, useStateContext } = reactNative.internal;
 var ReanimatedScrollOffsetTracker = ({
   animatedScrollRef,
   scrollOffset
@@ -82,22 +83,33 @@ var StickyOverlay = typedMemo(function StickyOverlayComponent({ stickyHeaderConf
 });
 var ReanimatedPositionViewSticky = typedMemo(function ReanimatedPositionViewStickyComponent(props) {
   var _a;
-  const ctx = useStateContext();
+  const ctx = useRenderStateContext(useStateContext());
   const { id, horizontal, style, refView, stickyScrollOffset, stickyHeaderConfig, children, ...rest } = props;
-  const [position = POSITION_OUT_OF_VIEW, headerSize = 0, stylePaddingTop = 0, itemKey, itemIndex, _totalSize = 0] = useArr$([
+  const [
+    position = POSITION_OUT_OF_VIEW,
+    alignItemsAtEndPadding = 0,
+    headerSize = 0,
+    stylePaddingTop = 0,
+    itemKey,
+    itemIndex,
+    _totalSize = 0,
+    _stickyLayoutEpoch = 0
+  ] = useArr$([
     `containerPosition${id}`,
+    "alignItemsAtEndPadding",
     "headerSize",
     "stylePaddingTop",
     `containerItemKey${id}`,
     `containerItemIndex${id}`,
-    "totalSize"
+    "totalSize",
+    "stickyLayoutEpoch"
   ]);
   const pushLimit = React__namespace.useMemo(
     () => getStickyPushLimit(ctx, itemIndex, itemKey),
-    [ctx, itemIndex, itemKey, _totalSize]
+    [ctx, itemIndex, itemKey, _totalSize, _stickyLayoutEpoch]
   );
   const stickyOffset = (_a = stickyHeaderConfig == null ? void 0 : stickyHeaderConfig.offset) != null ? _a : 0;
-  const stickyStart = position + headerSize + stylePaddingTop - stickyOffset;
+  const stickyStart = position + headerSize + stylePaddingTop + alignItemsAtEndPadding - stickyOffset;
   const stickyPositionStyle = Reanimated.useAnimatedStyle(() => {
     const delta = Math.max(0, stickyScrollOffset.value - stickyStart);
     const stickyPosition = position + delta;
@@ -108,27 +120,30 @@ var ReanimatedPositionViewSticky = typedMemo(function ReanimatedPositionViewStic
     () => [style, { zIndex: itemIndex + 1e3 }, stickyPositionStyle],
     [itemIndex, stickyPositionStyle, style]
   );
-  return /* @__PURE__ */ React__namespace.createElement(Reanimated__default.default.View, { ref: refView, style: viewStyle, ...rest }, /* @__PURE__ */ React__namespace.createElement(StickyOverlay, { stickyHeaderConfig }), children);
+  return (
+    // The pinned wrapper overlays rows; only the header's own content takes touches.
+    /* @__PURE__ */ React__namespace.createElement(Reanimated__default.default.View, { pointerEvents: "box-none", ref: refView, style: viewStyle, ...rest }, /* @__PURE__ */ React__namespace.createElement(StickyOverlay, { stickyHeaderConfig }), children)
+  );
 });
 var ReanimatedPositionView = typedMemo(function ReanimatedPositionViewComponent(props) {
-  const ctx = useStateContext();
-  const { id, horizontal, style, refView, children, recycleItems, layoutTransition, ...rest } = props;
-  const [positionValue = POSITION_OUT_OF_VIEW, layoutReady = true] = useArr$([
+  const ctx = useRenderStateContext(useStateContext());
+  const { id, horizontal, style, refView, children, layoutTransition, ...rest } = props;
+  const [positionValue = POSITION_OUT_OF_VIEW, layoutReady = true, isScrollActive] = useArr$([
     `containerPosition${id}`,
-    `containerLayoutReady${id}`
+    `containerLayoutReady${id}`,
+    "isScrollActive"
   ]);
+  const itemKey = layoutTransition ? peek$(ctx, `containerItemKey${id}`) : void 0;
   const prevItemKeyRef = React__namespace.useRef(void 0);
-  let shouldSkipTransitionForRecycleReuse = false;
-  if (recycleItems && layoutTransition) {
-    const itemKeySignal = `containerItemKey${id}`;
-    const itemKey = peek$(ctx, itemKeySignal);
-    shouldSkipTransitionForRecycleReuse = itemKey !== void 0 && prevItemKeyRef.current !== void 0 && prevItemKeyRef.current !== itemKey;
-    if (itemKey !== void 0) {
-      prevItemKeyRef.current = itemKey;
-    }
-  } else {
-    prevItemKeyRef.current = void 0;
-  }
+  const shouldSkipTransitionForRecycleReuse = itemKey !== void 0 && prevItemKeyRef.current !== void 0 && prevItemKeyRef.current !== itemKey;
+  const adjustment = ctx.state.layoutAdjustmentEpoch;
+  const previousAdjustment = React__namespace.useRef(adjustment);
+  const wasAdjusted = previousAdjustment.current !== adjustment;
+  React__namespace.useLayoutEffect(() => {
+    if (itemKey !== void 0 || !layoutTransition) prevItemKeyRef.current = itemKey;
+    previousAdjustment.current = adjustment;
+  }, [adjustment, itemKey, layoutTransition]);
+  const shouldSkipLayoutTransition = wasAdjusted || isScrollActive || !!ctx.state.scrollingTo;
   const viewStyle = React__namespace.useMemo(
     () => [style, horizontal ? { left: positionValue } : { top: positionValue }, !layoutReady && { opacity: 0 }],
     [horizontal, layoutReady, positionValue, style]
@@ -136,7 +151,7 @@ var ReanimatedPositionView = typedMemo(function ReanimatedPositionViewComponent(
   return /* @__PURE__ */ React__namespace.createElement(
     Reanimated__default.default.View,
     {
-      layout: shouldSkipTransitionForRecycleReuse ? void 0 : layoutTransition,
+      layout: shouldSkipTransitionForRecycleReuse || shouldSkipLayoutTransition ? void 0 : layoutTransition,
       ref: refView,
       style: viewStyle,
       ...rest,
@@ -157,6 +172,12 @@ function setSharedValueValue(sharedValue, value) {
   }
 }
 function useAnimatedLegendListSharedValuesSync(legendList, sharedValues) {
+  const scrollOffset = sharedValues == null ? void 0 : sharedValues.scrollOffset;
+  React__namespace.useEffect(() => {
+    if (legendList && scrollOffset) {
+      setSharedValueValue(scrollOffset, legendList.getState().scroll);
+    }
+  }, [legendList, scrollOffset]);
   React__namespace.useEffect(() => {
     if (!legendList || !sharedValues) {
       return;
@@ -171,7 +192,6 @@ function useAnimatedLegendListSharedValuesSync(legendList, sharedValues) {
       sharedValues.isWithinMaintainScrollAtEndThreshold,
       state.isWithinMaintainScrollAtEndThreshold
     );
-    setSharedValueValue(sharedValues.scrollOffset, state.scroll);
     const unsubscribers = [
       sharedValues.activeStickyIndex ? state.listen(
         "activeStickyIndex",
@@ -197,13 +217,7 @@ var LegendListForwardedRef = typedMemo(
   // biome-ignore lint/nursery/noShadow: const function name shadowing is intentional
   React__namespace.forwardRef(function LegendListForwardedRef2(props, ref) {
     var _a, _b;
-    const { itemLayoutAnimation, recycleItems, refLegendList, renderScrollComponent, sharedValues, ...rest } = props;
-    const refFn = React.useCallback(
-      (r) => {
-        refLegendList(r);
-      },
-      [refLegendList]
-    );
+    const { itemLayoutAnimation, refLegendList, renderScrollComponent, sharedValues, ...rest } = props;
     const internalScrollOffset = Reanimated.useSharedValue(0);
     const scrollOffset = (_a = sharedValues == null ? void 0 : sharedValues.scrollOffset) != null ? _a : internalScrollOffset;
     const trackedScrollOffset = (sharedValues == null ? void 0 : sharedValues.scrollOffset) !== void 0 || ((_b = rest.stickyHeaderIndices) == null ? void 0 : _b.length) ? scrollOffset : void 0;
@@ -239,26 +253,16 @@ var LegendListForwardedRef = typedMemo(
         return void 0;
       }
       return function PositionComponent(positionProps) {
-        return /* @__PURE__ */ React__namespace.createElement(
-          ReanimatedPositionView,
-          {
-            ...positionProps,
-            layoutTransition: itemLayoutAnimationRef.current,
-            recycleItems
-          }
-        );
+        return /* @__PURE__ */ React__namespace.createElement(ReanimatedPositionView, { ...positionProps, layoutTransition: itemLayoutAnimationRef.current });
       };
-    }, [hasItemLayoutAnimation, recycleItems]);
+    }, [hasItemLayoutAnimation]);
     const legendListProps = {
       ...rest,
       positionComponentInternal,
-      recycleItems,
-      ...{
-        renderScrollComponent: renderReanimatedScrollComponent,
-        ...IsNewArchitecture ? { stickyPositionComponentInternal } : {}
-      } 
+      renderScrollComponent: renderReanimatedScrollComponent,
+      ...IsNewArchitecture ? { stickyPositionComponentInternal } : {}
     };
-    return /* @__PURE__ */ React__namespace.createElement(reactNative.LegendList, { ref: refFn, refScrollView: ref, ...legendListProps });
+    return /* @__PURE__ */ React__namespace.createElement(reactNative.LegendList, { ref: refLegendList, refScrollView: ref, ...legendListProps });
   })
 );
 var AnimatedLegendListComponent = Reanimated__default.default.createAnimatedComponent(LegendListForwardedRef);

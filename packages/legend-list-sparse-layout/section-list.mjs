@@ -1,3 +1,4 @@
+/* sparse-k14-390r-32c462af */
 import * as React from 'react';
 import { Platform } from 'react-native';
 import { internal, LegendList } from '@legendapp/list/react-native';
@@ -259,7 +260,14 @@ var SectionList = typedMemo(
       ]
     );
     const scrollToLocation = React.useCallback(
-      ({ sectionIndex, itemIndex, viewOffset, viewPosition, animated }) => {
+      ({
+        sectionIndex,
+        itemIndex,
+        viewOffset,
+        viewPosition,
+        viewPositionFallback,
+        animated
+      }) => {
         var _a, _b, _c;
         const meta = sectionMeta[sectionIndex];
         if (!meta) return;
@@ -269,7 +277,8 @@ var SectionList = typedMemo(
           animated,
           index: target,
           viewOffset,
-          viewPosition
+          viewPosition,
+          viewPositionFallback
         });
       },
       [sectionMeta]
