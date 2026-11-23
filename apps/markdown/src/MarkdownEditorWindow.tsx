@@ -250,7 +250,6 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
   const newFolder = useCallback(() => {
     if (newEntryDirectory) createWorkspaceFolder(newEntryDirectory).catch(handleError);
   }, [handleError, newEntryDirectory]);
-  const folderMenu = useMemo(() => ({ newFileName: newMarkdownFileName, onRemoveFolder: workspace.removeFolder, windowId }), [windowId, workspace.removeFolder]);
 
   useMarkdownMenus({
     hasFolders: workspaceFolders.length > 0,
@@ -370,7 +369,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
             activePath={currentFile}
             colors={workspaceColors}
             files={workspace.state.files}
-            folderMenu={folderMenu}
+            folderMenu={{ newFileName: newMarkdownFileName, onRemoveFolder: workspace.removeFolder, windowId }}
             folders={workspaceFolders}
             isDocumentPath={isMarkdownPath}
             onAddFolder={addFolder}

@@ -6,8 +6,7 @@ import {
 } from "@legendapp/spark/menus";
 import { workspaceMenuItems } from "@legend-apps/workspace/menu-items";
 
-// Spark merges these into the native menu bar: targeted roots and role items move to their placement, other items
-// append. The native File menu keeps Open Recent, Close, Page Setup… and Print… with their separators.
+// Spark merges this configuration into the native menu bar, which supplies the remaining system commands.
 export const markdownMenuConfig: MenuRootItem[] = [
   { type: "submenu",
     id: "app",

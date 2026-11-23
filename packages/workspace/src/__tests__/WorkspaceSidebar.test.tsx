@@ -6,14 +6,7 @@ import { useWorkspaceWindow } from "../useWorkspaceWindow";
 import { WorkspaceSidebar } from "../WorkspaceSidebar";
 import type { WorkspaceWindowProps } from "../workspaceState";
 
-const mockTree: Record<string, string | null> = {
-  "/repo": null,
-  "/repo/src": null,
-  "/repo/src/a.ts": "",
-  "/repo/node_modules": null,
-  "/repo/notes.md": "",
-  "/data/w.json": '{"folders":["/repo"],"theme":"dark"}',
-};
+let mockTree: Record<string, string | null>;
 
 jest.mock("@legendapp/spark/files", () => ({
   getDirectory: jest.fn(async () => "/data"),
@@ -80,14 +73,21 @@ describe("WorkspaceSidebar", () => {
     return renderer.root.find(node => node.type === ("Pressable" as never) && node.props.accessibilityLabel === label).props.onPress();
   });
 
-  const pressable = (label: string) => renderer.root.find(node => node.type === ("Pressable" as never) && node.props.accessibilityLabel === label);
+  const pressable = (label?: string) => renderer.root.find(node => node.type === ("Pressable" as never) && node.props.accessibilityLabel === label);
   const sidebarItem = (id: string) => renderer.root.find(node => node.type === ("SidebarItem" as never) && node.props.id === id);
-  const chooseMenuItem = (itemId: string | null) => jest.mocked(showContextMenu).mockResolvedValueOnce(itemId ? { canceled: false, itemId } : { canceled: true });
+  const chooseMenuItem = (itemId: string) => jest.mocked(showContextMenu).mockResolvedValueOnce({ canceled: false, itemId });
 
   beforeEach(() => {
     jest.clearAllMocks();
     mockWatchers.length = 0;
-    for (const path of Object.keys(mockTree)) if (/Untitled|New Folder|\/repo\/later\.md/.test(path)) delete mockTree[path];
+    mockTree = {
+      "/repo": null,
+      "/repo/src": null,
+      "/repo/src/a.ts": "",
+      "/repo/node_modules": null,
+      "/repo/notes.md": "",
+      "/data/w.json": '{"folders":["/repo"],"theme":"dark"}',
+    };
   });
   afterEach(() => act(async () => renderer.unmount()));
 
@@ -133,7 +133,7 @@ describe("WorkspaceSidebar", () => {
 
   it("shows Add Folder only while there are no folders, and adds and removes folders without touching disk", async () => {
     await act(async () => { renderer = create(<Harness props={{}} />); });
-    await act(async () => pressable(undefined as never).props.onPress());
+    await act(async () => pressable().props.onPress());
     expect(onAddFolder).toHaveBeenCalledTimes(1);
 
     await act(async () => workspace.addFolders(["/repo", "/other", "/repo"]));
