@@ -4,7 +4,7 @@ import { closeWindow, setWindowOptions, } from "@legendapp/spark/windows";
 import { getLegendDisplayTheme, getLegendDisplayThemeAppearance } from "@legend-apps/theme";
 import type { MarkdownSaveState } from "@legend-apps/markdown-document";
 import { editorWindowIdentifier, editorWindowModuleName, settingsWindowIdentifier, settingsWindowModuleName, } from "./appConstants";
-import { getMarkdownDisplayThemeSetting } from "./markdownSettings";
+import { getMarkdownChromeTheme, getMarkdownDisplayThemeSetting } from "./markdownSettings";
 import { markdownEditorWindowTitle } from "./markdownWindowTitle";
 import { SettingsWindow } from "./SettingsWindow";
 import { loadMarkdownUserThemesSync } from "./userThemes";
@@ -25,7 +25,8 @@ function createMarkdownEditorWindowStyle({ appearance, backgroundColor, includeF
         macos: {
             toolbar: {
                 visible: true,
-                style: "unified" as const,
+                // The toolbar style sets the native title bar height, which centers the traffic lights.
+                style: getMarkdownChromeTheme().titleBarHeight < 44 ? "unifiedCompact" as const : "unified" as const,
             },
             titleBar: {
                 contentLayout: "fullSize" as const,

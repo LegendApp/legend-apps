@@ -53,6 +53,7 @@ function Harness({ props, sidebarOpenSetting = true, sidebarColors = colors }: {
       onAddFolder={workspace.chooseFolders}
       onError={error => { throw error; }}
       onOpenFile={workspace.openTab}
+      titleBarHeight={36}
     />
   );
 }

@@ -2,7 +2,7 @@ import { act, fireEvent, render, within } from "@testing-library/react-native";
 import { watch } from "@legendapp/spark/files";
 import { observable } from "@legendapp/state";
 import React from "react";
-import { Text } from "react-native";
+import { StyleSheet, Text } from "react-native";
 import type { TestInstance } from "test-renderer";
 import { MarkdownEditorWindow } from "../MarkdownEditorWindow";
 import { useMarkdownAppExit, useMarkdownWindowCloseRequest } from "../useMarkdownDocumentEvents";
@@ -131,12 +131,15 @@ jest.mock("../useMarkdownWindows", () => ({
   useMarkdownSettingsWindow: () => jest.fn(),
 }));
 
+const mockChromeTheme = { titleBarHeight: 36 };
+
 jest.mock("../markdownSettings", () => ({
   applyMarkdownThemeSetting: jest.fn(),
   getMarkdownSidebarOpenSetting: () => true,
   setMarkdownSidebarOpenSetting: jest.fn(),
   useMarkdownAppearanceSettings: () => ({}),
   useMarkdownAutosaveSetting: () => "enabled",
+  useMarkdownChromeTheme: () => mockChromeTheme,
   useMarkdownDisplayThemeSetting: () => "system",
   useMarkdownFormattingToolbarModeSetting: () => "selection",
   useMarkdownLayoutThemeSetting: () => "default",
@@ -285,7 +288,7 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
     await view.unmount();
   });
 
-  it("shows a quiet placeholder for a clean untitled document", async () => {
+  it("leaves a clean untitled document blank and focused", async () => {
     mockSessionState$.assign({
       documentSource: "untitled",
       isDirty: false,
@@ -294,9 +297,23 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
 
     const view = await render(<MarkdownEditorWindow />);
 
-    expect(view.getByText("Untitled")).toBeTruthy();
-    expect(view.getByText("Start writing")).toBeTruthy();
+    expect(view.queryByText("Untitled")).toBeNull();
+    expect(view.queryByText("Start writing")).toBeNull();
+    expect(mockMarkdownDocument).toHaveBeenLastCalledWith(expect.objectContaining({ autoFocusFirstBlock: true }));
     await view.unmount();
+  });
+
+  it("sizes the title bar from the chrome theme", async () => {
+    mockChromeTheme.titleBarHeight = 44;
+    try {
+      const view = await render(<MarkdownEditorWindow />);
+
+      // The sidebar header holds the toggle and spans the title bar.
+      expect(StyleSheet.flatten(view.getByLabelText("Hide Sidebar").parent?.props.style).height).toBe(44);
+      await view.unmount();
+    } finally {
+      mockChromeTheme.titleBarHeight = 36;
+    }
   });
 
   it("keeps session chrome state changes out of the document render path", async () => {

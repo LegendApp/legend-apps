@@ -1,4 +1,4 @@
-import { applyLegendDisplayThemeToUniwind } from "@legend-apps/theme";
+import { applyLegendDisplayThemeToUniwind, defaultLegendChromeTheme, type LegendChromeTheme } from "@legend-apps/theme";
 import { type HotkeyBindingState, type HotkeyValue } from "@legendapp/spark/shortcuts/commands";
 import { createObservableFile } from "@legend-apps/storage";
 import { useValue } from "@legendapp/state/react";
@@ -44,6 +44,7 @@ const fontSizeOrder: MarkdownFontSizeSetting[] = ["small", "default", "large", "
 
 type MarkdownSettingsFile = {
   autosave: MarkdownAutosaveSetting;
+  chrome: LegendChromeTheme;
   contentWidth: MarkdownContentWidthSetting;
   density: MarkdownDocumentDensitySetting;
   displayTheme: MarkdownDisplayThemeSetting;
@@ -63,6 +64,7 @@ type MarkdownSettingsFile = {
 
 const initialMarkdownSettings: MarkdownSettingsFile = {
   autosave: "enabled",
+  chrome: defaultLegendChromeTheme,
   contentWidth: "standard",
   density: "comfortable",
   displayTheme: "light",
@@ -118,6 +120,24 @@ function isMarkdownContentWidthSetting(value: unknown): value is MarkdownContent
 
 function isMarkdownDocumentDensitySetting(value: unknown): value is MarkdownDocumentDensitySetting {
   return value === "compact" || value === "comfortable" || value === "spacious";
+}
+
+/** Falls back to the default for a missing height, or one too short for the traffic lights or taller than a toolbar. */
+function toChromeTheme(chrome: Partial<LegendChromeTheme> | undefined): LegendChromeTheme {
+  const titleBarHeight = chrome?.titleBarHeight;
+  return typeof titleBarHeight === "number" && titleBarHeight >= 28 && titleBarHeight <= 80 ? { titleBarHeight } : defaultLegendChromeTheme;
+}
+
+export function getMarkdownChromeTheme(): LegendChromeTheme {
+  return toChromeTheme(markdownSettings$.chrome.get());
+}
+
+export function useMarkdownChromeTheme(): LegendChromeTheme {
+  return toChromeTheme(useValue(markdownSettings$.chrome));
+}
+
+export function setMarkdownChromeTheme(chrome: LegendChromeTheme) {
+  markdownSettings$.chrome.set(chrome);
 }
 
 export function getMarkdownDisplayThemeSetting(): MarkdownDisplayThemeSetting {

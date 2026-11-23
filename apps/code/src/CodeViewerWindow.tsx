@@ -5,7 +5,7 @@ import { beforeWindowClose } from "@legendapp/spark/windows";
 import { ownRegistration } from "@legend-apps/runtime-utils";
 import { noteRecentDocument } from "@legendapp/spark/app/documents";
 import { prepareDocument, SourceDocumentEditor, type SourceDocumentEditorHandle } from "@legend-apps/source-editor";
-import { getLegendDisplayTheme } from "@legend-apps/theme";
+import { defaultLegendChromeTheme, getLegendDisplayTheme } from "@legend-apps/theme";
 import { DocumentTabBar, useDocumentWindow, useWorkspaceWindow, WorkspaceSidebar } from "@legend-apps/workspace";
 import { useValue } from "@legendapp/state/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -160,6 +160,7 @@ export function CodeViewerWindow({ files, folders, launchArguments, preparedDocu
         onToggleSidebar={workspace.toggleSidebar}
         sidebarOpen={sidebarOpen}
         paths={tabs.paths}
+        titleBarHeight={defaultLegendChromeTheme.titleBarHeight}
       />
       {error ? <Text style={[styles.error, { color: displayTheme.colors.danger }]}>{error}</Text> : null}
       <View style={styles.list}>
@@ -218,6 +219,7 @@ export function CodeViewerWindow({ files, folders, launchArguments, preparedDocu
             onAddFolder={workspace.chooseFolders}
             onError={reportError}
             onOpenFile={openFile}
+            titleBarHeight={defaultLegendChromeTheme.titleBarHeight}
           />
         )}
         sidebarCollapsed={!sidebarOpen}

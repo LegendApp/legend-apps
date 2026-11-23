@@ -1,6 +1,6 @@
 import { ColorValueInput } from "@legend-apps/design-system";
 import { SettingsRow, SettingsSection, SettingsSelectRow, SettingsSwitchRow, SettingsSegmentedRow } from "@legendapp/spark/ui/settings";
-import type { LegendThemeBackground, LegendThemeBackgroundSource } from "@legend-apps/theme";
+import type { LegendChromeTheme, LegendThemeBackground, LegendThemeBackgroundSource } from "@legend-apps/theme";
 import { Text, TextInput, Pressable, View } from "react-native";
 
 export type AppearanceThemeOption = {
@@ -267,6 +267,30 @@ export function BackgroundSettingsSection({
           />
         </SettingsRow>
       ) : null}
+    </SettingsSection>
+  );
+}
+
+const titleBarHeightOptions = [
+  { label: "Compact", value: "36" },
+  { label: "Regular", value: "52" },
+];
+
+export function ChromeSettingsSection({ chrome, onChromeChange }: { chrome: LegendChromeTheme; onChromeChange: (chrome: LegendChromeTheme) => void }) {
+  const value = String(chrome.titleBarHeight);
+  // A height set in the settings file outside the presets still shows as selected.
+  const options = titleBarHeightOptions.some(option => option.value === value)
+    ? titleBarHeightOptions
+    : [...titleBarHeightOptions, { label: `Custom (${value})`, value }];
+  return (
+    <SettingsSection title="Window">
+      <SettingsSegmentedRow
+        label="Title Bar"
+        description="Height of the title bar and tab strip"
+        options={options}
+        value={value}
+        onValueChange={(next) => onChromeChange({ ...chrome, titleBarHeight: Number(next) })}
+      />
     </SettingsSection>
   );
 }

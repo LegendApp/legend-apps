@@ -1,3 +1,4 @@
+import { ChromeSettingsSection } from "@legend-apps/appearance-settings";
 import { getLegendDisplayThemeFiles, getMarkdownLayoutThemeFiles } from "@legend-apps/theme";
 import {
   SettingsSection,
@@ -7,6 +8,7 @@ import {
 import { useMemo } from "react";
 import { Text, View } from "react-native";
 import {
+  setMarkdownChromeTheme,
   setMarkdownContentWidthSetting,
   setMarkdownDocumentDensitySetting,
   setMarkdownDisplayThemeSetting,
@@ -19,6 +21,7 @@ import {
   type MarkdownFontFamilySetting,
   type MarkdownFontSizeSetting,
   type MarkdownLineHeightSetting,
+  useMarkdownChromeTheme,
   useMarkdownContentWidthSetting,
   useMarkdownDocumentDensitySetting,
   useMarkdownDisplayThemeSetting,
@@ -92,6 +95,7 @@ export function AppearanceSettingsContent() {
   const selectedLineHeight = useMarkdownLineHeightSetting();
   const selectedContentWidth = useMarkdownContentWidthSetting();
   const selectedDensity = useMarkdownDocumentDensitySetting();
+  const chrome = useMarkdownChromeTheme();
 
   return (
     <>
@@ -115,6 +119,7 @@ export function AppearanceSettingsContent() {
           <ThemeIssueMessages issues={userThemeLoadResult.layoutThemes.issues} />
         ) : null}
       </SettingsSection>
+      <ChromeSettingsSection chrome={chrome} onChromeChange={setMarkdownChromeTheme} />
       <SettingsSection title="Document">
         <SettingsSegmentedRow
           description="Use the theme typeface, a serif reading face, or a fixed-width face."
