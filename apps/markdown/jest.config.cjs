@@ -8,6 +8,7 @@ module.exports = require("../../scripts/jest/spark.cjs")({
   ],
   moduleNameMapper: {
     "^@gorhom/portal$": "<rootDir>/apps/markdown/jest/gorhomPortalMock.cjs",
+    "^@legend-apps/workspace/menu-items$": "<rootDir>/packages/workspace/src/menuItems.ts",
     "^@legend-apps/(.*)$": "<rootDir>/packages/$1/src",
     "^react-native$": "<rootDir>/apps/markdown/jest/reactNativeMock.cjs",
     "^uniwind$": "<rootDir>/apps/markdown/jest/uniwindMock.cjs",

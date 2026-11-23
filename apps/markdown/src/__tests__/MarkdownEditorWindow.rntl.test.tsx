@@ -70,6 +70,7 @@ jest.mock("@legendapp/spark/ui/glass", () => ({
 jest.mock("@legendapp/spark/shortcuts/commands", () => ({ getDefaultHotkeyBindings: jest.requireActual("@legendapp/spark/shortcuts/commands").getDefaultHotkeyBindings, createHotkeyRouter: jest.fn(() => ({})), useRoutedHotkeys: jest.fn() }));
 
 jest.mock("@legendapp/spark/files", () => ({
+  list: jest.fn(async () => []),
   watch: jest.fn(async () => ({ remove: jest.fn(async () => {}) })),
 }));
 
@@ -132,10 +133,13 @@ jest.mock("../useMarkdownWindows", () => ({
 }));
 
 const mockChromeTheme = { titleBarHeight: 36 };
+let mockSidebarFolders: string[] = [];
 
 jest.mock("../markdownSettings", () => ({
   applyMarkdownThemeSetting: jest.fn(),
+  getMarkdownSidebarFoldersSetting: () => mockSidebarFolders,
   getMarkdownSidebarOpenSetting: () => true,
+  setMarkdownSidebarFoldersSetting: jest.fn(),
   setMarkdownSidebarOpenSetting: jest.fn(),
   useMarkdownAppearanceSettings: () => ({}),
   useMarkdownAutosaveSetting: () => "enabled",
@@ -288,6 +292,30 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
     expect(view.queryByLabelText("Add File")).toBeNull();
     expect(view.queryByLabelText("Add Folder")).toBeNull();
     await view.unmount();
+  });
+
+  it("restores and saves the main window's sidebar folders, and leaves other windows' folders alone", async () => {
+    const { setMarkdownSidebarFoldersSetting } = jest.requireMock("../markdownSettings");
+    const { useMarkdownMenus } = jest.requireMock("../useMarkdownMenus");
+    mockSidebarFolders = ["/notes"];
+    try {
+      const view = await render(<MarkdownEditorWindow />);
+      expect(view.getByLabelText("notes")).toBeTruthy();
+      expect(view.queryByText("Add Folder…")).toBeNull();
+      expect(setMarkdownSidebarFoldersSetting).toHaveBeenLastCalledWith(["/notes"]);
+      expect(useMarkdownMenus).toHaveBeenLastCalledWith(expect.objectContaining({ hasFolders: true }));
+      await view.unmount();
+
+      setMarkdownSidebarFoldersSetting.mockClear();
+      const other = await render(<MarkdownEditorWindow windowId="markdown-editor-2" />);
+      expect(other.queryByLabelText("notes")).toBeNull();
+      expect(other.getByText("Add Folder…")).toBeTruthy();
+      expect(useMarkdownMenus).toHaveBeenLastCalledWith(expect.objectContaining({ hasFolders: false }));
+      expect(setMarkdownSidebarFoldersSetting).not.toHaveBeenCalled();
+      await other.unmount();
+    } finally {
+      mockSidebarFolders = [];
+    }
   });
 
   it("leaves a clean untitled document blank and focused", async () => {

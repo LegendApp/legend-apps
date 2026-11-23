@@ -56,6 +56,7 @@ type MarkdownSettingsFile = {
   layoutTheme: MarkdownLayoutThemeSetting;
   lineHeight: MarkdownLineHeightSetting;
   selectionToolbarLayout: MarkdownToolbarLayout;
+  sidebarFolders: string[];
   sidebarOpen: boolean;
   startupBehavior: MarkdownStartupBehaviorSetting;
   theme?: MarkdownDisplayThemeSetting;
@@ -76,6 +77,7 @@ const initialMarkdownSettings: MarkdownSettingsFile = {
   layoutTheme: "default",
   lineHeight: "normal",
   selectionToolbarLayout: getDefaultMarkdownToolbarLayout("selection"),
+  sidebarFolders: [],
   sidebarOpen: true,
   startupBehavior: "newDocument",
   topToolbarLayout: getDefaultMarkdownToolbarLayout("top"),
@@ -171,6 +173,16 @@ export function getMarkdownSidebarOpenSetting(): boolean {
 
 export function setMarkdownSidebarOpenSetting(open: boolean) {
   markdownSettings$.sidebarOpen.set(open);
+}
+
+/** The main window's sidebar folders, restored on the next launch. */
+export function getMarkdownSidebarFoldersSetting(): string[] {
+  const folders: unknown = markdownSettings$.sidebarFolders.get();
+  return Array.isArray(folders) ? folders.filter((folder): folder is string => typeof folder === "string") : [];
+}
+
+export function setMarkdownSidebarFoldersSetting(folders: string[]) {
+  markdownSettings$.sidebarFolders.set(folders);
 }
 
 export function getMarkdownAutosaveSetting(): MarkdownAutosaveSetting {

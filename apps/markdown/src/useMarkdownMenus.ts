@@ -15,6 +15,11 @@ import {
 import type { MarkdownDocumentSessionState, MarkdownDocumentSessionState$ } from "./useMarkdownDocumentSession";
 
 type MarkdownMenuOptions = {
+  /** Whether the window has root folders, which New File and New Folder need. */
+  hasFolders: boolean;
+  onAddFolder: () => void;
+  onNewFile: () => void;
+  onNewFolder: () => void;
   documentCommandsRef: RefObject<MarkdownDocumentCommands | null>;
   onError: (error: unknown) => void;
   onNewDocument: () => Promise<void>;
@@ -48,6 +53,8 @@ const disabledDocumentMenuItems = [
   "strikethrough",
   "spoiler",
   "link",
+  "newFile",
+  "newFolder",
 ];
 
 function disableDocumentMenuItems() {
@@ -55,6 +62,10 @@ function disableDocumentMenuItems() {
 }
 
 export function useMarkdownMenus({
+  hasFolders,
+  onAddFolder,
+  onNewFile,
+  onNewFolder,
   documentCommandsRef,
   onError,
   onNewDocument,
@@ -70,6 +81,9 @@ export function useMarkdownMenus({
   windowId,
 }: MarkdownMenuOptions) {
   const menuHandlers = useMemo<MarkdownMenuHandlers>(() => ({
+    addFolder: onAddFolder,
+    newFile: onNewFile,
+    newFolder: onNewFolder,
     bold: () => documentCommandsRef.current?.toggleBold(),
     decreaseFontSize: decreaseMarkdownFontSizeSetting,
     italic: () => documentCommandsRef.current?.toggleItalic(),
@@ -108,6 +122,9 @@ export function useMarkdownMenus({
     underline: () => documentCommandsRef.current?.toggleUnderline(),
     undo: () => documentCommandsRef.current?.undo(),
   }), [
+    onAddFolder,
+    onNewFile,
+    onNewFolder,
     documentCommandsRef,
     onError,
     onNewDocument,
@@ -142,8 +159,10 @@ export function useMarkdownMenus({
       { id: "strikethrough", enabled: hasDocument },
       { id: "spoiler", enabled: hasDocument },
       { id: "link", enabled: hasDocument },
+      { id: "newFile", enabled: hasFolders },
+      { id: "newFolder", enabled: hasFolders },
     ].map(({ id, enabled }) => [id, { disabled: !enabled }])));
-  }, [sessionState$]);
+  }, [hasFolders, sessionState$]);
 
   useEffect(() => {
     const unregister = registerMarkdownEditorMenuHandlers(windowId, menuHandlers, refreshMenuState);

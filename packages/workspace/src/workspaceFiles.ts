@@ -34,13 +34,37 @@ export async function writeWorkspace(settings: WorkspaceSettings, path?: string)
 }
 
 async function getNewWorkspacePath(settings: WorkspaceSettings) {
-  const directory = await getWorkspacesDirectory();
-  const taken = new Set((await list(directory)).map(entry => entry.name));
   const base = settings.folders[0] ? getPathName(settings.folders[0]).replace(/[/:]/g, "-") : "Workspace";
+  return getUnusedPath(await getWorkspacesDirectory(), base, `.${workspaceFileExtension}`);
+}
+
+/** `directory/base.ext`, numbered `base 2.ext` and up while the name is taken. */
+async function getUnusedPath(directory: string, base: string, extension = "") {
+  const taken = new Set((await list(directory)).map(entry => entry.name));
   for (let count = 1; ; count++) {
-    const name = `${count === 1 ? base : `${base} ${count}`}.${workspaceFileExtension}`;
+    const name = `${count === 1 ? base : `${base} ${count}`}${extension}`;
     if (!taken.has(name)) return `${directory}/${name}`;
   }
+}
+
+/** Creates an empty file named after `fileName` (numbered when taken) and returns its path. */
+export async function createWorkspaceFile(directory: string, fileName: string) {
+  const dot = fileName.lastIndexOf(".");
+  const path = dot > 0 ? await getUnusedPath(directory, fileName.slice(0, dot), fileName.slice(dot)) : await getUnusedPath(directory, fileName);
+  await writeText(path, "");
+  return path;
+}
+
+export async function createWorkspaceFolder(directory: string) {
+  const path = await getUnusedPath(directory, "New Folder");
+  await mkdir(path);
+  return path;
+}
+
+/** Where New File and New Folder create entries: beside the open file when it is in a root folder, else in the first root. */
+export function getNewEntryDirectory(folders: readonly string[], activePath: string | null) {
+  const inFolder = activePath !== null && folders.some(folder => activePath.startsWith(`${folder}/`));
+  return inFolder ? activePath.slice(0, activePath.lastIndexOf("/")) : folders[0] ?? null;
 }
 
 export async function chooseFolders() {

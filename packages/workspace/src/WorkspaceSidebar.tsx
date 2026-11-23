@@ -1,9 +1,12 @@
+import { showContextMenu, type MenuItem } from "@legendapp/spark/context-menu";
+import { revealInFileManager, watch } from "@legendapp/spark/files";
 import { Sidebar, SidebarItem } from "@legendapp/spark/ui/sidebar";
 import { SFSymbol } from "@legendapp/spark/ui/symbol";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { flattenWorkspaceTree, getPathName, listWorkspaceDirectory, type DirectoryListing, type WorkspaceTreeRow } from "./fileTree";
 import { SidebarToggle, trafficLightsWidth, withAlpha } from "./titleBar";
+import { createWorkspaceFile, createWorkspaceFolder } from "./workspaceFiles";
 
 /** Concrete colors: SF Symbols do not take PlatformColor. `primary` tints folder symbols. */
 export type WorkspaceColors = { border: string; foreground: string; muted: string; primary?: string; selection: string };
@@ -13,8 +16,12 @@ export type WorkspaceSidebarProps = {
   colors: WorkspaceColors;
   files: readonly string[];
   folders: readonly string[];
+  /** Enables folder menus (right-click, and the section header's hover button). New File creates `newFileName`. */
+  folderMenu?: { newFileName: string; onRemoveFolder: (path: string) => void; windowId: string };
   /** Rows for other files are shown dimmed and cannot be opened. */
   isDocumentPath?: (path: string) => boolean;
+  /** Shows an Add Folder… button while there are no folders. */
+  onAddFolder?: () => void;
   onError: (error: unknown) => void;
   onOpenFile: (path: string) => void;
   /** Shows the sidebar toggle beside the traffic lights, where the title bar's toggle sits while the sidebar is hidden. */
@@ -27,7 +34,15 @@ const rowHeight = 24;
 const sectionHeight = 26;
 const indentation = 16;
 
-export function WorkspaceSidebar({ activePath, colors, files, folders, isDocumentPath, onError, onOpenFile, onToggleSidebar, titleBarHeight }: WorkspaceSidebarProps) {
+const folderMenuItems: MenuItem[] = [
+  { type: "action", id: "newFile", label: "New File" },
+  { type: "action", id: "newFolder", label: "New Folder" },
+  { type: "separator" },
+  { type: "action", id: "reveal", label: "Reveal in Finder" },
+];
+const rootFolderMenuItems: MenuItem[] = [...folderMenuItems, { type: "separator" }, { type: "action", id: "remove", label: "Remove Folder from Sidebar" }];
+
+export function WorkspaceSidebar({ activePath, colors, files, folderMenu, folders, isDocumentPath, onAddFolder, onError, onOpenFile, onToggleSidebar, titleBarHeight }: WorkspaceSidebarProps) {
   const [listings, setListings] = useState<ReadonlyMap<string, DirectoryListing>>(new Map());
   // Root folders start expanded and other directories collapsed; a toggle flips that.
   const [toggled, setToggled] = useState<ReadonlySet<string>>(new Set());
@@ -53,7 +68,43 @@ export function WorkspaceSidebar({ activePath, colors, files, folders, isDocumen
     }
   }, [listings, onError, rows]);
 
+  // Changes on disk reload the listings of the changed path and its parent.
+  useEffect(() => {
+    const registrations = folders.map(folder => watch(folder, changed => setListings(current => {
+      const stale = [changed, changed.slice(0, changed.lastIndexOf("/"))].filter(path => current.has(path));
+      if (stale.length === 0) return current;
+      const next = new Map(current);
+      for (const path of stale) next.delete(path);
+      return next;
+    }), { recursive: true }));
+    for (const registration of registrations) registration.catch(onError);
+    return () => { for (const registration of registrations) registration.then(({ remove }) => remove()).catch(onError); };
+  }, [folders, onError]);
+
   const toggle = (path: string) => setToggled(current => { const next = new Set(current); if (!next.delete(path)) next.add(path); return next; });
+  const expand = (path: string) => { if (!expanded.has(path)) toggle(path); };
+  const showFolderMenu = folderMenu && (async (path: string, position: { x: number; y: number }) => {
+    const selection = await showContextMenu({ items: folders.includes(path) ? rootFolderMenuItems : folderMenuItems, position, windowId: folderMenu.windowId });
+    if (selection.canceled) return;
+    switch (selection.itemId) {
+      case "newFile": {
+        const file = await createWorkspaceFile(path, folderMenu.newFileName);
+        expand(path);
+        onOpenFile(file);
+        return;
+      }
+      case "newFolder":
+        await createWorkspaceFolder(path);
+        expand(path);
+        return;
+      case "reveal":
+        await revealInFileManager(path);
+        return;
+      case "remove":
+        folderMenu.onRemoveFolder(path);
+    }
+  });
+  const openFolderMenu = showFolderMenu && ((path: string, position: { x: number; y: number }) => { showFolderMenu(path, position).catch(onError); });
   const openable = (row: WorkspaceTreeRow) => row.isDirectory || !isDocumentPath || isDocumentPath(row.path);
   // The native list selects only file rows it can open; the open document is selected when it is in the tree.
   const selectedId = rows.some(row => row.path === activePath && !row.isDirectory && openable(row)) ? activePath : null;
@@ -63,6 +114,13 @@ export function WorkspaceSidebar({ activePath, colors, files, folders, isDocumen
       <View style={[styles.header, { height: titleBarHeight }]}>
         {onToggleSidebar ? <SidebarToggle colors={colors} label="Hide Sidebar" onPress={onToggleSidebar} /> : null}
       </View>
+      {onAddFolder && folders.length === 0
+        ? (
+          <Pressable accessibilityRole="button" onPress={onAddFolder} style={({ pressed }) => [styles.addFolder, { borderColor: colors.border }, pressed && { backgroundColor: withAlpha(colors.foreground, 0.07) }]}>
+            <Text style={[styles.name, { color: colors.foreground }]}>Add Folder…</Text>
+          </Pressable>
+        )
+        : null}
       <Sidebar
         defaultRowHeight={rowHeight}
         onSelectionChange={({ id }) => { if (id && id !== activePath) onOpenFile(id); }}
@@ -72,9 +130,15 @@ export function WorkspaceSidebar({ activePath, colors, files, folders, isDocumen
         {rows.map(row => {
           const header = row.depth === 0 && row.isDirectory && folders.includes(row.path);
           return (
-            <SidebarItem id={row.path} key={row.path} rowHeight={header ? sectionHeight : rowHeight} selectable={!row.isDirectory && openable(row)}>
+            <SidebarItem
+              id={row.path}
+              key={row.path}
+              onContextMenu={openFolderMenu && row.isDirectory ? event => openFolderMenu(row.path, event.windowPosition) : undefined}
+              rowHeight={header ? sectionHeight : rowHeight}
+              selectable={!row.isDirectory && openable(row)}
+            >
               {header
-                ? <SectionHeader colors={colors} row={row} onPress={() => toggle(row.path)} />
+                ? <SectionHeader colors={colors} onMenu={openFolderMenu && (position => openFolderMenu(row.path, position))} row={row} onPress={() => toggle(row.path)} />
                 : <TreeRow colors={colors} openable={openable(row)} row={row} onToggle={() => toggle(row.path)} />}
             </SidebarItem>
           );
@@ -84,8 +148,13 @@ export function WorkspaceSidebar({ activePath, colors, files, folders, isDocumen
   );
 }
 
-/** A root folder, as a sidebar section whose chevron shows on hover or while collapsed. */
-function SectionHeader({ colors, onPress, row }: { colors: WorkspaceColors; onPress: () => void; row: WorkspaceTreeRow }) {
+/** A root folder, as a sidebar section whose chevron and menu button show on hover; the chevron also shows while collapsed. */
+function SectionHeader({ colors, onMenu, onPress, row }: {
+  colors: WorkspaceColors;
+  onMenu?: (position: { x: number; y: number }) => void;
+  onPress: () => void;
+  row: WorkspaceTreeRow;
+}) {
   const [hovered, setHovered] = useState(false);
   return (
     <Pressable
@@ -98,7 +167,23 @@ function SectionHeader({ colors, onPress, row }: { colors: WorkspaceColors; onPr
       style={styles.section}
     >
       <Text numberOfLines={1} style={[styles.sectionTitle, { color: colors.muted }]}>{row.name}</Text>
-      {hovered || !row.expanded ? <SFSymbol color={colors.muted} name={row.expanded ? "chevron.down" : "chevron.right"} size={10} /> : null}
+      <View style={styles.sectionAccessories}>
+        {hovered && onMenu
+          ? (
+            <Pressable
+              accessibilityLabel={`${row.name} Actions`}
+              accessibilityRole="button"
+              hitSlop={4}
+              onPress={({ nativeEvent }) => onMenu({ x: nativeEvent.pageX, y: nativeEvent.pageY })}
+              tooltip="Folder Actions"
+              style={({ pressed }) => [styles.sectionButton, pressed && { backgroundColor: withAlpha(colors.foreground, 0.1) }]}
+            >
+              <SFSymbol color={colors.muted} name="ellipsis" size={11} />
+            </Pressable>
+          )
+          : null}
+        {hovered || !row.expanded ? <SFSymbol color={colors.muted} name={row.expanded ? "chevron.down" : "chevron.right"} size={10} /> : null}
+      </View>
     </Pressable>
   );
 }
@@ -127,6 +212,15 @@ function TreeRow({ colors, onToggle, openable, row }: { colors: WorkspaceColors;
 }
 
 const styles = StyleSheet.create({
+  addFolder: {
+    alignItems: "center",
+    borderRadius: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 28,
+    justifyContent: "center",
+    marginHorizontal: 12,
+    marginTop: 8,
+  },
   disclosure: {
     alignItems: "center",
     height: rowHeight,
@@ -169,6 +263,18 @@ const styles = StyleSheet.create({
     paddingLeft: 6,
     paddingRight: 8,
     paddingTop: 4,
+  },
+  sectionAccessories: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 4,
+  },
+  sectionButton: {
+    alignItems: "center",
+    borderRadius: 4,
+    height: 18,
+    justifyContent: "center",
+    width: 20,
   },
   sectionTitle: {
     flexShrink: 1,

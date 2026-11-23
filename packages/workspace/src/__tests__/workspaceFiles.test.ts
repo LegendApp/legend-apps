@@ -1,6 +1,6 @@
 import { openFileDialog } from "@legendapp/spark/dialogs";
 import { readText, writeText } from "@legendapp/spark/files";
-import { chooseWorkspace, parseWorkspaceSettings, writeWorkspace } from "../workspaceFiles";
+import { chooseWorkspace, getNewEntryDirectory, parseWorkspaceSettings, writeWorkspace } from "../workspaceFiles";
 
 jest.mock("@legendapp/spark/files", () => ({
   getDirectory: jest.fn(async () => "/data/app/"),
@@ -36,5 +36,12 @@ describe("workspace files", () => {
     jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/data/app/Workspaces/w.json"] });
     jest.mocked(readText).mockResolvedValueOnce('{"folders":["/a","/b"]}');
     await expect(chooseWorkspace()).resolves.toEqual({ folders: ["/a", "/b"], workspacePath: "/data/app/Workspaces/w.json" });
+  });
+
+  it("creates new entries beside the open file in a root folder, else in the first root", () => {
+    expect(getNewEntryDirectory(["/a", "/b"], "/b/docs/x.md")).toBe("/b/docs");
+    expect(getNewEntryDirectory(["/a", "/b"], "/bc/x.md")).toBe("/a");
+    expect(getNewEntryDirectory(["/a"], null)).toBe("/a");
+    expect(getNewEntryDirectory([], "/a/x.md")).toBeNull();
   });
 });
