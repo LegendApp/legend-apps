@@ -2,6 +2,13 @@ import { SFSymbol } from "@legendapp/spark/ui/symbol";
 import { useState } from "react";
 import { Pressable, StyleSheet } from "react-native";
 
+declare module "react-native" {
+  interface PressableProps {
+    /** react-native-macos shows this as the view's native hover help. */
+    tooltip?: string;
+  }
+}
+
 /** Clears the traffic lights, so the sidebar toggle keeps one position whether the sidebar shows or not. */
 export const trafficLightsWidth = 80;
 
@@ -22,6 +29,7 @@ export function SidebarToggle({ colors, label, onPress }: { colors: { foreground
       onHoverIn={() => setHovered(true)}
       onHoverOut={() => setHovered(false)}
       onPress={onPress}
+      tooltip={label}
       style={({ pressed }) => [styles.toggle, (hovered || pressed) && { backgroundColor: withAlpha(colors.foreground, pressed ? 0.12 : 0.07) }]}
     >
       <SFSymbol color={colors.muted} name="sidebar.left" size={18} />

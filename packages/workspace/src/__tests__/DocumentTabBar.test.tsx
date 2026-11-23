@@ -40,6 +40,7 @@ describe("DocumentTabBar", () => {
     expect(tabs().map(tab => tab.props.accessibilityState.selected)).toEqual([false, true, false]);
     const closes = renderer.root.findAll(node => node.type === ("Pressable" as never) && node.props.accessibilityLabel?.startsWith("Close "));
     expect(closes.map(close => close.props.pointerEvents)).toEqual(["none", "auto", "none"]);
+    expect(closes.map(close => close.props.tooltip)).toEqual(["Close Tab", "Close Tab", "Close Tab"]);
     // Neither neighbour of the active tab draws a separator.
     expect(tabs().map(tab => tab.findAll(node => node.type === ("View" as never) && flat(node.props.style).position === "absolute" && flat(node.props.style).height === 16).length)).toEqual([0, 0, 0]);
     expect(flat(tabs()[1].props.style).backgroundColor).toBe(withAlpha(colors.foreground, 0.09));

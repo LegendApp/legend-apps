@@ -49,8 +49,6 @@ function Harness({ props, sidebarOpenSetting = true, sidebarColors = colors }: {
       files={files}
       folders={folders}
       isDocumentPath={path => path.endsWith(".md")}
-      onAddFile={workspace.chooseFiles}
-      onAddFolder={workspace.chooseFolders}
       onError={error => { throw error; }}
       onOpenFile={workspace.openTab}
       titleBarHeight={36}
@@ -77,15 +75,15 @@ describe("WorkspaceSidebar", () => {
   it("starts single files with the sidebar closed, then adds folders", async () => {
     await act(async () => { renderer = create(<Harness props={{ files: ["/x/one.md"] }} />); });
     expect(workspace.state.sidebarOpen).toBe(false);
-    expect(labels()).toEqual([["one.md", true], ["Add File", true], ["Add Folder", true]]);
+    expect(labels()).toEqual([["one.md", true]]);
 
     jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
-    await press("Add Folder");
+    await act(async () => workspace.chooseFolders());
     expect(openFileDialog).toHaveBeenLastCalledWith({ multiple: true, selection: "directories" });
     expect(workspace.state.sidebarOpen).toBe(true);
     expect(workspace.state.workspacePath).toBeNull();
     expect(writeText).not.toHaveBeenCalled();
-    expect(labels().map(([label]) => label)).toEqual(["repo", "src", "notes.md", "one.md", "Add File", "Add Folder"]);
+    expect(labels().map(([label]) => label)).toEqual(["repo", "src", "notes.md", "one.md"]);
   });
 
   it("refreshes mounted row colors when the theme changes without changing the files", async () => {
@@ -101,11 +99,11 @@ describe("WorkspaceSidebar", () => {
     await act(async () => { renderer = create(<Harness props={{ folders: ["/repo"] }} />); });
     expect(workspace.state.sidebarOpen).toBe(true);
     await press("src");
-    expect(labels()).toEqual([["repo", true], ["src", true], ["a.ts", false], ["notes.md", true], ["Add File", true], ["Add Folder", true]]);
+    expect(labels()).toEqual([["repo", true], ["src", true], ["a.ts", false], ["notes.md", true]]);
     expect(renderer.root.findAll(node => node.type === ("SidebarItem" as never)).map(node => [node.props.id, node.props.selectable]))
       .toEqual([["/repo", false], ["/repo/src", false], ["/repo/src/a.ts", false], ["/repo/notes.md", true]]);
     await press("repo");
-    expect(labels().map(([label]) => label)).toEqual(["repo", "Add File", "Add Folder"]);
+    expect(labels().map(([label]) => label)).toEqual(["repo"]);
     expect(list).toHaveBeenCalledTimes(2);
   });
 
@@ -116,14 +114,13 @@ describe("WorkspaceSidebar", () => {
     expect(renderer.root.findByType("Sidebar" as never).props.selectedId).toBe("/repo/notes.md");
 
     jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/other"] });
-    await press("Add Folder");
+    await act(async () => workspace.chooseFolders());
     expect(writeText).toHaveBeenCalledWith("/data/w.json", '{\n  "folders": [\n    "/repo",\n    "/other"\n  ],\n  "theme": "dark"\n}\n');
 
     jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/x/a.md", "/x/b.md"] });
-    await press("Add File");
+    await act(async () => { await workspace.chooseFiles(); });
     expect(openFileDialog).toHaveBeenLastCalledWith({ filters: [{ extensions: ["md"] }], multiple: true, selection: "files" });
     expect(workspace.state.files).toEqual(["/x/a.md", "/x/b.md"]);
-    expect(workspace.state.tabs).toEqual({ active: "/x/a.md", paths: ["/repo/notes.md", "/x/a.md"] });
   });
 
   it("saves a new workspace and remembers the sidebar choice only for folders", async () => {

@@ -15,9 +15,6 @@ export type WorkspaceSidebarProps = {
   folders: readonly string[];
   /** Rows for other files are shown dimmed and cannot be opened. */
   isDocumentPath?: (path: string) => boolean;
-  /** Resolves with the added files; the first one opens. */
-  onAddFile: () => Promise<readonly string[]>;
-  onAddFolder: () => void;
   onError: (error: unknown) => void;
   onOpenFile: (path: string) => void;
   /** Shows the sidebar toggle beside the traffic lights, where the title bar's toggle sits while the sidebar is hidden. */
@@ -30,7 +27,7 @@ const rowHeight = 24;
 const sectionHeight = 26;
 const indentation = 16;
 
-export function WorkspaceSidebar({ activePath, colors, files, folders, isDocumentPath, onAddFile, onAddFolder, onError, onOpenFile, onToggleSidebar, titleBarHeight }: WorkspaceSidebarProps) {
+export function WorkspaceSidebar({ activePath, colors, files, folders, isDocumentPath, onError, onOpenFile, onToggleSidebar, titleBarHeight }: WorkspaceSidebarProps) {
   const [listings, setListings] = useState<ReadonlyMap<string, DirectoryListing>>(new Map());
   // Root folders start expanded and other directories collapsed; a toggle flips that.
   const [toggled, setToggled] = useState<ReadonlySet<string>>(new Set());
@@ -83,10 +80,6 @@ export function WorkspaceSidebar({ activePath, colors, files, folders, isDocumen
           );
         })}
       </Sidebar>
-      <View style={styles.footer}>
-        <FooterButton colors={colors} label="Add File" symbol="doc.badge.plus" onPress={() => { void onAddFile().then(paths => { if (paths[0]) onOpenFile(paths[0]); }); }} />
-        <FooterButton colors={colors} label="Add Folder" symbol="folder.badge.plus" onPress={onAddFolder} />
-      </View>
     </View>
   );
 }
@@ -133,42 +126,12 @@ function TreeRow({ colors, onToggle, openable, row }: { colors: WorkspaceColors;
     : <View accessibilityLabel={row.name} accessibilityState={{ disabled: !openable }} accessible style={style}>{content}</View>;
 }
 
-function FooterButton({ colors, label, onPress, symbol }: { colors: WorkspaceColors; label: string; onPress: () => void; symbol: string }) {
-  const [hovered, setHovered] = useState(false);
-  return (
-    <Pressable
-      accessibilityLabel={label}
-      accessibilityRole="button"
-      onHoverIn={() => setHovered(true)}
-      onHoverOut={() => setHovered(false)}
-      onPress={onPress}
-      style={({ pressed }) => [styles.footerButton, (hovered || pressed) && { backgroundColor: withAlpha(colors.foreground, pressed ? 0.12 : 0.07) }]}
-    >
-      <SFSymbol color={colors.muted} name={symbol} size={15} />
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
   disclosure: {
     alignItems: "center",
     height: rowHeight,
     justifyContent: "center",
     width: 14,
-  },
-  footer: {
-    flexDirection: "row",
-    gap: 2,
-    paddingBottom: 6,
-    paddingHorizontal: 8,
-    paddingTop: 2,
-  },
-  footerButton: {
-    alignItems: "center",
-    borderRadius: 6,
-    height: 26,
-    justifyContent: "center",
-    width: 30,
   },
   header: {
     flexDirection: "row",

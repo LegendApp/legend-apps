@@ -223,17 +223,6 @@ describe("Code default editor", () => {
         expect(editors()).toHaveLength(0);
         expect(openButton()).toBeDefined();
     });
-    it("opens files added from the single-file sidebar as tabs", async () => {
-        await act(async () => { renderer = create(<CodeViewerWindow launchArguments={["/one.ts"]}/>); });
-        expect(renderer.root.findByType("SplitView" as never).props.sidebarCollapsed).toBe(true);
-        jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/two.ts", "/three.ts"] });
-        await act(async () => pressable("Add File").props.onPress());
-        expect(openFileDialog).toHaveBeenCalledWith({ filters: [], multiple: true, selection: "files" });
-        expect(renderer.root.findByType("SplitView" as never).props.sidebarCollapsed).toBe(false);
-        expect(editor().props.filePath).toBe("/two.ts");
-        expect(editor().props.preparedDocumentId).toBe("prepared:/two.ts");
-        expect(tabTitles()).toEqual([["one.ts", false], ["two.ts", true]]);
-    });
     it("passes a launch preparation through without starting a duplicate read", async () => {
         await act(async () => { renderer = create(<CodeViewerWindow launchArguments={["/launch.ts"]} preparedDocumentId="launch-token"/>); });
         expect(editor().props.preparedDocumentId).toBe("launch-token");
