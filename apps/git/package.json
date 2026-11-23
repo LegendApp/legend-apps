@@ -17,6 +17,7 @@
     "@legendapp/state": "catalog:",
     "@legend-apps/reorder-controls": "workspace:*",
     "@legend-apps/color-picker": "workspace:*",
-    "@legend-apps/design-system": "workspace:*"
+    "@legend-apps/design-system": "workspace:*",
+    "@legend-apps/workspace": "workspace:*"
   }
 }

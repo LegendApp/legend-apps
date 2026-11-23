@@ -122,6 +122,32 @@ it("renders the empty window, toggles its sidebar, opens the folder panel and cl
   expect(registration.remove).toHaveBeenCalledTimes(1);
 });
 
+it("places the standard Mac menus before Git commands and groups the File actions around Open Recent", async () => {
+  let renderer!: ReactTestRenderer;
+  await act(async () => { renderer = create(<App />); });
+  try {
+    const menus = lastMenu().items;
+    expect(menus.map(({ id }) => id)).toEqual([
+      "app", "file", "edit", "view", "repository", "branch", "changes", "worktree", "pull-request",
+    ]);
+    expect(menus.slice(1, 4).map(({ placement }) => placement)).toEqual([
+      { after: { menu: "app" } }, { after: { menu: "file" } }, { after: { menu: "edit" } },
+    ]);
+    expect(menus.slice(4).map(({ placement }) => placement)).toEqual(
+      Array(5).fill({ before: { menu: "window" } }),
+    );
+    const file = menus.find(({ id }) => id === "file");
+    expect(file.items).toMatchObject([
+      { id: "open-repository", placement: { before: { role: "open" } }, shortcut: "Cmd+o" },
+      { id: "open-worktree", placement: { after: { id: "open-repository" } } },
+      { id: "native-open", hidden: true, disabled: true },
+      { id: "reveal-repository", placement: { after: { role: "close" } } },
+    ]);
+  } finally {
+    await act(async () => { renderer.unmount(); });
+  }
+});
+
 it("gives the window the settings' appearance and switches the diff mode from View ▸ Diff", async () => {
   jest.clearAllMocks();
   const files = jest.requireMock("@legendapp/spark/files") as { writeText(path: string, text: string): Promise<void>; readText(path: string): Promise<string> };

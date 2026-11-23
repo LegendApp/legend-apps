@@ -4,7 +4,7 @@ export const markdownMenuState$ = observable<Record<string, MenuState>>({});
 import {
   type MenuRootItem,
 } from "@legendapp/spark/menus";
-import { workspaceMenuItems } from "@legend-apps/workspace/menu-items";
+import { macMenuPlacement, workspaceMenuItems } from "@legend-apps/workspace/menu-items";
 
 // Spark merges this configuration into the native menu bar, which supplies the remaining system commands.
 export const markdownMenuConfig: MenuRootItem[] = [
@@ -23,7 +23,7 @@ export const markdownMenuConfig: MenuRootItem[] = [
     id: "file",
     label: "File",
     target: { menu: "file" },
-    placement: { after: { menu: "app" } },
+    placement: macMenuPlacement.file,
     items: [
       {
         id: "new",
@@ -65,7 +65,7 @@ export const markdownMenuConfig: MenuRootItem[] = [
     id: "edit",
     label: "Edit",
     target: { menu: "edit" },
-    placement: { after: { menu: "file" } },
+    placement: macMenuPlacement.edit,
     items: [
       {
         id: "undo",

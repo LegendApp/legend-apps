@@ -46,6 +46,7 @@ import { folderItem, useFileList } from "./fileList";
 import { CommitComposer, type CommitMessageGenerator } from "./CommitComposer";
 import { openFileDialog, showMessage, showPrompt } from "@legendapp/spark/dialogs";
 import { useMenu, type UseMenuOptions } from "@legendapp/spark/menus";
+import { macMenuPlacement } from "@legend-apps/workspace/menu-items";
 import { Sidebar, SidebarItem } from "@legendapp/spark/ui/sidebar";
 import { SFSymbol } from "@legendapp/spark/ui/symbol";
 import { SidebarSplitView } from "@legendapp/spark/ui/split-view";
@@ -993,21 +994,25 @@ Rebase anyway?`,
     id: "legend-git",
     items: [
       { type: "submenu", id: "app", label: "Legend Git", target: { menu: "app" }, items: [{ type: "action", id: "settings", label: "Settings…", target: { role: "settings" } }] },
-      { type: "submenu", id: "file", label: "File", target: { menu: "file" }, items: [
-        // AppKit's own Open Recent (filled from the system's recent documents) sits between these two.
-        item("open-repository"), item("open-worktree"), { type: "separator" }, item("reveal-repository"),
+      { type: "submenu", id: "file", label: "File", target: { menu: "file" }, placement: macMenuPlacement.file, items: [
+        { ...item("open-repository"), placement: { before: { role: "open" } } },
+        { ...item("open-worktree"), placement: { after: { id: "open-repository" } } },
+        { type: "role", id: "native-open", role: "open", target: { role: "open" }, hidden: true, disabled: true },
+        { ...item("reveal-repository"), placement: { after: { role: "close" } } },
       ] },
-      { type: "submenu", id: "edit", label: "Edit", target: { menu: "edit" }, items: [item("undo-operation"), { type: "separator" }, item("copy-sha"), { type: "separator" }, item("blame-line")] },
+      { type: "submenu", id: "edit", label: "Edit", target: { menu: "edit" }, placement: macMenuPlacement.edit, items: [
+        { ...item("undo-operation"), placement: { after: { role: "redo" } } },
+        { ...item("copy-sha"), placement: { after: { role: "copy" } } },
+        { ...item("blame-line"), placement: { after: { role: "selectAll" } } },
+      ] },
       // AppKit's own View ▸ Show/Hide Sidebar drives the split view, so the menu has no second one.
-      { type: "submenu", id: "view", label: "View", target: { menu: "view" }, items: [item("show-changes"), item("show-history"), item("show-review"), { type: "separator" }, item("show-file-history"), item("show-all-history"), { type: "separator" },
+      { type: "submenu", id: "view", label: "View", target: { menu: "view" }, placement: macMenuPlacement.view, items: [item("show-changes"), item("show-history"), item("show-review"), { type: "separator" }, item("show-file-history"), item("show-all-history"), { type: "separator" },
         layoutMenu(layout, viewKindFor(section), focusedPanelId), diffMenu(layout.settings.panels.diff, !!layout.store && !layout.store.isReadOnly("user")), { type: "separator" },
         { type: "action", id: "customize-toolbar", label: "Customize Toolbar…" }] },
-      { type: "submenu", id: "repository", label: "Repository", placement: { before: { menu: "window" } }, items: [item("fetch"), item("pull"), item("push"), item("cancel-network"), { type: "separator" }, item("refresh"), { type: "separator" }, item("create-pull-request"), item("open-github"), { type: "separator" }, item("sign-in-github"), item("sign-out-github")] },
-      { type: "submenu", id: "pull-request", label: "Pull Request", placement: { before: { menu: "window" } }, items: [item("review-pull-request"), { type: "separator" }, item("checkout-pull-request"), item("pull-request-worktree")] },
-      { type: "submenu", id: "branch", label: "Branch", placement: { before: { menu: "window" } }, items: [item("switch-branch"), item("new-branch"), { type: "separator" }, item("rename-branch"), item("delete-branch"), { type: "separator" }, item("merge-ref"), item("rebase-ref"), item("interactive-rebase-ref"), item("cherry-pick-commit"), item("revert-commit"), { type: "separator" }, item("abort-operation"), item("continue-operation")] },
-      { type: "submenu", id: "worktree", label: "Worktree", placement: { before: { menu: "window" } }, items: [item("new-worktree"), item("open-review-worktree"), { type: "separator" }, item("reveal-worktree"), item("remove-worktree")] },
+      { type: "submenu", id: "repository", label: "Repository", placement: macMenuPlacement.appMenu, items: [item("fetch"), item("pull"), item("push"), item("cancel-network"), { type: "separator" }, item("refresh"), { type: "separator" }, item("create-pull-request"), item("open-github"), { type: "separator" }, item("sign-in-github"), item("sign-out-github")] },
+      { type: "submenu", id: "branch", label: "Branch", placement: macMenuPlacement.appMenu, items: [item("switch-branch"), item("new-branch"), { type: "separator" }, item("rename-branch"), item("delete-branch"), { type: "separator" }, item("merge-ref"), item("rebase-ref"), item("interactive-rebase-ref"), item("cherry-pick-commit"), item("revert-commit"), { type: "separator" }, item("abort-operation"), item("continue-operation")] },
       {
-        type: "submenu", id: "changes", label: "Changes", placement: { before: { menu: "window" } },
+        type: "submenu", id: "changes", label: "Changes", placement: macMenuPlacement.appMenu,
         items: [
           item("stage-file"), item("unstage-file"), item("stage-all"), item("unstage-all"), { type: "separator" },
           item("apply-lines"), { type: "separator" },
@@ -1017,6 +1022,8 @@ Rebase anyway?`,
           item("generate-message"), item("commit"),
         ],
       },
+      { type: "submenu", id: "worktree", label: "Worktree", placement: macMenuPlacement.appMenu, items: [item("new-worktree"), item("open-review-worktree"), { type: "separator" }, item("reveal-worktree"), item("remove-worktree")] },
+      { type: "submenu", id: "pull-request", label: "Pull Request", placement: macMenuPlacement.appMenu, items: [item("review-pull-request"), { type: "separator" }, item("checkout-pull-request"), item("pull-request-worktree")] },
     ],
     onAction: action => runMenuAction(action.itemId),
   };

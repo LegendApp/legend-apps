@@ -158,6 +158,7 @@
         "@legend-apps/reorder-controls": "workspace:*",
         "@legend-apps/source-editor": "workspace:*",
         "@legend-apps/syntax-parser": "workspace:*",
+        "@legend-apps/workspace": "workspace:*",
         "@legendapp/list": "catalog:",
         "@legendapp/spark": "catalog:",
         "@legendapp/state": "catalog:",
