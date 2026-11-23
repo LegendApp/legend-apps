@@ -1436,7 +1436,10 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
 - (void)mouseDown:(NSEvent *)event
 {
   RNMarkdownEditorHost *host = [self editorHost];
-  if (host == nil) {
+  // A click on a view drawn over this row, such as the floating toolbar, reaches
+  // here through the responder chain; it must not activate the row underneath.
+  NSView *hitView = [self.window.contentView.superview hitTest:event.locationInWindow];
+  if (host == nil || (hitView != nil && ![hitView isDescendantOf:self])) {
     [super mouseDown:event];
     return;
   }
