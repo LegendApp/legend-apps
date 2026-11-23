@@ -1,5 +1,5 @@
 import { type MenuRootItem } from "@legendapp/spark/menus";
-import { workspaceFileMenuItems } from "@legend-apps/workspace/menu-items";
+import { workspaceMenuItems } from "@legend-apps/workspace/menu-items";
 
 export const codeMenuConfig: MenuRootItem[] = [
   { type: "submenu",
@@ -36,7 +36,10 @@ export const codeMenuConfig: MenuRootItem[] = [
         target: { role: "open" }, label: "Open…",
         shortcut: "Cmd+o",
       },
-      ...workspaceFileMenuItems,
+      workspaceMenuItems.newWindow,
+      workspaceMenuItems.openFolder,
+      workspaceMenuItems.openWorkspace,
+      workspaceMenuItems.saveWorkspace,
       { type: "separator" },
       { type: "action", id: "save", target: { role: "save" }, label: "Save", shortcut: "Cmd+s" },
       { type: "action", id: "saveAs", target: { role: "saveAs" }, label: "Save As…", shortcut: "Cmd+Shift+s" },

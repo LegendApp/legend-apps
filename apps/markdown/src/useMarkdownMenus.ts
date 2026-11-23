@@ -30,7 +30,6 @@ type MarkdownMenuOptions = {
   onSaveDocument: () => Promise<boolean>;
   onSaveDocumentAs: () => Promise<boolean>;
   onSaveWorkspace: () => Promise<void>;
-  onToggleSidebar: () => void;
   sessionState$: MarkdownDocumentSessionState$;
   windowId: string;
 };
@@ -76,7 +75,6 @@ export function useMarkdownMenus({
   onSaveDocument,
   onSaveDocumentAs,
   onSaveWorkspace,
-  onToggleSidebar,
   sessionState$,
   windowId,
 }: MarkdownMenuOptions) {
@@ -118,7 +116,6 @@ export function useMarkdownMenus({
     resetFontSize: resetMarkdownFontSizeSetting,
     spoiler: () => documentCommandsRef.current?.toggleSpoiler(),
     strikethrough: () => documentCommandsRef.current?.toggleStrikethrough(),
-    toggleSidebar: onToggleSidebar,
     underline: () => documentCommandsRef.current?.toggleUnderline(),
     undo: () => documentCommandsRef.current?.undo(),
   }), [
@@ -135,7 +132,6 @@ export function useMarkdownMenus({
     onSaveDocument,
     onSaveDocumentAs,
     onSaveWorkspace,
-    onToggleSidebar,
     sessionState$,
   ]);
 

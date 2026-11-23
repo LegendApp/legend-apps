@@ -1,4 +1,4 @@
-export { workspaceFileMenuItems } from "./menuItems";
+export { workspaceMenuItems } from "./menuItems";
 import { chooseFolders, chooseWorkspace } from "./workspaceFiles";
 import type { WorkspaceWindowProps } from "./workspaceState";
 

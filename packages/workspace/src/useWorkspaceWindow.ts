@@ -39,12 +39,15 @@ export function useWorkspaceWindow(props: WorkspaceWindowProps, { onSidebarOpenC
     update(() => ({ sidebarOpen: !sidebarOpen }));
   }, [onSidebarOpenChange, update]);
 
+  /** Follows the native split view, which collapses the sidebar itself from View › Hide Sidebar. */
+  const setSidebarOpen = useCallback((open: boolean) => { if (open !== stateRef.current.sidebarOpen) toggleSidebar(); }, [toggleSidebar]);
+
   /** Adds root folders and shows the sidebar. */
   const addFolders = useCallback((added: readonly string[]) => {
     if (added.length === 0) return;
     update(({ folders }) => ({ folders: addUniquePaths(folders, added) }));
-    if (!stateRef.current.sidebarOpen) toggleSidebar();
-  }, [toggleSidebar, update]);
+    setSidebarOpen(true);
+  }, [setSidebarOpen, update]);
   /** Takes a root folder out of the window; nothing on disk changes. */
   const removeFolder = useCallback((path: string) => update(({ folders }) => ({ folders: folders.filter(folder => folder !== path) })), [update]);
 
@@ -66,6 +69,7 @@ export function useWorkspaceWindow(props: WorkspaceWindowProps, { onSidebarOpenC
     removeFolder,
     renameTab,
     saveWorkspace,
+    setSidebarOpen,
     state,
     toggleSidebar,
   };

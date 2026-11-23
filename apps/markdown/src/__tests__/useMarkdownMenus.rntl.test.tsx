@@ -47,7 +47,6 @@ function MenuOwner({ hasFolders = false, windowId, sessionState$ }: { hasFolders
     onSaveDocument: save,
     onSaveDocumentAs: save,
     onSaveWorkspace: transition,
-    onToggleSidebar: noop,
     sessionState$,
     windowId,
   });
