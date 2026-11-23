@@ -34,7 +34,7 @@ export function TransitionSettingsPage() {
     <SettingsSection title="Title Animations">
       <TitleAnimationSpeedRow />
     </SettingsSection>
-    <SettingsSection title="Transitions">
+    <SettingsSection>
       <SettingsRow label="Your transition library" description="Edit TypeScript files or add new ones. Changes rebuild open decks; updates wait until the presentation ends.">
         <Action title="Open Folder" run={() => run(() => Linking.openURL(getTransitionDirectory().uri))} />
       </SettingsRow>

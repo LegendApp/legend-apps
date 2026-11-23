@@ -47,7 +47,7 @@ function createCodeWindowsNavigator() {
         [codeSettingsWindowModuleName]: {
             component: SettingsWindow,
             id: codeSettingsWindowIdentifier,
-            options: createSettingsWindowOptions(),
+            options: createSettingsWindowOptions({ macos: { titleBar: { titleVisibility: "hidden" } } }),
         },
     } satisfies WindowsConfig;
     return createWindowsNavigator(codeWindowsConfig);

@@ -1,6 +1,5 @@
 import { PortalProvider } from "@gorhom/portal";
 import { useValue } from "@legendapp/state/react";
-import { PlatformColor, Text } from "react-native";
 import {
     VirtualizedSettingsWindow,
     SettingsPage,
@@ -39,10 +38,7 @@ const settingsPages = [
     ] : []),
     { id: "open-source", title: "Open Source", icon: "chevron.left.forwardslash.chevron.right", Content: OpenSourceSettingsContent },
 ].map(({ id, title, icon, Content }) => (
-    <SettingsPage key={id} id={id} title={title} icon={icon}>
-        <Text accessibilityRole="header" style={{ color: PlatformColor("labelColor"), fontSize: 15, fontWeight: "600" }}>
-            {title}
-        </Text>
+    <SettingsPage key={id} id={id} title={title} icon={icon} heading={false}>
         <Content />
     </SettingsPage>
 ));

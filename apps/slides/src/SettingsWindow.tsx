@@ -119,10 +119,10 @@ export function SettingsWindow() {
       <SettingsPage id="transitions" title="Transitions" icon="rectangle.on.rectangle">
         <TransitionSettingsPage />
       </SettingsPage>
-      <SettingsPage id="effects" title="Effects" icon="wand.and.stars">
+      <SettingsPage id="effects" title="Effects" heading="Effect Packs" icon="wand.and.stars">
         <EffectsSettingsPage />
       </SettingsPage>
-      <SettingsPage id="compiler" title="Compiler" icon="hammer">
+      <SettingsPage id="compiler" title="Compiler" heading="Deck Compiler" icon="hammer">
         <CompilerSettingsPage />
       </SettingsPage>
     </SharedSettingsWindow>

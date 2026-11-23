@@ -207,7 +207,7 @@ function LayoutPage() {
     if (name) await saveLayoutAs(store, settings, base, name, {});
   }
   return <>
-    <SettingsSection title="Layout">
+    <SettingsSection>
       <Text className="px-3 py-2 text-sm text-text-secondary">Divider positions are window state, kept per window; View ▸ Layout moves panes.</Text>
       <Choice title="Active Layout" value={settings.layout.active} options={names.map(name => ({ label: layoutTitle(name), value: name }))} onChange={value => set(["layout", "active"], value)} />
       <SettingsRow label="Save Layout As…" description="Copies the active layout into a named layout you can edit.">
@@ -374,7 +374,7 @@ function ToolbarPage() {
   const { items, displayMode } = settings.toolbar;
   const available: ToolbarEntry[] = [...toolbarWidgets, ...commandIds.filter(id => (commandMeta[id] as CommandMeta).symbol)];
   return <>
-    <SettingsSection title="Toolbar">
+    <SettingsSection>
       <View className="flex-row justify-end px-3 py-2"><Button onPress={() => set(["toolbar", "items"], undefined)}>Reset to Preset</Button></View>
       <Choice title="Display" description="Spark's toolbar shows icons only for now (ask S2); labels show in tooltips." value={displayMode} options={[{ label: "Icon and Label", value: "iconAndLabel" }, { label: "Icon Only", value: "iconOnly" }, { label: "Label Only", value: "labelOnly" }]} onChange={value => set(["toolbar", "displayMode"], value)} />
     </SettingsSection>
@@ -391,7 +391,7 @@ function MenusPage() {
   const current = settings.contextMenus[target] ?? defaultContextMenus[target];
   const available: MenuEntry[] = ["separator", ...commandIds.filter(id => (commandMeta[id] as CommandMeta).targets?.includes(target))];
   return <>
-    <SettingsSection title="Context Menus">
+    <SettingsSection>
       <View className="flex-row justify-end px-3 py-2"><Button onPress={() => set(["contextMenus", target], undefined)}>Reset Menu</Button></View>
       <Choice title="Menu" description="Entries that don't apply to what was clicked are left out when the menu opens." value={target} options={menuTargets.map(id => ({ label: titleCase(id), value: id }))} onChange={value => setTarget(value as MenuTarget)} />
     </SettingsSection>
@@ -461,7 +461,7 @@ function AIPage() {
     runAI(pane).catch(error => aiState$.status.set(error instanceof Error ? error.message : String(error))).finally(() => aiState$.running.set(false));
   };
   return <>
-    <SettingsSection title="Customize with AI">
+    <SettingsSection>
       <Text className="px-3 py-2 text-sm text-text-secondary">Describe the change. Your own Claude or Codex command-line tool writes a settings patch from Legend Git's settings reference; you see it live before anything is saved. This changes settings only; Customize App changes the app's code.</Text>
       <SettingsRow label="Request">
         <TextInput key={state.fill} accessibilityLabel="Request" defaultValue={state.request} onChangeText={text => aiState$.request.set(text)} style={styles.prompt} />

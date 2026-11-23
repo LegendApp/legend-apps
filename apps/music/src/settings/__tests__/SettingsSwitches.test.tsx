@@ -192,15 +192,14 @@ it("keeps playback chips compact and moves controls through the drop zones", () 
     act(() => settings$.ui.playback.set(initial));
 });
 
-it("renders a matching heading inside each scrollable settings page", () => {
+it("uses the native title as the heading for each settings page", () => {
     render(<SettingsContainer initialPage="apple-music" />);
     const window = renderer.root.findByType(VirtualizedSettingsWindow);
     expect(window.props.defaultPageId).toBe("apple-music");
     const pages: ReactElement<SettingsPageProps>[] = window.props.children;
     expect(pages.map((page) => page.props.title)).toEqual(expect.arrayContaining(["Apple Music", "Overlay"]));
-    for (const { props: { children, title } } of pages) {
-        const [heading] = React.Children.toArray(children) as ReactElement<{ accessibilityRole: string; children: string }>[];
-        expect(heading.type).toBe(Text);
-        expect(heading.props).toMatchObject({ accessibilityRole: "header", children: title });
+    for (const { props: { children, heading } } of pages) {
+        expect(heading).toBe(false);
+        expect(React.Children.only(children)).not.toHaveProperty("type", Text);
     }
 });

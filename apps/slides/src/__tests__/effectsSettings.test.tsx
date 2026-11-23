@@ -167,7 +167,7 @@ test("offline shows installed packs and presenting blocks changes", async () => 
   slidesState$.audienceOpen.set(true);
   const renderer = await render();
   try {
-    expect(renderer.root.findAll(node => node.type === "section").map(node => node.props.title)).toEqual(["Effect Packs", "Backgrounds", "Charts"]);
+    expect(renderer.root.findAll(node => node.type === "section").map(node => node.props.title)).toEqual([undefined, "Backgrounds", "Charts"]);
     expect(sectionDescription(section(renderer, "Backgrounds"))).toBe("Installed · 1.0.0");
     expect(renderer.root.findAll(node => node.type === "row" && node.props.label === "Catalog unavailable")[0].props.description).toContain("503");
     expect(renderer.root.findAll(node => node.type === "row" && node.props.label === "Presenting")).toHaveLength(1);

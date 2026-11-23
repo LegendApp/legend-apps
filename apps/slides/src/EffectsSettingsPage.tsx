@@ -76,7 +76,7 @@ export function EffectsSettingsPage() {
   const rows = installed ? effectPackRows(loaded?.catalog ?? null, installed) : [];
   const disabled = busy || presenting;
   return <>
-    <SettingsSection title="Effect Packs">
+    <SettingsSection>
       <SettingsRow label="Installed effects" description="Packs install into Application Support and work offline. Decks keep the version they were built with.">
         <RuntimeButton title="Open Folder" onPress={() => void effectsDirectory().then(async directory => { await mkdir(directory, { recursive: true }); await Linking.openURL(`file://${encodeURI(directory)}`); }).catch(console.error)} />
       </SettingsRow>

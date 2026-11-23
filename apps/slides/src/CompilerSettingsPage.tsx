@@ -18,7 +18,7 @@ export function CompilerSettingsPage() {
   const summary = status === "checking" ? "Looking for Bun or Node…"
     : runtime ? `${runtime.kind === "bun" ? "Bun" : "Node"} ${runtime.version} (${sourceLabel[runtime.source]})`
     : "No runtime found. Decks can't compile until you download Bun or choose your own.";
-  return <SettingsSection title="Deck Compiler">
+  return <SettingsSection>
     <SettingsRow label="JavaScript Runtime" description={runtime?.path ?? "Legend Slides compiles decks with Bun 1.3+ or Node 22+."}>
       {status === "downloading" ? <View className="w-64"><CompilerRuntimeProgress /></View> : <Text className="text-sm text-foreground" style={{ maxWidth: 260 }}>{summary}</Text>}
     </SettingsRow>
