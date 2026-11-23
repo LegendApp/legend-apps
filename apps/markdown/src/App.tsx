@@ -60,12 +60,19 @@ async function openNewMarkdownEditorWindow(controller: DocumentAppController) {
 }
 
 function createMarkdownMenuHandlers(controller: DocumentAppController): MenuHandlers {
+  // New, folder, and workspace windows start on an untitled document rather than the last one.
+  const workspaceHandlers = createWorkspaceMenuHandlers(async (props) => {
+    await openMarkdownEditorWindow({ launchArguments: [newMarkdownDocumentLaunchArgument], ...props });
+    controller.setDocumentWindowOpen(true);
+  }, reportMarkdownAppControllerError);
   return {
-    // New, folder, and workspace windows start on an untitled document rather than the last one.
-    ...createWorkspaceMenuHandlers(async (props) => {
-      await openMarkdownEditorWindow({ launchArguments: [newMarkdownDocumentLaunchArgument], ...props });
-      controller.setDocumentWindowOpen(true);
-    }, reportMarkdownAppControllerError),
+    ...workspaceHandlers,
+    // Without an editor window, Add Folder opens one on the chosen folders.
+    addFolder: (action: MenuAction) => {
+      if (!dispatchMarkdownEditorMenuAction(action)) workspaceHandlers.openFolder();
+    },
+    newFile: dispatchMarkdownEditorMenuAction,
+    newFolder: dispatchMarkdownEditorMenuAction,
     new: (action: MenuAction) => {
       if (!dispatchMarkdownEditorMenuAction(action)) {
         openNewMarkdownEditorWindow(controller)

@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { readWorkspace, writeWorkspace } from "./workspaceFiles";
 import {
+  addUniquePaths,
   closeDocumentTab,
   createWorkspaceWindowState,
   openDocumentTab,
@@ -38,6 +39,15 @@ export function useWorkspaceWindow(props: WorkspaceWindowProps, { onSidebarOpenC
     update(() => ({ sidebarOpen: !sidebarOpen }));
   }, [onSidebarOpenChange, update]);
 
+  /** Adds root folders and shows the sidebar. */
+  const addFolders = useCallback((added: readonly string[]) => {
+    if (added.length === 0) return;
+    update(({ folders }) => ({ folders: addUniquePaths(folders, added) }));
+    if (!stateRef.current.sidebarOpen) toggleSidebar();
+  }, [toggleSidebar, update]);
+  /** Takes a root folder out of the window; nothing on disk changes. */
+  const removeFolder = useCallback((path: string) => update(({ folders }) => ({ folders: folders.filter(folder => folder !== path) })), [update]);
+
   /** Saves the folders as a workspace in app data, creating the file on first save. */
   const saveWorkspace = useCallback(async () => {
     const { folders, workspacePath } = stateRef.current;
@@ -50,8 +60,10 @@ export function useWorkspaceWindow(props: WorkspaceWindowProps, { onSidebarOpenC
   }, [update]);
 
   return {
+    addFolders,
     closeTab,
     openTab,
+    removeFolder,
     renameTab,
     saveWorkspace,
     state,

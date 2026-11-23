@@ -31,8 +31,12 @@ function state(filename: string) {
   });
 }
 
-function MenuOwner({ windowId, sessionState$ }: { windowId: string; sessionState$: ReturnType<typeof state> }) {
+function MenuOwner({ hasFolders = false, windowId, sessionState$ }: { hasFolders?: boolean; windowId: string; sessionState$: ReturnType<typeof state> }) {
   useMarkdownMenus({
+    hasFolders,
+    onAddFolder: noop,
+    onNewFile: noop,
+    onNewFolder: noop,
     documentCommandsRef: commands,
     onError: noop,
     onNewDocument: transition,
@@ -54,13 +58,15 @@ it("uses the focused editor's menu state and restores the remaining editor after
   const first = state("/first.md"), second = state("/second.md");
   const untrackFirst = trackDocumentWindow("first", refreshMarkdownEditorMenuState);
   const untrackSecond = trackDocumentWindow("second", refreshMarkdownEditorMenuState);
-  const view = await render(<><MenuOwner windowId="first" sessionState$={first} /><MenuOwner windowId="second" sessionState$={second} /></>);
+  const view = await render(<><MenuOwner hasFolders windowId="first" sessionState$={first} /><MenuOwner windowId="second" sessionState$={second} /></>);
   await act(async () => first.isDirty.set(true));
   expect(markdownMenuState$.save.disabled.peek()).toBe(true);
   await act(async () => mockFocusListeners.get("first")?.({ focused: true }));
   expect(markdownMenuState$.save.disabled.peek()).toBe(false);
+  expect(markdownMenuState$.newFile.disabled.peek()).toBe(false);
   await act(async () => mockFocusListeners.get("second")?.({ focused: true }));
   expect(markdownMenuState$.save.disabled.peek()).toBe(true);
+  expect(markdownMenuState$.newFolder.disabled.peek()).toBe(true);
   await view.rerender(<MenuOwner windowId="first" sessionState$={first} />);
   untrackSecond();
   expect(markdownMenuState$.save.disabled.peek()).toBe(false);

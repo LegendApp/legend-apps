@@ -10,8 +10,12 @@ import {
 } from "@legend-apps/markdown-document";
 import { getLegendDisplayTheme, getLegendDisplayThemeAppearance, getMarkdownLayoutTheme } from "@legend-apps/theme";
 import {
+  chooseFolders,
   closeDocumentTab,
+  createWorkspaceFile,
+  createWorkspaceFolder,
   DocumentTabBar,
+  getNewEntryDirectory,
   useDocumentWindow,
   useWorkspaceWindow,
   WorkspaceSidebar,
@@ -49,7 +53,9 @@ import { getLaunchMarkdownFile, isMarkdownPath } from "./markdownFiles";
 import type { MarkdownEditorWindowProps } from "./markdownWindows";
 import {
   applyMarkdownThemeSetting,
+  getMarkdownSidebarFoldersSetting,
   getMarkdownSidebarOpenSetting,
+  setMarkdownSidebarFoldersSetting,
   setMarkdownSidebarOpenSetting,
   useMarkdownAppearanceSettings,
   useMarkdownAutosaveSetting,
@@ -67,6 +73,8 @@ import { MarkdownLinkPopover } from "./MarkdownLinkPopover";
 import { loadMarkdownUserThemesSync } from "./userThemes";
 import { untitledMarkdownAdapter } from "./untitledMarkdownAdapter";
 import { refreshMarkdownEditorMenuState } from "./markdownEditorActions";
+
+const newMarkdownFileName = "Untitled.md";
 
 type MarkdownDocumentSession = ReturnType<typeof useMarkdownDocumentSession>;
 type MarkdownFormattingToolbarMode = ReturnType<typeof useMarkdownFormattingToolbarModeSetting>;
@@ -100,15 +108,21 @@ function editorSmokeVariantForScenario(scenario: MarkdownE2ELaunchScenario): Mar
 export function MarkdownEditorWindow({ files, folders, launchArguments, windowId = editorWindowIdentifier, workspacePath }: MarkdownEditorWindowProps) {
   loadMarkdownUserThemesSync();
   const [startupArguments] = useState(() => files ?? launchArguments);
+  // Only the main window is restored on launch, so it alone keeps its sidebar folders.
+  const keepsFolders = windowId === editorWindowIdentifier;
   const workspace = useWorkspaceWindow({
     files: files ?? [getLaunchMarkdownFile(launchArguments)].filter((path): path is string => path !== null),
-    folders,
+    folders: folders ?? (keepsFolders && !workspacePath ? getMarkdownSidebarFoldersSetting() : undefined),
     workspacePath,
   }, {
     onSidebarOpenChange: setMarkdownSidebarOpenSetting,
     sidebarOpenSetting: getMarkdownSidebarOpenSetting(),
   });
-  const { openTab, renameTab } = workspace;
+  const { addFolders, openTab, renameTab } = workspace;
+  const workspaceFolders = workspace.state.folders;
+  useEffect(() => {
+    if (keepsFolders) setMarkdownSidebarFoldersSetting(workspaceFolders);
+  }, [keepsFolders, workspaceFolders]);
   // Tabs follow the session: opening a file adds its tab and Save As renames it.
   const session = useMarkdownDocumentSession({
     onFileOpened: openTab,
@@ -221,7 +235,28 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
     windowId,
   });
 
+  const currentFile = useValue(() => session.sessionState$.documentSource.get() === "file" ? session.sessionState$.filename.get() : null);
+  const { prepareCurrentDocumentForClose, openSelectedFile, openUntitledDocument, handleError } = session;
+  const switchToFile = useCallback(async (path: string) => {
+    if (path !== currentFile && await prepareCurrentDocumentForClose({ autosaveEnabled: autosave === "enabled", reason: "open" })) {
+      openSelectedFile(path);
+    }
+  }, [autosave, currentFile, openSelectedFile, prepareCurrentDocumentForClose]);
+  const addFolder = useCallback(() => { chooseFolders().then(addFolders).catch(handleError); }, [addFolders, handleError]);
+  const newEntryDirectory = getNewEntryDirectory(workspaceFolders, currentFile);
+  const newFile = useCallback(() => {
+    if (newEntryDirectory) createWorkspaceFile(newEntryDirectory, newMarkdownFileName).then(switchToFile).catch(handleError);
+  }, [handleError, newEntryDirectory, switchToFile]);
+  const newFolder = useCallback(() => {
+    if (newEntryDirectory) createWorkspaceFolder(newEntryDirectory).catch(handleError);
+  }, [handleError, newEntryDirectory]);
+  const folderMenu = useMemo(() => ({ newFileName: newMarkdownFileName, onRemoveFolder: workspace.removeFolder, windowId }), [windowId, workspace.removeFolder]);
+
   useMarkdownMenus({
+    hasFolders: workspaceFolders.length > 0,
+    onAddFolder: addFolder,
+    onNewFile: newFile,
+    onNewFolder: newFolder,
     documentCommandsRef: session.documentCommandsRef,
     onError: session.handleError,
     onInsertLink: insertLink,
@@ -245,13 +280,6 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
     windowId,
   });
 
-  const currentFile = useValue(() => session.sessionState$.documentSource.get() === "file" ? session.sessionState$.filename.get() : null);
-  const { prepareCurrentDocumentForClose, openSelectedFile, openUntitledDocument, handleError } = session;
-  const switchToFile = useCallback(async (path: string) => {
-    if (path !== currentFile && await prepareCurrentDocumentForClose({ autosaveEnabled: autosave === "enabled", reason: "open" })) {
-      openSelectedFile(path);
-    }
-  }, [autosave, currentFile, openSelectedFile, prepareCurrentDocumentForClose]);
   const closeFileTab = useCallback(async (path: string) => {
     if (path !== currentFile) {
       workspace.closeTab(path);
@@ -343,8 +371,10 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
             activePath={currentFile}
             colors={workspaceColors}
             files={workspace.state.files}
-            folders={workspace.state.folders}
+            folderMenu={folderMenu}
+            folders={workspaceFolders}
             isDocumentPath={isMarkdownPath}
+            onAddFolder={addFolder}
             onError={handleError}
             onOpenFile={path => { switchToFile(path).catch(handleError); }}
             onToggleSidebar={workspace.toggleSidebar}
