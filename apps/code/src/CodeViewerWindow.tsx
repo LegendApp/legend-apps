@@ -48,7 +48,7 @@ export function CodeViewerWindow({ files, folders, launchArguments, preparedDocu
   const reportError = useCallback((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)), []);
   const workspace = useWorkspaceWindow(
     { files: files ?? (launchFile ? [launchFile] : []), folders, workspacePath },
-    { onError: reportError, onSidebarOpenChange: setCodeSidebarOpenSetting, sidebarOpenSetting: getCodeSidebarOpenSetting() },
+    { onSidebarOpenChange: setCodeSidebarOpenSetting, sidebarOpenSetting: getCodeSidebarOpenSetting() },
   );
   const { closeTab, openTab, renameTab } = workspace;
   const { files: sidebarFiles, folders: sidebarFolders, sidebarOpen, tabs } = workspace.state;

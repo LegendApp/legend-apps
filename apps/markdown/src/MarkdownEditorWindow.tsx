@@ -44,7 +44,7 @@ import {
   useMarkdownEditorWindowOptions,
   useMarkdownSettingsWindow,
 } from "./useMarkdownWindows";
-import { editorWindowIdentifier, markdownFileTypes } from "./appConstants";
+import { editorWindowIdentifier } from "./appConstants";
 import { getLaunchMarkdownFile, isMarkdownPath } from "./markdownFiles";
 import type { MarkdownEditorWindowProps } from "./markdownWindows";
 import {
@@ -100,15 +100,11 @@ function editorSmokeVariantForScenario(scenario: MarkdownE2ELaunchScenario): Mar
 export function MarkdownEditorWindow({ files, folders, launchArguments, windowId = editorWindowIdentifier, workspacePath }: MarkdownEditorWindowProps) {
   loadMarkdownUserThemesSync();
   const [startupArguments] = useState(() => files ?? launchArguments);
-  // The session reports workspace errors once it exists.
-  const reportWorkspaceError = useRef<(error: unknown) => void>(console.error);
   const workspace = useWorkspaceWindow({
     files: files ?? [getLaunchMarkdownFile(launchArguments)].filter((path): path is string => path !== null),
     folders,
     workspacePath,
   }, {
-    fileTypes: markdownFileTypes,
-    onError: useCallback((error: unknown) => reportWorkspaceError.current(error), []),
     onSidebarOpenChange: setMarkdownSidebarOpenSetting,
     sidebarOpenSetting: getMarkdownSidebarOpenSetting(),
   });
@@ -119,7 +115,6 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
     onFileSavedAs: useCallback((from: string | null, to: string) => from ? renameTab(from, to) : openTab(to), [openTab, renameTab]),
   });
   useDocumentWindow(windowId, workspace.toggleSidebar, refreshMarkdownEditorMenuState);
-  useEffect(() => { reportWorkspaceError.current = session.handleError; }, [session.handleError]);
   const [findVisible, setFindVisible] = useState(false);
   const [findQuery, setFindQuery] = useState("");
   const [findStatus, setFindStatus] = useState("");
