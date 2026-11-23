@@ -33,14 +33,13 @@ export function useWorkspaceWindow(props: WorkspaceWindowProps, { onSidebarOpenC
   const closeTab = useCallback((path: string) => update(({ tabs }) => ({ tabs: closeDocumentTab(tabs, path) })), [update]);
   const renameTab = useCallback((from: string, to: string) => update(({ tabs }) => ({ tabs: renameDocumentTab(tabs, from, to) })), [update]);
 
-  const toggleSidebar = useCallback(() => {
+  const setSidebarOpen = useCallback((open: boolean) => {
     const { folders, sidebarOpen, workspacePath } = stateRef.current;
-    if (folders.length > 0 || workspacePath) onSidebarOpenChange?.(!sidebarOpen);
-    update(() => ({ sidebarOpen: !sidebarOpen }));
+    if (open === sidebarOpen) return;
+    if (folders.length > 0 || workspacePath) onSidebarOpenChange?.(open);
+    update(() => ({ sidebarOpen: open }));
   }, [onSidebarOpenChange, update]);
-
-  /** Follows the native split view, which collapses the sidebar itself from View › Hide Sidebar. */
-  const setSidebarOpen = useCallback((open: boolean) => { if (open !== stateRef.current.sidebarOpen) toggleSidebar(); }, [toggleSidebar]);
+  const toggleSidebar = useCallback(() => setSidebarOpen(!stateRef.current.sidebarOpen), [setSidebarOpen]);
 
   /** Adds root folders and shows the sidebar. */
   const addFolders = useCallback((added: readonly string[]) => {

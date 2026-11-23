@@ -71,10 +71,11 @@ export function WorkspaceSidebar({ activePath, colors, files, folderMenu, folder
   // Changes on disk reload the listings of the changed path and its parent.
   useEffect(() => {
     const registrations = folders.map(folder => watch(folder, changed => setListings(current => {
-      const stale = [changed, changed.slice(0, changed.lastIndexOf("/"))].filter(path => current.has(path));
-      if (stale.length === 0) return current;
+      const parent = changed.slice(0, changed.lastIndexOf("/"));
+      if (!current.has(changed) && !current.has(parent)) return current;
       const next = new Map(current);
-      for (const path of stale) next.delete(path);
+      next.delete(changed);
+      next.delete(parent);
       return next;
     }), { recursive: true }));
     for (const registration of registrations) registration.catch(onError);
@@ -83,7 +84,7 @@ export function WorkspaceSidebar({ activePath, colors, files, folderMenu, folder
 
   const toggle = (path: string) => setToggled(current => { const next = new Set(current); if (!next.delete(path)) next.add(path); return next; });
   const expand = (path: string) => { if (!expanded.has(path)) toggle(path); };
-  const showFolderMenu = folderMenu && (async (path: string, position: { x: number; y: number }) => {
+  const openFolderMenu = folderMenu && (async (path: string, position: { x: number; y: number }) => {
     const selection = await showContextMenu({ items: folders.includes(path) ? rootFolderMenuItems : folderMenuItems, position, windowId: folderMenu.windowId });
     if (selection.canceled) return;
     switch (selection.itemId) {
@@ -104,7 +105,6 @@ export function WorkspaceSidebar({ activePath, colors, files, folderMenu, folder
         folderMenu.onRemoveFolder(path);
     }
   });
-  const openFolderMenu = showFolderMenu && ((path: string, position: { x: number; y: number }) => { showFolderMenu(path, position).catch(onError); });
   const openable = (row: WorkspaceTreeRow) => row.isDirectory || !isDocumentPath || isDocumentPath(row.path);
   // The native list selects only file rows it can open; the open document is selected when it is in the tree.
   const selectedId = rows.some(row => row.path === activePath && !row.isDirectory && openable(row)) ? activePath : null;
@@ -129,16 +129,19 @@ export function WorkspaceSidebar({ activePath, colors, files, folderMenu, folder
       >
         {rows.map(row => {
           const header = row.depth === 0 && row.isDirectory && folders.includes(row.path);
+          const onMenu = openFolderMenu && row.isDirectory ? (position: { x: number; y: number }) => {
+            openFolderMenu(row.path, position).catch(onError);
+          } : undefined;
           return (
             <SidebarItem
               id={row.path}
               key={row.path}
-              onContextMenu={openFolderMenu && row.isDirectory ? event => openFolderMenu(row.path, event.windowPosition) : undefined}
+              onContextMenu={onMenu && (event => onMenu(event.windowPosition))}
               rowHeight={header ? sectionHeight : rowHeight}
               selectable={!row.isDirectory && openable(row)}
             >
               {header
-                ? <SectionHeader colors={colors} onMenu={openFolderMenu && (position => openFolderMenu(row.path, position))} row={row} onPress={() => toggle(row.path)} />
+                ? <SectionHeader colors={colors} onMenu={onMenu} row={row} onPress={() => toggle(row.path)} />
                 : <TreeRow colors={colors} openable={openable(row)} row={row} onToggle={() => toggle(row.path)} />}
             </SidebarItem>
           );

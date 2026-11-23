@@ -50,7 +50,8 @@ async function getUnusedPath(directory: string, base: string, extension = "") {
 /** Creates an empty file named after `fileName` (numbered when taken) and returns its path. */
 export async function createWorkspaceFile(directory: string, fileName: string) {
   const dot = fileName.lastIndexOf(".");
-  const path = dot > 0 ? await getUnusedPath(directory, fileName.slice(0, dot), fileName.slice(dot)) : await getUnusedPath(directory, fileName);
+  const extensionStart = dot > 0 ? dot : fileName.length;
+  const path = await getUnusedPath(directory, fileName.slice(0, extensionStart), fileName.slice(extensionStart));
   await writeText(path, "");
   return path;
 }
