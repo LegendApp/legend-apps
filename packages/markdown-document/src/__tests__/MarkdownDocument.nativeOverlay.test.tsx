@@ -369,7 +369,7 @@ describe("native document text selection", () => {
       renderer = TestRenderer.create(<MarkdownDocument adapter={adapter} filename="test.md"
         savePolicy={{ autosave: false }} />);
     });
-    const frame = { blockId, markdown, height: 100, rowHeight: 120, width: 560, x: 40, y: 80 };
+    const frame = { blockId, markdown, width: 560, x: 40, y: 80 };
     const rowStyle = () => flattenStyle(activationView(renderer, blockId).props.style);
     await act(async () => nativeHost(renderer).props.onBeginEditing({ nativeEvent: {
       ...frame, height: 0, rowHeight: 20, width: 0,
