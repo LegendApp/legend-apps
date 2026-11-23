@@ -350,8 +350,6 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
             files={workspace.state.files}
             folders={workspace.state.folders}
             isDocumentPath={isMarkdownPath}
-            onAddFile={workspace.chooseFiles}
-            onAddFolder={workspace.chooseFolders}
             onError={handleError}
             onOpenFile={path => { switchToFile(path).catch(handleError); }}
             onToggleSidebar={workspace.toggleSidebar}

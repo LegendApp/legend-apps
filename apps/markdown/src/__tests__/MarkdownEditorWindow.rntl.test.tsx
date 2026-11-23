@@ -284,7 +284,9 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
 
     await act(async () => fireEvent.press(view.getByLabelText("Show Sidebar")));
     expect(view.getByLabelText("Hide Sidebar")).toBeTruthy();
-    expect(view.getByLabelText("Add Folder")).toBeTruthy();
+    expect(view.getByLabelText("Hide Sidebar").props.tooltip).toBe("Hide Sidebar");
+    expect(view.queryByLabelText("Add File")).toBeNull();
+    expect(view.queryByLabelText("Add Folder")).toBeNull();
     await view.unmount();
   });
 

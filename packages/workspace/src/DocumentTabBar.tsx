@@ -121,6 +121,7 @@ function DocumentTab({ active, colors, onClose, onLayout, onSelect, separated, t
         onHoverIn={() => setCloseHovered(true)}
         onHoverOut={() => setCloseHovered(false)}
         onPress={onClose}
+        tooltip="Close Tab"
         pointerEvents={active || hovered ? "auto" : "none"}
         style={[styles.close, closeHovered && { backgroundColor: withAlpha(colors.foreground, 0.1) }, !(active || hovered) && styles.hidden]}
       >

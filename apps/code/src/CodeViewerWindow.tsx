@@ -215,8 +215,6 @@ export function CodeViewerWindow({ files, folders, launchArguments, preparedDocu
             colors={workspaceColors}
             files={sidebarFiles}
             folders={sidebarFolders}
-            onAddFile={workspace.chooseFiles}
-            onAddFolder={workspace.chooseFolders}
             onError={reportError}
             onOpenFile={openFile}
             titleBarHeight={defaultLegendChromeTheme.titleBarHeight}
