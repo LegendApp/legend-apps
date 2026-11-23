@@ -153,14 +153,15 @@ describe("WorkspaceSidebar", () => {
 
   it("runs the section header's hover menu: New File opens a numbered file and Reveal shows the folder", async () => {
     mockTree["/repo/Untitled.md"] = "";
-    await act(async () => { renderer = create(<Harness props={{ folders: ["/repo"] }} />); });
+    const measureInWindow = (callback: (x: number, y: number, width: number, height: number) => void) => callback(10, 20, 20, 18);
+    await act(async () => { renderer = create(<Harness props={{ folders: ["/repo"] }} />, { createNodeMock: () => ({ measureInWindow }) }); });
     expect(renderer.root.findAll(node => node.props.accessibilityLabel === "repo Actions")).toHaveLength(0);
     await act(async () => pressable("repo").props.onHoverIn());
     expect(pressable("repo Actions").props.tooltip).toBe("Folder Actions");
 
     chooseMenuItem("newFile");
-    await act(async () => pressable("repo Actions").props.onPress({ nativeEvent: { pageX: 10, pageY: 20 } }));
-    expect(showContextMenu).toHaveBeenCalledWith(expect.objectContaining({ position: { x: 10, y: 20 } }));
+    await act(async () => pressable("repo Actions").props.onPress());
+    expect(showContextMenu).toHaveBeenCalledWith(expect.objectContaining({ position: { x: 10, y: 38 } }));
     expect(writeText).toHaveBeenCalledWith("/repo/Untitled 2.md", "");
     expect(workspace.state.tabs.active).toBe("/repo/Untitled 2.md");
 

@@ -156,6 +156,7 @@ function SectionHeader({ colors, onMenu, onPress, row }: {
   row: WorkspaceTreeRow;
 }) {
   const [hovered, setHovered] = useState(false);
+  const menuButton = useRef<View>(null);
   return (
     <Pressable
       accessibilityLabel={row.name}
@@ -174,7 +175,9 @@ function SectionHeader({ colors, onMenu, onPress, row }: {
               accessibilityLabel={`${row.name} Actions`}
               accessibilityRole="button"
               hitSlop={4}
-              onPress={({ nativeEvent }) => onMenu({ x: nativeEvent.pageX, y: nativeEvent.pageY })}
+              // The menu drops below the button, whether a click or the keyboard pressed it.
+              onPress={() => menuButton.current?.measureInWindow((x, y, _width, height) => onMenu({ x, y: y + height }))}
+              ref={menuButton}
               tooltip="Folder Actions"
               style={({ pressed }) => [styles.sectionButton, pressed && { backgroundColor: withAlpha(colors.foreground, 0.1) }]}
             >
