@@ -10,7 +10,12 @@ const manifest = {
   },
   androidPackage: "so.legend.git",
   expoModules: { macos: false },
-  hostWindow: { macos: { hidden: false } },
+  hostWindow: {
+    macos: {
+      hidden: false,
+      startupBackgroundColors: { dark: "#1e1e1e", light: "#ffffff" },
+    },
+  },
   nativeModules: {
     macos: [
       "@legendapp/spark/ui",

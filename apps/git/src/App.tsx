@@ -15,12 +15,12 @@ import { isDividerResize } from "./layout/paneSizes";
 import { useWindowLayout } from "./layout/useWindowLayout";
 import type { PanelId } from "./settings/schema";
 import { activeLayout } from "./settings/presets";
-import { contextMenuItems, menuCommandIds, menuCommandTarget, resolveKeyBindings, routedBindings, toolbarItems, toolbarSlots, type MenuSubject } from "./actions";
+import { contextMenuItems, menuCommandIds, menuCommandTarget, normalizeAccelerator, resolveKeyBindings, routedBindings, toolbarItems, toolbarSlots, type MenuSubject } from "./actions";
 import { commandEnabled, commandLabel, commandMenuItem, queueEntry, runCommand, sectionPullRequest, sectionRef, sectionReview, sectionShowsHistory, sectionStash, sectionWorktree, type CommandContext, type CommandId, type Section } from "./commands";
 import { queueDetail, queuePushTarget, reviewQueue, type QueueEntry } from "./gitQueue";
 import { createGitRefs, emptyRefs, findRef, recentBranches, resolveBranchName, type WorktreeEntry } from "./gitRefs";
 import { createWorktreePreview, emptyWorktreePreview, worktreeDetail, worktreeName, type WorktreePreviewState } from "./gitWorktrees";
-import { closeMenuWindow, mainWindowId, registerMenuRunner, runMenuAction, useMenuBar, openSettingsWindow, openWorktreePaths, openWorktreeWindow, publishMenu, setMenuWindow, type GitWindowProps } from "./gitWindows";
+import { closeMenuWindow, mainWindowId, registerMenuRunner, runMenuAction, useMenuBar, openSettingsWindow, openStartWindow, openWorktreePaths, openWorktreeWindow, publishMenu, setMenuWindow, type GitWindowProps } from "./gitWindows";
 import { runCommand as runProcess } from "@legendapp/spark/processes";
 import { commitGitHubUrl, createGitHistory, emptyHistory } from "./gitHistory";
 import { historyQueryHint } from "./historyQuery";
@@ -31,6 +31,7 @@ import { showContextMenu } from "@legendapp/spark/context-menu";
 import { openURL } from "@legendapp/spark/links";
 import { subscribeToOpenRequests } from "@legendapp/spark/app/documents";
 import { EmptyState } from "./EmptyState";
+import { GitStartScreen } from "./start-screen/GitStartScreen";
 import { gitHubAccount, gitHubCliToken, useGitHubAccount } from "./gitHubAccount";
 import { createPullRequests, emptyPullRequests, pullRequestBases, pullRequestBranch, pushedAs, type PullRequestsState } from "./gitPullRequests";
 import { CreatePullRequestSheet, type PullRequestInput } from "./CreatePullRequestSheet";
@@ -40,13 +41,13 @@ import { commentCounts, commentRange, placeThreads, threadLines } from "./review
 import { CommentSheet, ReviewThreadView } from "./ReviewThreadView";
 import { StateBar } from "./StateBar";
 import { abortLabel, abortWarning, canContinue, conflictPickable, conflictSideName, operationText } from "./gitOperation";
-import { recentLabels, recentRepositories, useRecentRepositories } from "./gitRecents";
+import { recentRepositories, useRecentRepositories } from "./gitRecents";
 import { FileRow, fileStatus, pathParts, useSymbolColor } from "./FileRow";
 import { folderItem, useFileList } from "./fileList";
 import { CommitComposer, type CommitMessageGenerator } from "./CommitComposer";
 import { openFileDialog, showMessage, showPrompt } from "@legendapp/spark/dialogs";
 import { useMenu, type UseMenuOptions } from "@legendapp/spark/menus";
-import { macMenuPlacement } from "@legend-apps/workspace/menu-items";
+import { macMenuPlacement, workspaceMenuItems } from "@legend-apps/workspace/menu-items";
 import { Sidebar, SidebarItem } from "@legendapp/spark/ui/sidebar";
 import { SFSymbol } from "@legendapp/spark/ui/symbol";
 import { SidebarSplitView } from "@legendapp/spark/ui/split-view";
@@ -69,6 +70,8 @@ export function App({ windowId = mainWindowId, initialPath, repoName }: GitWindo
   const changesRef = useRef(changes);
   changesRef.current = changes;
   const controller = useRef<ReturnType<typeof createGitChanges> | null>(null);
+  const launchRequests = useRef<Promise<void> | null>(null);
+  const [openingAtStartup, setOpeningAtStartup] = useState(true);
   // A conflicted file's unsaved Result edits; they survive refreshes and section switches, and actions that would drop them ask.
   const [resultDraft] = useState(createResultDraftStore);
   const [section, setSection] = useState<Section>("changes");
@@ -988,18 +991,14 @@ Rebase anyway?`,
   contextRef.current = context;
   // Settings key bindings over the defaults; the menu bar carries each command's first one.
   const keyBindings = useMemo(() => resolveKeyBindings(layout.settings.keybindings), [layout.settings.keybindings]);
+  const newWindowShortcut = useMemo(() => [...keyBindings.keys.values()]
+    .some(keys => keys.some(key => normalizeAccelerator(key) === "Cmd+n")) ? undefined : "Cmd+n", [keyBindings]);
   const item = (id: CommandId) => commandMenuItem(id, context, { keys: keyBindings.keys });
 
   const menu: UseMenuOptions = {
     id: "legend-git",
     items: [
       { type: "submenu", id: "app", label: "Legend Git", target: { menu: "app" }, items: [{ type: "action", id: "settings", label: "Settings…", target: { role: "settings" } }] },
-      { type: "submenu", id: "file", label: "File", target: { menu: "file" }, placement: macMenuPlacement.file, items: [
-        { ...item("open-repository"), placement: { before: { role: "open" } } },
-        { ...item("open-worktree"), placement: { after: { id: "open-repository" } } },
-        { type: "role", id: "native-open", role: "open", target: { role: "open" }, hidden: true, disabled: true },
-        { ...item("reveal-repository"), placement: { after: { role: "close" } } },
-      ] },
       { type: "submenu", id: "edit", label: "Edit", target: { menu: "edit" }, placement: macMenuPlacement.edit, items: [
         { ...item("undo-operation"), placement: { after: { role: "redo" } } },
         { ...item("copy-sha"), placement: { after: { role: "copy" } } },
@@ -1024,6 +1023,15 @@ Rebase anyway?`,
       },
       { type: "submenu", id: "worktree", label: "Worktree", placement: macMenuPlacement.appMenu, items: [item("new-worktree"), item("open-review-worktree"), { type: "separator" }, item("reveal-worktree"), item("remove-worktree")] },
       { type: "submenu", id: "pull-request", label: "Pull Request", placement: macMenuPlacement.appMenu, items: [item("review-pull-request"), { type: "separator" }, item("checkout-pull-request"), item("pull-request-worktree")] },
+      // Spark can transfer native key equivalents to Git commands until the native items are configured.
+      { type: "submenu", id: "file", label: "File", target: { menu: "file" }, placement: macMenuPlacement.file, items: [
+        { ...workspaceMenuItems.newWindow, shortcut: newWindowShortcut, placement: { before: { role: "new" } } },
+        { ...item("open-repository"), placement: { before: { role: "open" } } },
+        { ...item("open-worktree"), placement: { after: { id: "open-repository" } } },
+        { ...item("reveal-repository"), placement: { after: { role: "close" } } },
+        { type: "role", id: "native-new", role: "new", target: { role: "new" }, hidden: true, disabled: true },
+        { type: "role", id: "native-open", role: "open", target: { role: "open" }, hidden: true, disabled: true },
+      ] },
     ],
     onAction: action => runMenuAction(action.itemId),
   };
@@ -1046,11 +1054,28 @@ Rebase anyway?`,
     // Worktree windows open from the main one, so only repositories opened by the user become recents.
     if (root && !initialPath) void recentRepositories.note(root);
   }, [root]); // eslint-disable-line react-hooks/exhaustive-deps -- initialPath is fixed per window
+  useEffect(() => {
+    if (!layout.initialState) return;
+    const owner = controller.current;
+    let active = true;
+    const path = initialPath ?? (windowId === mainWindowId ? layout.initialState.repository : undefined);
+    const open = async () => {
+      await launchRequests.current;
+      if (active && path) await owner?.open(path, { restore: true });
+      if (active) setOpeningAtStartup(false);
+    };
+    void open();
+    return () => { active = false; };
+  }, [initialPath, layout.initialState, windowId]);
+  useEffect(() => {
+    if (root && windowId === mainWindowId) layout.windowState?.setRepository(root);
+  }, [layout.windowState, root, windowId]);
   // Not a Repository (§5): a sheet offering another folder; the repository already open stays open.
   useEffect(() => {
     const failed = changes.openError;
     if (!failed) return;
     controller.current?.dismissOpenError();
+    if (layout.windowState?.get().repository === failed.path) layout.windowState.setRepository(undefined);
     const name = failed.path.replace(/\/+$/, "").split("/").pop() || failed.path;
     void showMessage({
       windowId, kind: "warning", title: `“${name}” isn’t in a Git repository.`,
@@ -1191,7 +1216,7 @@ Rebase anyway?`,
   const aheadBehindTooltip = `${branch?.behind ?? 0} incoming and ${branch?.ahead ?? 0} outgoing commits on “${branch?.upstream}”`;
   // The settings' items (a preset's or the user's); the slots keep their identity while `toolbar` does.
   const slots = useMemo(() => toolbarSlots(layout.settings.toolbar), [layout.settings.toolbar]);
-  const toolbarItemList: MacOSToolbarItem[] = toolbarItems(slots, context, {
+  const toolbarItemList: MacOSToolbarItem[] = root ? toolbarItems(slots, context, {
     branchPicker: () => [{ type: "menu", id: "branch", label: branchLabel ?? "Branch", symbol: "arrow.triangle.branch", tooltip: "Current branch", items: [
       ...recentBranches(context.refs).map(branch => ({ type: "checkbox" as const, id: `checkout:${branch.ref}`, label: branch.name, checked: branch.current, disabled: branch.current || !commandEnabled("checkout-ref", context, branch.ref) && !branch.current })),
       ...context.refs?.branches.length ? [{ type: "separator" as const }] : [],
@@ -1208,7 +1233,7 @@ Rebase anyway?`,
     // AppKit's NSSearchToolbarItem (it collapses itself when the toolbar is narrow); Spark's `collapses` button ignores real clicks (Spark ask).
     // History searches everything at once; qualifiers (author:, path:, before:, …) narrow it (historyQuery.ts).
     search: () => [{ type: "search", id: "search", label: "Search", placeholder: showsHistory ? historyQueryHint : "Filter Files", width: showsHistory ? 260 : 200 }],
-  });
+  }) : [];
   // The search field keeps its own text; it is passed only when the toolbar is rebuilt (a section switch or Show All).
   const searchText = showsHistory ? historyQuery : filter;
   // Progress text changes go to the label alone (below); a rebuilt toolbar carries the current text.
@@ -1220,7 +1245,7 @@ Rebase anyway?`,
   const appearance = layout.settings.appearance;
   const sentAppearance = useRef(appearance);
   useEffect(() => {
-    void setWindowOptions(windowId, { appearance, macos: { titleBar: { contentLayout: "fullSize", transparent: true, titleVisibility: "visible" } } }).catch(console.error);
+    void setWindowOptions(windowId, { appearance, macos: { titleBar: { contentLayout: "fullSize", transparent: true } } }).catch(console.error);
   }, []);
   useEffect(() => {
     if (sentAppearance.current === appearance) return;
@@ -1235,6 +1260,7 @@ Rebase anyway?`,
         // Omitted, not null, without a repository: a null URI also clears the window title. A worktree window has none,
         // since AppKit then titles the window with the folder's name instead of "<repo> — <branch>".
         ...(root && !repoName ? { representedUri: `file://${root.split("/").map(encodeURIComponent).join("/")}` } : {}),
+        titleBar: { titleVisibility: root ? "visible" : "hidden" },
         toolbar: toolbarRef.current,
       },
     }).catch(console.error);
@@ -1312,6 +1338,7 @@ Rebase anyway?`,
         onReset: () => setLayoutRevision(value => value + 1),
       });
       else if (itemId.startsWith("diff:")) { const store = layoutRef.current.store; if (store) runDiffAction(itemId, store).catch(console.error); }
+      else if (itemId === "newWindow") void openStartWindow().catch(console.error);
       else if (itemId === "settings" || itemId === "customize-toolbar") openSettingsWindow(rootRef.current, itemId === "settings" ? undefined : "toolbar").catch(console.error);
       else runCommand(itemId, contextRef.current);
     });
@@ -1324,12 +1351,15 @@ Rebase anyway?`,
     });
     // File ▸ Open Recent (AppKit's, filled from the system's recent documents) and folders opened from Finder arrive as
     // open requests; the main window opens them, so a worktree window keeps its worktree.
+    let requestedOpen: Promise<void> | undefined;
     const openRequests = windowId === mainWindowId ? subscribeToOpenRequests(event => {
       if (disposed || event.type !== "file") return;
-      void owner.open(event.path);
+      requestedOpen = owner.open(event.path);
     }) : null;
-    for (const pending of [registration, closeRegistration, focusRegistration, ...openRequests ? [openRequests] : []]) void pending.catch(console.error);
-    if (initialPath) { openWorktreePaths.add(initialPath); setMenuWindow(windowId); void owner.open(initialPath); }
+    for (const pending of [registration, closeRegistration, focusRegistration]) void pending.catch(console.error);
+    launchRequests.current = openRequests?.then(() => requestedOpen).catch(console.error) ?? null;
+    if (initialPath) openWorktreePaths.add(initialPath);
+    setMenuWindow(windowId);
     return close;
   }, []); // eslint-disable-line react-hooks/exhaustive-deps -- one window, one set of controllers
 
@@ -1531,7 +1561,7 @@ Rebase anyway?`,
     {/* Starts at the remembered sidebar width, so the split view waits for the window state (one small file). */}
     {/* The window's own background behind the panes: the source list's glass material shows what is behind it, and
         Spark's root material is clear, so without it the sidebar showed the desktop (white in a dark window). */}
-    {layoutReady ? <View style={styles.window}><SidebarSplitView
+    {layoutReady ? <View style={styles.window}>{root ? <SidebarSplitView
       key={layoutRevision}
       appearance={layout.settings.appearance}
       style={styles.root}
@@ -1554,18 +1584,13 @@ Rebase anyway?`,
       titleBar={{ content: { height: contentInset, material: "titlebar" } }}
       sidebar={
         <Sidebar style={styles.root} selectedId={sidebarSelected} onSelectionChange={event => {
-          if (event.id?.startsWith("recent:")) runCommand("open-recent", contextRef.current, event.id.slice(7));
-          else if (event.id === "github-sign-in") runCommand("sign-in-github", contextRef.current);
+          if (event.id === "github-sign-in") runCommand("sign-in-github", contextRef.current);
           else if (event.id === "changes" || event.id === "history" || event.id?.startsWith("ref:") || event.id?.startsWith("stash:") || event.id?.startsWith("worktree:") || event.id?.startsWith("review:") || event.id?.startsWith("pr:")) setSection(event.id as Section);
         }} contentInsetTop={contentInset}>
-          {/* Starts right under the title bar, at the same height with or without a repository (as Diff's sidebar). */}
           <SidebarItem id="repositories" selectable={false} rowHeight={24}>
-            <Text style={styles.section}>{root?.split("/").pop() ?? (recents.length ? "Recent" : "Repositories")}</Text>
+            <Text style={styles.section}>{root.split("/").pop()}</Text>
           </SidebarItem>
-          {root ? sidebarItems : recents.length ? recentLabels(recents).map((label, index) => <SidebarItem key={recents[index]} id={`recent:${recents[index]}`}>
-            <SidebarRow symbol="folder" label={label} />
-          </SidebarItem>) :
-            <SidebarItem id="empty" selectable={false}><Text style={styles.sidebarNote}>No repository open</Text></SidebarItem>}
+          {sidebarItems}
         </Sidebar>
       }
       content={
@@ -1576,7 +1601,7 @@ Rebase anyway?`,
             {operation.kind !== "bisect" ? <Button style={styles.barButton} disabled={!commandEnabled("continue-operation", context)} onPress={() => runCommand("continue-operation", contextRef.current)}>Continue</Button> : null}
           </StateBar> : null}
           {changes.error ? <StateBar tone="error" text={changes.error} /> : null}
-          {root && pulls.error ? <StateBar tone="error" text={pulls.error.message}>
+          {pulls.error ? <StateBar tone="error" text={pulls.error.message}>
             {pulls.error.kind === "unauthorized" ? <Button style={styles.barButton} onPress={() => runCommand("sign-in-github", contextRef.current)}>Sign In…</Button>
               : <Button style={styles.barButton} disabled={pulls.loading} onPress={() => void pullsController.current?.refresh()}>Try Again</Button>}
           </StateBar> : null}
@@ -1585,7 +1610,7 @@ Rebase anyway?`,
             {detailError.kind === "unauthorized" ? <Button style={styles.barButton} onPress={() => runCommand("sign-in-github", contextRef.current)}>Sign In…</Button>
               : <Button style={styles.barButton} onPress={() => void pullsController.current?.refresh()}>Try Again</Button>}
           </StateBar> : null}
-          {root ? <View style={styles.detail}>
+          <View style={styles.detail}>
             <DiffDocumentCacheContext.Provider value={layout.documents}>
               {/* Changes stays mounted (hidden) in other sections so the commit message draft and a running generation survive a switch. */}
               <View style={[styles.root, kind !== "changes" && styles.hidden]}>
@@ -1594,19 +1619,19 @@ Rebase anyway?`,
               {kind !== "changes" ? <LayoutHost key={activeLayoutId} plan={windowPlan(layout.settings, layout.base, kind, sectionConditions, has(sectionPanels))} panels={sectionPanels} onFocusPanel={focusPanel} onPaneResize={layout.paneSizes.onPaneResize} /> : null}
             </DiffDocumentCacheContext.Provider>
           </View>
-            : changes.loading ? <EmptyState title="Opening Repository…" />
-            : <EmptyState symbol="folder" title="No Repository Open" message="Open a Git repository to see its changes and commit them.">
-              <Button style={styles.open} onPress={() => void chooseRepository()}>Open Repository…</Button>
-            </EmptyState>}
           {commentSheet && selectedPull ? <CommentSheet key={commentSheet.review ? "review" : commentSheet.title + commentSheet.context} top={contentInset} title={commentSheet.title} context={commentSheet.context} busy={pulls.writing}
             review={commentSheet.review} onCancel={() => setCommentSheet(null)} onSubmit={(body, event) => void postComment(commentSheet, body, event)} /> : null}
-          {rebaseSheet && root ? <InteractiveRebaseSheet key={rebaseSheet.plan.head + rebaseSheet.plan.base} top={contentInset} plan={rebaseSheet.plan} onto={rebaseSheet.onto} busy={rebasing}
+          {rebaseSheet ? <InteractiveRebaseSheet key={rebaseSheet.plan.head + rebaseSheet.plan.base} top={contentInset} plan={rebaseSheet.plan} onto={rebaseSheet.onto} busy={rebasing}
             onCancel={() => setRebaseSheet(null)} onStart={(todo, updateRefs) => void startInteractiveRebase(todo, updateRefs)} /> : null}
-          {createSheet && root ? <CreatePullRequestSheet key={createSheet.branch} top={contentInset} branch={createSheet.branch} bases={createSheet.bases} base={createSheet.base} title={createSheet.title}
+          {createSheet ? <CreatePullRequestSheet key={createSheet.branch} top={contentInset} branch={createSheet.branch} bases={createSheet.bases} base={createSheet.base} title={createSheet.title}
             busy={creating || pulls.writing} onCancel={() => setCreateSheet(null)} onSubmit={input => void submitCreatePullRequest(input)} /> : null}
         </View>
       }
-    /></View> : null}
+    /> : <View style={styles.content}>
+      {changes.error ? <StateBar tone="error" text={changes.error} /> : null}
+      {openingAtStartup || changes.loading ? <EmptyState title="Opening Repository…" />
+        : <GitStartScreen recents={recents} onOpen={() => void chooseRepository()} onOpenRecent={path => runCommand("open-recent", contextRef.current, path)} />}
+    </View>}</View> : null}
   </SettingsContext.Provider>);
 }
 
@@ -1892,7 +1917,6 @@ const styles = StyleSheet.create({
   detail: { flex: 1, borderTopWidth: StyleSheet.hairlineWidth, borderColor: PlatformColor("separatorColor"), backgroundColor: PlatformColor("textBackgroundColor") },
   hidden: { display: "none" },
   panel: { flexGrow: 1, flexShrink: 1, flexBasis: "auto", minHeight: 0, backgroundColor: PlatformColor("controlBackgroundColor") },
-  open: { width: 150, height: 28 },
   listSection: { flex: 1 },
   separated: { borderTopWidth: StyleSheet.hairlineWidth, borderColor: PlatformColor("separatorColor") },
   heading: { flexDirection: "row", alignItems: "center", gap: 8, height: 36, paddingLeft: 16, paddingRight: 12 },

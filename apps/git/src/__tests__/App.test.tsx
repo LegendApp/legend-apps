@@ -21,7 +21,7 @@ import { blameLine, loadUnifiedDiff, openGitHistory } from "@legend-apps/diff-pa
 import { setStringAsync } from "@legendapp/spark/clipboard";
 import { showContextMenu } from "@legendapp/spark/context-menu";
 import { openURL } from "@legendapp/spark/links";
-import { openSettingsWindow, openWorktreeWindow } from "../gitWindows";
+import { openSettingsWindow, openStartWindow, openWorktreeWindow } from "../gitWindows";
 import { DiffPane } from "../DiffPane";
 import { CommentSheet, ReviewThreadView } from "../ReviewThreadView";
 import { CreatePullRequestSheet } from "../CreatePullRequestSheet";
@@ -88,7 +88,7 @@ jest.mock("@legendapp/spark/windows", () => ({ setWindowOptions: jest.fn(async (
 // Refresh, search) stands in for SourceTree's. actions.test.ts covers each preset's toolbar.
 jest.mock("../settings/presets/sourcetree.json", () => ({ ...jest.requireActual("../settings/presets/sourcetree.json"),
   toolbar: { displayMode: "iconOnly", items: ["toggle-sidebar", "branchPicker", "flexibleSpace", "viewSwitcher", "networkProgress", "refresh", "search"] } }));
-jest.mock("../gitWindows", () => ({ ...jest.requireActual("../gitWindows"), openWorktreeWindow: jest.fn(async () => ({})), openSettingsWindow: jest.fn(async () => {}) }));
+jest.mock("../gitWindows", () => ({ ...jest.requireActual("../gitWindows"), openWorktreeWindow: jest.fn(async () => ({})), openSettingsWindow: jest.fn(async () => {}), openStartWindow: jest.fn(async () => ({})) }));
 jest.mock("@legendapp/spark/windows/macos", () => ({
   addMacOSWindowListener: jest.fn(async () => ({ remove: jest.fn(async () => {}) })),
   setToolbarItemText: jest.fn(async () => {}),
@@ -100,26 +100,59 @@ const lastMenu = () => jest.mocked(useMenu).mock.calls.at(-1)![0] as unknown as 
 const openMenu = () => lastMenu().items.flatMap(entry => entry.items ?? []).find(entry => entry.id === "open-repository");
 /** File ▸ Open Repository…, the way the menu bar runs it. */
 const openRepository = () => lastMenu().onAction({ itemId: "open-repository" });
+const windowStateFile = "/data/state/main.json";
+const mockFiles = () => jest.requireMock("@legendapp/spark/files") as { writeText(path: string, text: string): Promise<void>; readText(path: string): Promise<string> };
+afterEach(async () => { await mockFiles().writeText(windowStateFile, "{}"); });
 
-it("renders the empty window, toggles its sidebar, opens the folder panel and cleans up", async () => {
+function mockEmptyRepository() {
+  const resolveRoot = jest.fn(async () => "/repo");
+  jest.mocked(watchDirectories).mockReturnValue({ remove: jest.fn() });
+  jest.mocked(getGitService).mockReturnValue({
+    resolveRoot,
+    watchLocations: jest.fn(async () => ({ root: "/repo", gitDir: "/repo/.git", commonDir: "/repo/.git", ignoredPaths: [] })),
+    status: jest.fn(async () => ({ branch: { oid: "(initial)", head: "main", upstream: null, ahead: 0, behind: 0 }, entries: [] })),
+    lastDiscard: jest.fn(async () => null),
+    operationState: jest.fn(async () => null),
+    listRefs: jest.fn(async () => ({ branches: [], remotes: [], tags: [] })),
+    listStashes: jest.fn(async () => []),
+    listWorktrees: jest.fn(async () => []),
+    remoteUrl: jest.fn(async () => null),
+    configValue: jest.fn(async () => null),
+  } as unknown as GitService);
+  return resolveRoot;
+}
+
+it("shows the start screen and opens the native folder panel", async () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   let renderer!: ReactTestRenderer;
   await act(async () => { renderer = create(<App />); });
-  expect(JSON.stringify(renderer.toJSON())).toContain("No repository open");
-  // Without a repository the toolbar has only the sidebar toggle and there is no list column; Open Repository lives in the File menu.
-  expect(jest.mocked(setWindowOptions).mock.calls.at(-1)![1]).toMatchObject({ title: "Legend Git", macos: { toolbar: { items: [{ id: "toggle-sidebar", type: "button" }] } } });
-  expect(renderer.root.findByType(SidebarSplitView).props.list).toBeUndefined();
-  expect(openMenu()).toMatchObject({ label: "Open Repository…", shortcut: "Cmd+o", disabled: false });
-  const listener = jest.mocked(addMacOSWindowListener).mock.calls[0][1];
-  await act(async () => { listener({ type: "toolbarAction", windowId: "main", itemId: "toggle-sidebar" }); });
-  expect(renderer.root.findByType(SidebarSplitView).props.sidebarCollapsed).toBe(true);
-  await act(async () => { renderer.root.findByType(SidebarSplitView).props.onSidebarCollapsedChange(false); });
-  expect(renderer.root.findByType(SidebarSplitView).props.sidebarCollapsed).toBe(false);
-  await act(async () => { openRepository(); });
-  expect(openFileDialog).toHaveBeenCalledWith({ windowId: "main", selection: "directories", multiple: false, title: "Open Repository" });
-  const registration = await jest.mocked(addMacOSWindowListener).mock.results[0].value;
-  await act(async () => { renderer.unmount(); });
-  expect(registration.remove).toHaveBeenCalledTimes(1);
+  try {
+    expect(renderer.root.findAllByType(Text).map(node => node.props.children)).toContain("Legend Git");
+    expect(renderer.root.findAllByType(SidebarSplitView)).toHaveLength(0);
+    expect(openMenu()).toMatchObject({ label: "Open Repository…", shortcut: "Cmd+o", disabled: false });
+    await act(async () => { renderer.root.findByProps({ accessibilityRole: "button" }).props.onPress(); });
+    expect(openFileDialog).toHaveBeenCalledWith({ windowId: "main", selection: "directories", multiple: false, title: "Open Repository" });
+    await act(async () => { lastMenu().onAction({ itemId: "newWindow" }); });
+    expect(openStartWindow).toHaveBeenCalledTimes(1);
+  } finally {
+    const registration = await jest.mocked(addMacOSWindowListener).mock.results[0].value;
+    await act(async () => { renderer.unmount(); });
+    expect(registration.remove).toHaveBeenCalledTimes(1);
+  }
+});
+
+it("reopens the saved repository without mounting the start screen", async () => {
+  const resolveRoot = mockEmptyRepository();
+  await mockFiles().writeText(windowStateFile, JSON.stringify({ repository: "/repo", sidebarCollapsed: true }));
+  let renderer!: ReactTestRenderer;
+  await act(async () => { renderer = create(<App />); });
+  try {
+    expect(resolveRoot).toHaveBeenCalledTimes(1);
+    expect(renderer.root.findAllByType(Text).map(node => node.props.children)).not.toContain("Legend Git");
+    expect(renderer.root.findByType(SidebarSplitView).props.sidebarCollapsed).toBe(true);
+  } finally {
+    await act(async () => { renderer.unmount(); });
+  }
 });
 
 it("places the standard Mac menus before Git commands and groups the File actions around Open Recent", async () => {
@@ -127,21 +160,26 @@ it("places the standard Mac menus before Git commands and groups the File action
   await act(async () => { renderer = create(<App />); });
   try {
     const menus = lastMenu().items;
-    expect(menus.map(({ id }) => id)).toEqual([
-      "app", "file", "edit", "view", "repository", "branch", "changes", "worktree", "pull-request",
+    const order = ["app", "file", "edit", "format", "view", "window", "help"];
+    for (const { id, placement } of menus) {
+      if (!placement) continue;
+      const previous = order.indexOf(id);
+      if (previous >= 0) order.splice(previous, 1);
+      const anchor = order.indexOf(placement.before?.menu ?? placement.after?.menu);
+      order.splice(anchor + (placement.after ? 1 : 0), 0, id);
+    }
+    expect(order).toEqual([
+      "app", "file", "edit", "view", "format", "repository", "branch", "changes", "worktree", "pull-request", "window", "help",
     ]);
-    expect(menus.slice(1, 4).map(({ placement }) => placement)).toEqual([
-      { after: { menu: "app" } }, { after: { menu: "file" } }, { after: { menu: "edit" } },
-    ]);
-    expect(menus.slice(4).map(({ placement }) => placement)).toEqual(
-      Array(5).fill({ before: { menu: "window" } }),
-    );
     const file = menus.find(({ id }) => id === "file");
+    expect(menus.at(-1)).toBe(file);
     expect(file.items).toMatchObject([
+      { id: "newWindow", placement: { before: { role: "new" } }, shortcut: "Cmd+n" },
       { id: "open-repository", placement: { before: { role: "open" } }, shortcut: "Cmd+o" },
       { id: "open-worktree", placement: { after: { id: "open-repository" } } },
-      { id: "native-open", hidden: true, disabled: true },
       { id: "reveal-repository", placement: { after: { role: "close" } } },
+      { id: "native-new", hidden: true, disabled: true },
+      { id: "native-open", hidden: true, disabled: true },
     ]);
   } finally {
     await act(async () => { renderer.unmount(); });
@@ -185,7 +223,7 @@ it("opens Settings from the app menu, and its Toolbar pane from View ▸ Customi
 it("takes key bindings from settings into the menu bar and the hotkey router, and sends no toolbar update when the toolbar is unchanged", async () => {
   jest.clearAllMocks();
   const files = jest.requireMock("@legendapp/spark/files") as { writeText(path: string, text: string): Promise<void> };
-  await files.writeText("/data/settings.json", JSON.stringify({ version: 1, keybindings: { "open-repository": ["Cmd+Shift+o", "Cmd+Alt+o"], "refresh": [], "stage-all": ["Cmd+Shift+a"], "nope": ["Cmd+k"] } }));
+  await files.writeText("/data/settings.json", JSON.stringify({ version: 1, keybindings: { "open-repository": ["Cmd+Shift+o", "Cmd+Alt+o"], "refresh": [], "stage-all": ["Cmd+n"], "nope": ["Cmd+k"] } }));
   let renderer!: ReactTestRenderer;
   try {
   await act(async () => { renderer = create(<App />); });
@@ -195,7 +233,8 @@ it("takes key bindings from settings into the menu bar and the hotkey router, an
   // Open Worktree's default ⇧⌘O went to Open Repository; [] unbinds Refresh; the rest keep their defaults.
   expect(menuItem("open-worktree").shortcut).toBeUndefined();
   expect(menuItem("refresh").shortcut).toBeUndefined();
-  expect(menuItem("stage-all")).toMatchObject({ label: "Stage All", shortcut: "Cmd+Shift+a" });
+  expect(menuItem("stage-all")).toMatchObject({ label: "Stage All", shortcut: "Cmd+n" });
+  expect(menuItem("newWindow").shortcut).toBeUndefined();
   expect(menuItem("fetch")).toMatchObject({ shortcut: "Cmd+Alt+f" });
   // The second binding has no menu item to carry it: the window's hotkey router runs it.
   const options = jest.mocked(useRoutedHotkeys).mock.calls.at(-1)![0];
@@ -493,9 +532,9 @@ it("switches sections from the sidebar, the toolbar segment and the View menu, k
   expect(toolbarItem("search")).toMatchObject({ placeholder: "Search, or author:name path:src" });
   expect(toolbarItem("search").disabled).toBeUndefined();
   expect(toolbarItem("search-scope")).toBeUndefined();
-  // A section switch updates only the toolbar; the title bar options went once, at mount.
+  // A section switch updates only the toolbar. Opening a repository reveals its title.
   expect(jest.mocked(setWindowOptions).mock.calls.at(-1)![1]).toEqual({ macos: { toolbar: expect.anything() } });
-  expect(jest.mocked(setWindowOptions).mock.calls.filter(call => call[1].macos?.titleBar)).toHaveLength(1);
+  expect(jest.mocked(setWindowOptions).mock.calls.filter(call => call[1].macos?.titleBar?.contentLayout)).toHaveLength(1);
   const list = renderer.root.findByType("LegendList" as any);
   let row!: ReactTestRenderer;
   await act(async () => { row = create(list.props.renderItem({ item: commits[0] })); });
@@ -547,11 +586,9 @@ it("computes each command's enabled state once for the menu bar, toolbar and con
   // Without a repository, commands that need one are disabled everywhere and do nothing when sent anyway.
   for (const id of ["show-changes", "show-history", "refresh", "copy-sha", "open-github", "commit", "restore-discard"]) expect(menuItem(id)).toMatchObject({ disabled: true });
   expect(menuItem("toggle-sidebar")).toBeUndefined();
-  expect(toolbarItem("toggle-sidebar")).toMatchObject({ label: "Hide Sidebar", disabled: false });
+  expect(toolbarItem("toggle-sidebar")).toBeUndefined();
   await act(async () => { lastMenu().onAction({ itemId: "show-history" }); listener({ type: "toolbarAction", windowId: "main", itemId: "refresh" }); });
-  expect(renderer.root.findAllByType(Sidebar)[0]!.props.selectedId).toBeNull();
-  await act(async () => { listener({ type: "toolbarAction", windowId: "main", itemId: "toggle-sidebar" }); });
-  expect(toolbarItem("toggle-sidebar")).toMatchObject({ label: "Show Sidebar" });
+  expect(renderer.root.findAllByType(Sidebar)).toHaveLength(0);
 
   // With a repository, the toolbar Refresh and the menu's Refresh agree and run the same command.
   const git = { resolveRoot: jest.fn(async () => "/repo"), watchLocations: jest.fn(async () => ({ root: "/repo", gitDir: "/repo/.git", commonDir: "/repo/.git", ignoredPaths: [] })),
@@ -559,6 +596,9 @@ it("computes each command's enabled state once for the menu bar, toolbar and con
   jest.mocked(getGitService).mockReturnValue(git as unknown as GitService);
   jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
   await act(async () => { openRepository(); });
+  expect(toolbarItem("toggle-sidebar")).toMatchObject({ label: "Hide Sidebar", disabled: false });
+  await act(async () => { listener({ type: "toolbarAction", windowId: "main", itemId: "toggle-sidebar" }); });
+  expect(toolbarItem("toggle-sidebar")).toMatchObject({ label: "Show Sidebar" });
   expect(toolbarItem("branch").label).toBe("abc (detached)");
   expect(menuItem("refresh")).toMatchObject({ shortcut: "Cmd+r", disabled: false });
   expect(toolbarItem("refresh").disabled).toBe(false);
@@ -934,6 +974,8 @@ it("lays out the sidebar from settings: order, hidden sections, a large section 
 
 it("starts the sidebar at the width saved in the settings file and saves a dragged width there", async () => {
   jest.clearAllMocks();
+  mockEmptyRepository();
+  await mockFiles().writeText(windowStateFile, JSON.stringify({ repository: "/repo" }));
   const files = jest.requireMock("@legendapp/spark/files") as { writeText(path: string, text: string): Promise<void>; readText(path: string): Promise<string> };
   await files.writeText("/data/settings.json", JSON.stringify({ version: 1, layout: { sizes: { sourcetree: { sidebar: [264] } } } }));
   let renderer!: ReactTestRenderer;
@@ -967,8 +1009,10 @@ it("starts the sidebar at the width saved in the settings file and saves a dragg
   }
 });
 
-it("starts the sidebar right under the title bar, at the same inset with and without a repository", async () => {
+it("starts the repository sidebar right under the title bar", async () => {
   jest.clearAllMocks();
+  mockEmptyRepository();
+  await mockFiles().writeText(windowStateFile, JSON.stringify({ repository: "/repo" }));
   let renderer!: ReactTestRenderer;
   await act(async () => { renderer = create(<App />); });
   const split = renderer.root.findByType(SidebarSplitView);
@@ -980,6 +1024,8 @@ it("starts the sidebar right under the title bar, at the same inset with and wit
 
 it("puts the split view on the window's background, so the source list's glass shows the window and not the desktop", async () => {
   jest.clearAllMocks();
+  mockEmptyRepository();
+  await mockFiles().writeText(windowStateFile, JSON.stringify({ repository: "/repo" }));
   let renderer!: ReactTestRenderer;
   await act(async () => { renderer = create(<App />); });
   const backdrop = renderer.root.findByType(SidebarSplitView).parent!;
@@ -1117,7 +1163,7 @@ it("offers Edit ▸ Undo for the reflog's newest operation, says why a refused o
   await act(async () => { renderer = create(<App />); });
   const menuItem = (id: string) => lastMenu().items.flatMap(entry => entry.items ?? []).find(entry => entry.id === id);
   // No repository, then nothing to undo: "Undo", off, and never ⌘Z (text editing keeps it).
-  expect(menuItem("undo-operation")).toEqual({ type: "action", id: "undo-operation", label: "Undo", disabled: true });
+  expect(menuItem("undo-operation")).toMatchObject({ type: "action", id: "undo-operation", label: "Undo", disabled: true });
   expect(lastMenu().items.find(entry => entry.id === "edit").items[0].id).toBe("undo-operation");
   jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
   await act(async () => { openRepository(); });
@@ -1384,7 +1430,7 @@ describe("worktrees", () => {
     const ids = lastMenu().items.flatMap(entry => [entry.id, ...(entry.items ?? []).map((child: any) => child.id)]).filter(Boolean);
     expect(new Set(ids).size).toBe(ids.length);
     expect(menuItem("open-worktree")).toMatchObject({ label: "Open Worktree in New Window", shortcut: "Cmd+Shift+o", disabled: true });
-    expect(lastMenu().items.find(entry => entry.id === "file").items.map((entry: any) => entry.id ?? "-")).toEqual(["open-repository", "open-worktree", "-", "reveal-repository"]);
+    expect(lastMenu().items.find(entry => entry.id === "file").items.map((entry: any) => entry.id ?? "-")).toEqual(["newWindow", "open-repository", "open-worktree", "reveal-repository", "native-new", "native-open"]);
 
     worktrees = [main, detached, linked];
     await act(async () => { lastMenu().onAction({ itemId: "refresh" }); });
@@ -1757,9 +1803,8 @@ it("lists recents in the empty window, opens Open Recent's requests, shows a pau
   await recentRepositories.note("/work/gone");
   let renderer!: ReactTestRenderer;
   await act(async () => { renderer = create(<App />); });
-  const sidebarIds = () => renderer.root.findAllByType(SidebarItem).map(item => item.props.id);
-  expect(sidebarIds()[0]).toBe("repositories");
-  expect(sidebarIds()[1]).toBe("recent:/work/gone");
+  expect(renderer.root.findAllByType(Text).map(node => node.props.children)).toContain("/work/gone");
+  expect(renderer.root.findAllByType(SidebarSplitView)).toHaveLength(0);
   const openRequest = jest.mocked(subscribeToOpenRequests).mock.calls[0]![0];
 
   // A folder that's gone (chosen from Open Recent): the sheet, and Choose Another… opens the folder panel.
@@ -2556,6 +2601,7 @@ it("resolves conflicted files with the side named for the operation, or both, fr
   await act(async () => { headerButtons()[0]!.props.onPress(); });
   expect(git.resolveConflict).toHaveBeenCalledTimes(3);
   expect(git.status.mock.calls.length).toBeGreaterThan(reads);
+  await act(async () => { renderer.unmount(); });
 });
 
 it("shows a conflicted file's regions with picks named for the operation, resolves one region at a time, then Mark Resolved", async () => {
@@ -2621,6 +2667,7 @@ it("shows a conflicted file's regions with picks named for the operation, resolv
   expect(git.stageFile).toHaveBeenLastCalledWith("app.ts", expect.anything());
   expect(bar().props.text).toBe("Merging “feature” into “main”");
   expect(bar().findAllByType(Button)[1]!.props.disabled).toBe(false);
+  await act(async () => { renderer.unmount(); });
 });
 
 it("names a conflict region's sides for a rebase and a cherry-pick", async () => {
@@ -2653,6 +2700,7 @@ it("names a conflict region's sides for a rebase and a cherry-pick", async () =>
   operation = { kind: "cherry-pick", branch: "main", target: null, commit: { oid: "ccccccc", subject: "Fix the title" }, step: null, conflicts: 1, mergeHead: false };
   await act(async () => { lastMenu().onAction({ itemId: "refresh" }); });
   expect(regionLabels()).toEqual(["Use “main”", "Use “Fix the title”", "Use Both"]);
+  await act(async () => { renderer.unmount(); });
 });
 
 it("edits a conflicted file's Result, keeps the draft through refreshes, asks before losing it, saves it, then Mark Resolved", async () => {
@@ -2767,4 +2815,5 @@ it("edits a conflicted file's Result, keeps the draft through refreshes, asks be
   expect(pane().props.patch).toMatchObject({ path: "app.ts", section: "staged" });
   expect(files["notes.txt"]).not.toContain("y");
   expect(git.saveConflictResult).toHaveBeenCalledTimes(2);
+  await act(async () => { renderer.unmount(); });
 });

@@ -5,6 +5,7 @@ import { getWindow, openWindow, showWindow, WindowProvider } from "@legendapp/sp
 
 export const mainWindowId = "main";
 const worktreeWindowModule = "GitWorktreeWindow";
+let startWindowCount = 0;
 /** What a worktree window's App starts with: its own window id, the worktree to open and the repository's name for its title. */
 export type GitWindowProps = { windowId?: string; initialPath?: string; repoName?: string };
 
@@ -71,6 +72,15 @@ export async function openWorktreeWindow(path: string, repoName: string, title: 
   const existing = await getWindow(id).catch(() => null);
   if (existing) { await showWindow(id, { focus: true }); return existing; }
   return openWindow({ id, component: worktreeWindowModule, props: { windowId: id, initialPath: path, repoName }, title, size: { width: 1100, height: 720 }, appearance: "system", transparent: true, titleBarStyle: "overlay" });
+}
+
+export function openStartWindow() {
+  register();
+  const id = `git-start-${++startWindowCount}`;
+  return openWindow({
+    id, component: worktreeWindowModule, props: { windowId: id }, title: "Legend Git",
+    size: { width: 1100, height: 720 }, titleBarStyle: "overlay",
+  });
 }
 
 const settingsModule = () => require("./settings/SettingsWindow") as typeof import("./settings/SettingsWindow");

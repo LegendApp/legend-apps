@@ -101,8 +101,8 @@ export function createGitChanges(onChange: (state: ChangesState) => void, watch:
   let opening: AbortController | undefined;
   return {
     /** Opens the repository containing `path`; when there's none, sets `openError` and keeps the open repository. */
-    async open(path: string) {
-      if (closed) return;
+    async open(path: string, { restore = false } = {}) {
+      if (closed || (restore && opening)) return;
       opening?.abort();
       const attempt = opening = new AbortController();
       let root: string;

@@ -90,7 +90,7 @@ export function sparkConfig(manifest: AppManifest, mode: "dev" | "release" = "de
           hidden: manifest.hostWindow?.macos?.hidden ?? false,
           autosaveName: manifest.id === "music" ? "MainWindow" : `RCTAppDelegateMainWindow.${manifest.id}`,
           ...(manifest.hostWindow?.macos?.startupBackgroundColors ? { backgroundColors: manifest.hostWindow.macos.startupBackgroundColors } : {}),
-          ...(["music", "chat-history", "photos"].includes(manifest.id) ? { closeBehavior: "hide" } : {}),
+          ...(["music", "chat-history", "git", "photos"].includes(manifest.id) ? { closeBehavior: "hide" } : {}),
           ...(manifest.id === "music" ? { glass: true } : {}),
           ...(manifest.id === "diff" ? { closeBehavior: "request", reopenBehavior: "visibleWindows" } : {}),
           ...(["chat-history", "diff", "git"].includes(manifest.id) ? { toolbarStyle: "unified", titlebarSeparatorStyle: "shadow" } : {}),
