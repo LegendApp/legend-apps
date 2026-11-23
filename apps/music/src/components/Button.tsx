@@ -178,7 +178,7 @@ export function Button({
             onHoverOut={handleHoverOut}
         >
             {icon && <Icon name={icon} size={iconSize} yOffset={iconYOffset} />}
-            {isString(children) ? <Text className="text-white text-base">{children}</Text> : children}
+            {isString(children) ? <Text className="text-text-primary" style={{ fontSize: 13 }}>{children}</Text> : children}
         </Pressable>
     );
 }

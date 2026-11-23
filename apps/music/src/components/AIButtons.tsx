@@ -1,10 +1,13 @@
 import { getCodexAvailability } from "@legendapp/spark/ai/codex";
+import { type MenuItem, showContextMenu } from "@legendapp/spark/context-menu";
+import { useWindowId } from "@legendapp/spark/windows";
 import { useCallback, useEffect } from "react";
-import { Text, TextInput, View } from "react-native";
+import { ActivityIndicator, TextInput, View } from "react-native";
 
 import { Button } from "./Button";
-import { Checkbox } from "./Checkbox";
 import { useToast } from "./Toast";
+import { state$ as appState$ } from "../systems/State";
+import type { NativeMouseEvent } from "../types/NativeMouseEvent";
 import { generatePlaylistExtension } from "../systems/ai/playlistGeneration";
 import type { PlaylistAIContext } from "../systems/ai/playlistContext";
 import type { LocalTrack } from "../systems/LocalMusicState";
@@ -40,100 +43,25 @@ type AIToolState =
     | { status: "available" }
     | { message: string; status: "unavailable" };
 
-function sourceSummary(sources: readonly MusicProviderId[]): string {
-    return sources.map((source) => AI_SOURCE_LABELS[source].replace(" Music", "")).join(" + ");
-}
-
-function SourceChoices({
-    appleMusicConnected,
-    disabled = false,
-    libraryCount,
-    onToggle,
-    sources,
-    spotifyConnected,
-}: {
-    appleMusicConnected: boolean;
-    disabled?: boolean;
-    libraryCount: number;
-    onToggle: (source: MusicProviderId, checked: boolean) => void;
-    sources: readonly MusicProviderId[];
-    spotifyConnected: boolean;
-}) {
-    const details: Record<MusicProviderId, string> = {
-        local: `${libraryCount.toLocaleString()} ${libraryCount === 1 ? "song" : "songs"}`,
-        spotify: spotifyConnected ? "Connected" : "Set up in Settings → Spotify",
-        appleMusic: appleMusicConnected ? "Connected" : "Set up in Settings → Apple Music",
-    };
-
-    return (
-        <View className="gap-2">
-            {AI_SOURCE_IDS.map((source) => (
-                <View key={source} className="rounded-md bg-white/5 px-2 py-1.5">
-                    <Checkbox
-                        checked={sources.includes(source)}
-                        disabled={disabled}
-                        label={AI_SOURCE_LABELS[source]}
-                        onChange={(checked) => onToggle(source, checked)}
-                    />
-                    <Text className="ml-7 text-xs text-text-tertiary">{details[source]}</Text>
-                </View>
-            ))}
-        </View>
-    );
-}
-
-function SourcePolicyChoices({
-    hasSourceOverride,
-    onUseDefaults,
-    onUseOverride,
-}: {
-    hasSourceOverride: boolean;
-    onUseDefaults: () => void;
-    onUseOverride: () => void;
-}) {
-    return (
-        <View className="flex-row gap-2">
-            <Button
-                size="small"
-                variant={hasSourceOverride ? "secondary" : "accent"}
-                accessibilityState={{ selected: !hasSourceOverride }}
-                onClick={onUseDefaults}
-            >
-                Use AI defaults
-            </Button>
-            <Button
-                size="small"
-                variant={hasSourceOverride ? "accent" : "secondary"}
-                accessibilityState={{ selected: hasSourceOverride }}
-                onClick={onUseOverride}
-            >
-                Override this playlist
-            </Button>
-        </View>
-    );
-}
-
 function errorMessage(error: unknown) {
     return error instanceof Error ? error.message : String(error);
 }
 
 export function AIButtons(props: AIButtonsProps) {
-    const toolbarEnabled = useValue(settings$.ai.toolbarEnabled) ?? true;
+    const toolbarEnabled = useValue(settings$.ai.toolbarEnabled);
     return toolbarEnabled ? <AIButtonsContent {...props} /> : null;
 }
 
 function AIButtonsContent({ canUseAI, disabledReason, libraryTracks, onAddTracks, playlist }: AIButtonsProps) {
     const showToast = useToast();
+    const windowId = useWindowId();
     const state$ = useObservable({
-        isSourcePickerOpen: false,
         isPromptOpen: false,
         prompt: "",
         isGenerating: false,
-        generationError: null as string | null,
         aiToolState: { status: "checking" } as AIToolState,
     });
     const isGenerating = useValue(state$.isGenerating);
-    const generationError = useValue(state$.generationError);
     const aiToolState = useValue(state$.aiToolState);
     const defaultSources = useValue(settings$.ai.defaultSources);
     const overrideSources = useValue(settings$.ai.playlistSourceOverrides[playlist.id]);
@@ -166,17 +94,6 @@ function AIButtonsContent({ canUseAI, disabledReason, libraryTracks, onAddTracks
     }
 
     const canGenerate = unavailableMessage === null && !isGenerating;
-    const canAutoGenerate = canGenerate;
-    const canPromptGenerate = canGenerate;
-
-    const autoDisabledReason = unavailableMessage ?? (
-        playlist.trackPaths.length === 0 ? "Add at least one seed track for Auto, or use Prompt." : undefined
-    );
-    const statusMessage = isGenerating
-        ? "Generating playlist suggestions…"
-        : generationError ?? unavailableMessage ?? (
-            playlist.trackPaths.length === 0 ? "Add a seed track for Auto, or describe what you want with Prompt." : null
-        );
 
     useEffect(() => {
         let isMounted = true;
@@ -212,10 +129,7 @@ function AIButtonsContent({ canUseAI, disabledReason, libraryTracks, onAddTracks
                 return;
             }
 
-            batch(() => {
-                state$.isGenerating.set(true);
-                state$.generationError.set(null);
-            });
+            state$.isGenerating.set(true);
             try {
                 const result = await generatePlaylistExtension({
                     libraryTracks,
@@ -256,7 +170,6 @@ function AIButtonsContent({ canUseAI, disabledReason, libraryTracks, onAddTracks
                 }
             } catch (error) {
                 const message = error instanceof Error ? error.message : "Failed to generate playlist tracks";
-                state$.generationError.set(message);
                 showToast(message, "error");
             }
             state$.isGenerating.set(false);
@@ -275,14 +188,6 @@ function AIButtonsContent({ canUseAI, disabledReason, libraryTracks, onAddTracks
         settings$.ai.playlistSourceOverrides[playlist.id].set(nextSources);
     }, [playlist.id, showToast, sources]);
 
-    const handleUseDefaults = useCallback(() => {
-        settings$.ai.playlistSourceOverrides[playlist.id].delete();
-    }, [playlist.id]);
-
-    const handleUseOverride = useCallback(() => {
-        settings$.ai.playlistSourceOverrides[playlist.id].set([...sources]);
-    }, [playlist.id, sources]);
-
     const handleSubmitPrompt = useCallback(() => {
         const trimmedPrompt = state$.prompt.peek().trim();
         if (!trimmedPrompt) {
@@ -291,7 +196,6 @@ function AIButtonsContent({ canUseAI, disabledReason, libraryTracks, onAddTracks
         }
         if (!canGenerate) {
             const message = unavailableMessage ?? "AI playlist generation is unavailable.";
-            state$.generationError.set(message);
             showToast(message, "error");
             return;
         }
@@ -306,7 +210,6 @@ function AIButtonsContent({ canUseAI, disabledReason, libraryTracks, onAddTracks
     const handleAutoGenerate = useCallback(() => {
         if (playlist.trackPaths.length === 0) {
             const message = "Add at least one seed track for Auto, or use Prompt.";
-            state$.generationError.set(message);
             showToast(message, "error");
             return;
         }
@@ -314,166 +217,103 @@ function AIButtonsContent({ canUseAI, disabledReason, libraryTracks, onAddTracks
         void handleGenerate();
     }, [handleGenerate, playlist.trackPaths.length, showToast, state$]);
 
+    const handleOpenMenu = useCallback(async (event: NativeMouseEvent) => {
+        const items: MenuItem[] = [
+            { type: "action", id: "auto", label: "Add Similar Songs", disabled: playlist.trackPaths.length === 0 },
+            { type: "action", id: "prompt", label: "Add Songs from Prompt…" },
+            { type: "separator" },
+            ...AI_SOURCE_IDS.map((source): MenuItem => ({
+                type: "checkbox",
+                id: `source:${source}`,
+                label: `Search ${AI_SOURCE_LABELS[source]}`,
+                checked: sources.includes(source),
+            })),
+            { type: "action", id: "defaults", label: "Use Default Sources", hidden: !hasSourceOverride },
+            { type: "separator" },
+            { type: "action", id: "settings", label: "AI Settings…" },
+        ];
+        const selection = await showContextMenu({
+            items,
+            windowId,
+            position: { x: event.pageX ?? event.x ?? 0, y: event.pageY ?? event.y ?? 0 },
+        });
+        if (selection.canceled) return;
+        const { itemId } = selection;
+        if (itemId === "settings") {
+            appState$.assign({ showSettings: true, showSettingsPage: "general" });
+        } else if (itemId === "defaults") {
+            settings$.ai.playlistSourceOverrides[playlist.id].delete();
+        } else if (itemId.startsWith("source:")) {
+            const source = itemId.slice("source:".length) as MusicProviderId;
+            handleSourceToggle(source, !sources.includes(source));
+        } else if (unavailableMessage !== null) {
+            showToast(unavailableMessage, "error");
+        } else if (itemId === "auto") {
+            handleAutoGenerate();
+        } else {
+            state$.isPromptOpen.set(true);
+        }
+    }, [handleAutoGenerate, handleSourceToggle, hasSourceOverride, playlist, showToast, sources, state$, unavailableMessage, windowId]);
+
     return (
         <>
-            <View className="px-3 py-2 flex-row items-center justify-end gap-2 border-t border-border-primary">
-                {statusMessage ? (
-                    <Text className="min-w-0 flex-1 text-xs leading-tight text-text-secondary" numberOfLines={2}>
-                        {statusMessage}
-                    </Text>
-                ) : (
-                    <View className="flex-1" />
-                )}
-                <Button
-                    icon="slider.horizontal.3"
-                    iconSize={12}
-                    size="small"
-                    variant="secondary"
-                    accessibilityLabel={`AI sources: ${sourceSummary(sources)}`}
-                    accessibilityRole="button"
-                    tooltip="Choose AI music sources"
-                    onClick={() => state$.isSourcePickerOpen.set(true)}
-                >
-                    <Text className="text-xs font-medium text-text-secondary" numberOfLines={1}>
-                        {hasSourceOverride
-                            ? `This playlist · ${sourceSummary(sources)}`
-                            : `Default · ${sourceSummary(sources)}`}
-                    </Text>
-                </Button>
-                <Button
-                    size="small"
-                    variant="icon-bg"
-                    icon="wand.and.stars"
-                    accessibilityLabel="Auto generate"
-                    accessibilityRole="button"
-                    accessibilityHint={autoDisabledReason}
-                    tooltip={autoDisabledReason ?? "Auto generate from this playlist"}
-                    disabled={!canAutoGenerate}
-                    className={!canAutoGenerate ? "opacity-50" : undefined}
-                    onClick={handleAutoGenerate}
-                />
-                <Button
-                    size="small"
-                    variant="icon-bg"
-                    icon="text.bubble"
-                    accessibilityLabel="Prompt AI"
-                    accessibilityRole="button"
-                    accessibilityHint={unavailableMessage ?? undefined}
-                    tooltip={unavailableMessage ?? "Prompt AI to add songs"}
-                    disabled={!canPromptGenerate}
-                    className={!canPromptGenerate ? "opacity-50" : undefined}
-                    onClick={() => state$.isPromptOpen.set(true)}
-                />
-            </View>
-            <Show if={state$.isSourcePickerOpen}>
-                <View className="absolute inset-0 z-20 items-center justify-center bg-black/50">
-                    <View className="w-[380px] rounded-lg border border-border-primary bg-background-secondary p-4 gap-3 shadow-lg">
-                        <View className="gap-1">
-                            <Text className="text-base font-semibold text-text-primary">AI music sources</Text>
-                            <Text className="text-xs leading-relaxed text-text-secondary">
-                                Choose whether {playlist.name} follows your AI defaults or has its own sources.
-                            </Text>
-                        </View>
-                        <SourcePolicyChoices
-                            hasSourceOverride={hasSourceOverride}
-                            onUseDefaults={handleUseDefaults}
-                            onUseOverride={handleUseOverride}
-                        />
-                        <SourceChoices
-                            appleMusicConnected={appleMusicStatus.enabled && appleMusicStatus.authenticated}
-                            disabled={!hasSourceOverride}
-                            libraryCount={libraryTracks.length}
-                            onToggle={handleSourceToggle}
-                            sources={sources}
-                            spotifyConnected={spotifyStatus.enabled && spotifyStatus.authenticated}
-                        />
-                        <View className="flex-row items-center justify-between gap-3">
-                            <View className="min-w-0 flex-1">
-                                <Text className="text-xs text-text-tertiary">
-                                    {hasSourceOverride
-                                        ? "These sources apply to both Auto and Prompt for this playlist."
-                                        : "Change the defaults in Settings → General → AI playlists."}
-                                </Text>
+            <Show
+                if={state$.isPromptOpen}
+                else={
+                    <View className="absolute bottom-2 right-3 z-10">
+                        {isGenerating ? (
+                            <View className="size-7 items-center justify-center">
+                                <ActivityIndicator size="small" accessibilityLabel="Generating playlist suggestions" />
                             </View>
-                            <Button size="small" variant="accent" onClick={() => state$.isSourcePickerOpen.set(false)}>
-                                Done
-                            </Button>
-                        </View>
-                    </View>
-                </View>
-            </Show>
-            <Show if={state$.isPromptOpen}>
-                <View className="absolute inset-0 z-20 items-center justify-center bg-black/50">
-                    <View className="w-[440px] rounded-lg border border-border-primary bg-background-secondary p-4 gap-3 shadow-lg">
-                        <View className="gap-1">
-                            <Text className="text-base font-semibold text-text-primary">Prompt</Text>
-                            <Text className="text-xs text-text-secondary" numberOfLines={2}>
-                                {playlist.name}
-                            </Text>
-                        </View>
-                        <PromptInput prompt$={state$.prompt} />
-                        <View className="gap-2">
-                            <Text className="text-xs font-medium text-text-secondary">Find tracks in</Text>
-                            <SourcePolicyChoices
-                                hasSourceOverride={hasSourceOverride}
-                                onUseDefaults={handleUseDefaults}
-                                onUseOverride={handleUseOverride}
-                            />
-                            <SourceChoices
-                                appleMusicConnected={appleMusicStatus.enabled && appleMusicStatus.authenticated}
-                                disabled={!hasSourceOverride}
-                                libraryCount={libraryTracks.length}
-                                onToggle={handleSourceToggle}
-                                sources={sources}
-                                spotifyConnected={spotifyStatus.enabled && spotifyStatus.authenticated}
-                            />
-                            <View className="flex-row items-center justify-between gap-2">
-                                <Text className="min-w-0 flex-1 text-xs text-text-tertiary">
-                                    {hasSourceOverride
-                                        ? "This choice also applies to Auto. A matching local copy is always preferred."
-                                        : "Using your AI defaults. A matching local copy is always preferred."}
-                                </Text>
-                            </View>
-                            {unavailableMessage ? (
-                                <Text className="text-xs leading-relaxed text-red-300">{unavailableMessage}</Text>
-                            ) : null}
-                        </View>
-                        <View className="flex-row justify-end gap-2">
+                        ) : (
                             <Button
                                 size="small"
-                                variant="secondary"
-                                accessibilityLabel="Cancel prompt"
+                                variant="icon-bg"
+                                icon="sparkles"
+                                iconSize={13}
+                                accessibilityLabel="AI playlist"
                                 accessibilityRole="button"
-                                onClick={() => {
-                                    state$.isPromptOpen.set(false);
-                                    state$.prompt.set("");
-                                }}
-                            >
-                                Cancel
-                            </Button>
-                            <PromptSubmit prompt$={state$.prompt} canGenerate={canGenerate} onSubmit={handleSubmitPrompt} />
-                        </View>
+                                tooltip="AI playlist"
+                                onClick={handleOpenMenu}
+                            />
+                        )}
                     </View>
+                }
+            >
+                <View className="px-3 py-2 flex-row items-center gap-2 border-t border-border-primary">
+                    <PromptInput prompt$={state$.prompt} onSubmit={handleSubmitPrompt} />
+                    <Button
+                        size="small"
+                        variant="icon"
+                        icon="xmark"
+                        iconSize={12}
+                        accessibilityLabel="Cancel prompt"
+                        accessibilityRole="button"
+                        onClick={() => {
+                            state$.isPromptOpen.set(false);
+                            state$.prompt.set("");
+                        }}
+                    />
+                    <PromptSubmit prompt$={state$.prompt} canGenerate={canGenerate} onSubmit={handleSubmitPrompt} />
                 </View>
             </Show>
         </>
     );
 }
 
-function PromptInput({ prompt$ }: { prompt$: Observable<string> }) {
+function PromptInput({ prompt$, onSubmit }: { prompt$: Observable<string>; onSubmit: () => void }) {
     const prompt = useValue(prompt$);
     return <TextInput
-        multiline value={prompt} onChangeText={(value) => prompt$.set(value)}
-        placeholder="More upbeat, less acoustic, similar era..."
-        placeholderTextColor="rgba(255,255,255,0.35)"
-        className="min-h-28 rounded-md border border-border-primary bg-black/20 px-3 py-2 text-sm text-text-primary"
-        textAlignVertical="top"
+        autoFocus value={prompt} onChangeText={(value) => prompt$.set(value)} onSubmitEditing={onSubmit}
+        placeholder="Describe songs to add…"
+        accessibilityLabel="AI prompt"
+        className="h-7 min-w-0 flex-1 rounded-md border border-border-primary bg-black/20 px-2 text-sm text-text-primary"
     />;
 }
 
 function PromptSubmit({ prompt$, canGenerate, onSubmit }: { prompt$: Observable<string>; canGenerate: boolean; onSubmit: () => void }) {
     const enabled = useValue(() => canGenerate && prompt$.get().trim().length > 0);
-    return <Button size="small" variant="accent" accessibilityLabel="Generate playlist" accessibilityRole="button"
+    return <Button size="small" variant="primary" accessibilityLabel="Generate playlist" accessibilityRole="button"
         disabled={!enabled} className={!enabled ? "opacity-50" : undefined} onClick={onSubmit}>
         Generate
     </Button>;

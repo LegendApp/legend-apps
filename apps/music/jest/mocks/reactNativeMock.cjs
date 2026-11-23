@@ -38,6 +38,7 @@ module.exports = {
     Appearance: { getColorScheme: () => "dark" },
     PlatformColor: (name) => name,
     useColorScheme: () => "dark",
+    ActivityIndicator: createComponent("ActivityIndicator"),
     Pressable: createComponent("Pressable"),
     StyleSheet: {
         absoluteFillObject: {},

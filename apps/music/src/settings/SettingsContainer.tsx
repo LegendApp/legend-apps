@@ -38,7 +38,7 @@ const settingsPages = [
     ] : []),
     { id: "open-source", title: "Open Source", icon: "chevron.left.forwardslash.chevron.right", Content: OpenSourceSettingsContent },
 ].map(({ id, title, icon, Content }) => (
-    <SettingsPage key={id} id={id} title={title} icon={icon} heading={false}>
+    <SettingsPage key={id} id={id} title={title} icon={icon}>
         <Content />
     </SettingsPage>
 ));

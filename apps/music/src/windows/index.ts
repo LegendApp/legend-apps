@@ -5,7 +5,7 @@ const windowsConfig = {
     SettingsWindow: {
         loadComponent: () => import("../settings/SettingsContainer"),
         id: "settings",
-        options: createSettingsWindowOptions(),
+        options: createSettingsWindowOptions({ macos: { titleBar: { titleVisibility: "hidden" } } }),
     },
     MediaLibraryWindow: {
         loadComponent: () => import("../media-library/MediaLibraryWindow"),

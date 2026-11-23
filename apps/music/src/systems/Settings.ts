@@ -248,7 +248,7 @@ export const settings$ = createObservableFile<AppSettings>({
         ai: {
             defaultSources: [...AI_SOURCE_IDS],
             playlistSourceOverrides: {},
-            toolbarEnabled: true,
+            toolbarEnabled: false,
         },
         ui: {
             playbackControlsEnabled: true,
@@ -329,7 +329,7 @@ export function normalizeAISettings(value: unknown): AISettingsConfig {
     return {
         defaultSources: normalizeAISources(current?.defaultSources ?? legacyDefault, AI_SOURCE_IDS),
         playlistSourceOverrides: normalizePlaylistSourceOverrides(current?.playlistSourceOverrides),
-        toolbarEnabled: typeof current?.toolbarEnabled === "boolean" ? current.toolbarEnabled : true,
+        toolbarEnabled: typeof current?.toolbarEnabled === "boolean" ? current.toolbarEnabled : false,
     };
 }
 

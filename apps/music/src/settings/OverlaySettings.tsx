@@ -2,8 +2,7 @@ import { isNumber, linked } from "@legendapp/state";
 import { useObservable, useValue } from "@legendapp/state/react";
 import { $TextInput } from "@legendapp/state/react-native";
 import { View } from "react-native";
-import { Select } from "../components/Select";
-import { settingsInputFrame, settingsInputStyle, settingsInputText, SettingsRow, SettingsSection, SettingsSwitchRow } from "./components";
+import { settingsInputFrame, settingsInputStyle, settingsInputText, SettingsRow, SettingsSection, SettingsSelectRow, SettingsSwitchRow } from "./components";
 import {
     OVERLAY_MAX_DISPLAY_DURATION_SECONDS,
     OVERLAY_MIN_DISPLAY_DURATION_SECONDS,
@@ -25,6 +24,8 @@ const horizontalOptions = [
 export function OverlaySettingsContent() {
     const durationSeconds$ = settings$.overlay.displayDurationSeconds;
     const overlayEnabled = useValue(settings$.overlay.enabled);
+    const verticalPosition = useValue(settings$.overlay.position.vertical);
+    const horizontalPosition = useValue(settings$.overlay.position.horizontal);
     const durationText$ = useObservable(
         linked({
             get: () => `${durationSeconds$.get()}`,
@@ -45,7 +46,7 @@ export function OverlaySettingsContent() {
 
     return (
         <>
-            <SettingsSection title="Overlay Options">
+            <SettingsSection>
                 <SettingsSwitchRow
                     label="Enable overlay"
                     description="Show the current song overlay when a new track begins"
@@ -55,7 +56,7 @@ export function OverlaySettingsContent() {
 
                 <SettingsRow
                     label="Display duration"
-                    description={`Number of seconds the overlay remains visible (${OVERLAY_MIN_DISPLAY_DURATION_SECONDS} - ${OVERLAY_MAX_DISPLAY_DURATION_SECONDS})`}>
+                    description={`Seconds, ${OVERLAY_MIN_DISPLAY_DURATION_SECONDS}–${OVERLAY_MAX_DISPLAY_DURATION_SECONDS}`}>
                     <View className={`${settingsInputFrame} w-20`}>
                         <$TextInput
                             $value={durationText$}
@@ -67,28 +68,20 @@ export function OverlaySettingsContent() {
                     </View>
                 </SettingsRow>
 
-                <SettingsRow
-                    label="Position"
-                    description="Choose where the overlay appears on screen.">
-                  <View className=" gap-3">
-                      <View className="w-32">
-                          <Select
-                              options={verticalOptions}
-                              value$={settings$.overlay.position.vertical}
-                              disabled={!overlayEnabled}
-                              triggerClassName="px-2"
-                          />
-                      </View>
-                      <View className="w-32">
-                          <Select
-                              options={horizontalOptions}
-                              value$={settings$.overlay.position.horizontal}
-                              disabled={!overlayEnabled}
-                              triggerClassName="px-2"
-                          />
-                      </View>
-                  </View>
-                </SettingsRow>
+                <SettingsSelectRow
+                    label="Vertical position"
+                    options={verticalOptions}
+                    value={verticalPosition}
+                    disabled={!overlayEnabled}
+                    onValueChange={(value) => settings$.overlay.position.vertical.set(value as typeof verticalPosition)}
+                />
+                <SettingsSelectRow
+                    label="Horizontal position"
+                    options={horizontalOptions}
+                    value={horizontalPosition}
+                    disabled={!overlayEnabled}
+                    onValueChange={(value) => settings$.overlay.position.horizontal.set(value as typeof horizontalPosition)}
+                />
             </SettingsSection>
         </>
     );

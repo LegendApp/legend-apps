@@ -125,7 +125,7 @@ describe("AI music sources", () => {
         expect(normalizeAISettings({ source: "spotify" })).toEqual({
             defaultSources: ["spotify"],
             playlistSourceOverrides: {},
-            toolbarEnabled: true,
+            toolbarEnabled: false,
         });
     });
 

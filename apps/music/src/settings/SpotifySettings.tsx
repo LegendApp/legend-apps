@@ -1,7 +1,8 @@
+import { setStringAsync } from "@legendapp/spark/clipboard";
+import { Button } from "@legendapp/spark/ui";
 import { useValue } from "@legendapp/state/react";
-import { useCallback } from "react";
-import { Linking, Text, TextInput, View } from "react-native";
-import { Button } from "../components/Button";
+import { useCallback, useState } from "react";
+import { Linking, TextInput, View } from "react-native";
 import { useToast } from "../components/Toast";
 import { refreshProviderPlaylists } from "../providers/registry";
 import {
@@ -11,20 +12,30 @@ import {
     spotifyWebPlayer$,
 } from "../providers/spotify/provider";
 import { settings$ } from "../systems/Settings";
-import { settingsInputFrame, settingsInputStyle, settingsInputText, SettingsRow, SettingsSection, SettingsSwitchRow } from "./components";
+import {
+    SettingsCaption,
+    SettingsConnectionRow,
+    settingsInputFrame,
+    settingsInputStyle,
+    settingsInputText,
+    SettingsRow,
+    SettingsSection,
+} from "./components";
 
 export function SpotifySettingsContent() {
     const showToast = useToast();
     const status = useValue(spotifyStatus$);
     const player = useValue(spotifyWebPlayer$);
-    const enabled = useValue(settings$.providers.spotify.enabled);
     const clientId = useValue(settings$.providers.spotify.clientId);
+    const [showSetup, setShowSetup] = useState(false);
+    const connected = status.enabled && status.authenticated;
 
     const handleConnect = useCallback(async () => {
+        settings$.providers.spotify.enabled.set(true);
         try {
             await spotifyProvider.login();
-            showToast("Spotify connected.");
         } catch (error) {
+            settings$.providers.spotify.enabled.set(false);
             showToast(error instanceof Error ? error.message : "Spotify sign-in failed.", "error");
         }
     }, [showToast]);
@@ -32,73 +43,65 @@ export function SpotifySettingsContent() {
     const handleDisconnect = useCallback(async () => {
         try {
             await spotifyProvider.logout();
+            settings$.providers.spotify.enabled.set(false);
             await refreshProviderPlaylists();
-            showToast("Spotify disconnected.");
         } catch (error) {
             showToast(error instanceof Error ? error.message : "Could not disconnect Spotify.", "error");
         }
     }, [showToast]);
 
+    const description = status.error ?? player.error ?? (connected
+        ? player.isReady ? "Playback ready." : "Playback starts when the main window is open."
+        : "Needs a Client ID and Spotify Premium.");
+
     return (
-        <>
-            <SettingsSection>
-              <Text className="px-3 py-2 text-sm text-text-secondary">Search your catalog, browse playlists, and play tracks through Spotify Web Playback. Premium is required for playback.</Text>
-                <SettingsSwitchRow
-                    label="Enable Spotify"
-                    description="Makes Spotify available to search and AI playlist generation."
-                    value={enabled}
-                    onValueChange={(value) => settings$.providers.spotify.enabled.set(value)}
-                />
-                <SettingsRow
-                    label="Client ID"
-                    description="Personal integration: create your own Spotify developer app and paste its Client ID here.">
-                  <View className="w-64 flex-row items-center gap-2">
-                      <View className={`${settingsInputFrame} flex-1`}>
-                          <TextInput
-                              value={clientId ?? ""}
-                              onChangeText={(value) => settings$.providers.spotify.clientId.set(value.trim())}
-                              placeholder="Spotify Client ID"
-                              autoCapitalize="none"
-                              autoCorrect={false}
-                              className={settingsInputText}
-                              style={settingsInputStyle}
-                          />
-                      </View>
-                      <Button size="small" variant="secondary" onClick={() => Linking.openURL("https://developer.spotify.com/dashboard")}>
-                          Dashboard
-                      </Button>
-                  </View>
-                </SettingsRow>
-                <View className="gap-1 rounded-md border border-border-primary bg-background-tertiary p-3">
-                    <Text className="text-xs font-semibold text-text-primary">Create your Spotify key</Text>
-                    <Text className="text-xs leading-relaxed text-text-secondary">
-                        1. Open Dashboard and create an app. Select Web API and Web Playback SDK.
-                    </Text>
-                    <Text className="text-xs leading-relaxed text-text-secondary">
-                        2. Add this Redirect URI exactly: {SPOTIFY_REDIRECT_URI_FOR_DASHBOARD}
-                    </Text>
-                    <Text className="text-xs leading-relaxed text-text-secondary">
-                        3. Save the app, copy its Client ID, and paste it above. Spotify Premium is required.
-                    </Text>
+        <SettingsSection>
+            <SettingsCaption>Search and play Spotify through your own Spotify developer app.</SettingsCaption>
+            <SettingsConnectionRow
+                connected={connected}
+                label={connected ? status.displayName || "Spotify" : "Not connected"}
+                description={description}
+                disabled={status.isLoading || (!connected && !clientId)}
+                onConnect={handleConnect}
+                onDisconnect={handleDisconnect}
+            />
+            <SettingsRow label="Client ID">
+                <View className={`${settingsInputFrame} w-64`}>
+                    <TextInput
+                        accessibilityLabel="Spotify Client ID"
+                        value={clientId ?? ""}
+                        onChangeText={(value) => settings$.providers.spotify.clientId.set(value.trim())}
+                        placeholder="Paste Client ID"
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        className={settingsInputText}
+                        style={settingsInputStyle}
+                    />
                 </View>
-            </SettingsSection>
-            <SettingsSection title="Connection">
-                <SettingsRow
-                    label={status.authenticated ? status.displayName || "Connected" : "Not connected"}
-                    description={status.error ?? (status.authenticated
-                        ? `${status.detail}. ${player.isReady ? "Playback device ready." : "Playback device starts when the main window is open."}`
-                        : "Connect a Spotify Premium account after entering your Client ID.")}>
-                  <View className="flex-row gap-2">
-                      <Button size="small" variant="accent" disabled={!enabled || status.isLoading} onClick={handleConnect}>
-                          {status.authenticated ? "Reconnect" : "Connect"}
-                      </Button>
-                      <Button size="small" variant="secondary" disabled={!status.authenticated} onClick={handleDisconnect}>
-                          Disconnect
-                      </Button>
-                  </View>
+            </SettingsRow>
+            {connected ? null : (
+                <SettingsRow label="How to get a Client ID">
+                    <Button variant="disclosure" expanded={showSetup} onPress={() => setShowSetup(!showSetup)}>
+                        Show setup steps
+                    </Button>
                 </SettingsRow>
-                {player.error ? <Text className="text-xs leading-relaxed text-red-300">{player.error}</Text> : null}
-            </SettingsSection>
-        </>
+            )}
+            {!connected && showSetup ? (
+                <SettingsCaption>
+                    In the Spotify Developer Dashboard, create an app with Web API and Web Playback SDK, add the
+                    redirect URI below, then paste the app's Client ID above.
+                </SettingsCaption>
+            ) : null}
+            {!connected && showSetup ? (
+                <SettingsRow label="Redirect URI" description={SPOTIFY_REDIRECT_URI_FOR_DASHBOARD}>
+                    <View className="flex-row gap-2">
+                        <Button onPress={() => void setStringAsync(SPOTIFY_REDIRECT_URI_FOR_DASHBOARD)}>Copy</Button>
+                        <Button onPress={() => Linking.openURL("https://developer.spotify.com/dashboard")}>
+                            Open Dashboard
+                        </Button>
+                    </View>
+                </SettingsRow>
+            ) : null}
+        </SettingsSection>
     );
 }

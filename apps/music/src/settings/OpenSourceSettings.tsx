@@ -1,6 +1,6 @@
-import { Linking, Text } from "react-native";
+import { Button } from "@legendapp/spark/ui";
+import { Linking } from "react-native";
 
-import { Button } from "../components/Button";
 import { SettingsRow, SettingsSection } from "./components";
 
 interface Library {
@@ -67,12 +67,8 @@ const libraries: Library[] = [
     },
 ];
 
-function LinkButton({ label, url, variant = "secondary" }: { label: string; url: string; variant?: "accent" | "secondary" }) {
-    return (
-        <Button size="small" variant={variant} onClick={() => Linking.openURL(url)}>
-            <Text className="text-sm font-medium text-text-primary">{label}</Text>
-        </Button>
-    );
+function LinkButton({ label, url }: { label: string; url: string }) {
+    return <Button onPress={() => Linking.openURL(url)}>{label}</Button>;
 }
 
 export function OpenSourceSettingsContent() {
@@ -83,7 +79,7 @@ export function OpenSourceSettingsContent() {
                     label="Legend Music is free and open source"
                     description="Contribute to development, explore the code, or build your own version."
                 >
-                    <LinkButton label="View on GitHub" url="https://github.com/LegendApp/legend-music" variant="accent" />
+                    <LinkButton label="View on GitHub" url="https://github.com/LegendApp/legend-music" />
                 </SettingsRow>
                 <SettingsRow
                     label="Legend Kit"

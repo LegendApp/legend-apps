@@ -1,8 +1,8 @@
 import { useValue } from "@legendapp/state/react";
 import { HotkeyCapture } from "@legendapp/spark/shortcuts/commands";
-import { Linking, Text, View } from "react-native";
+import { Button } from "@legendapp/spark/ui";
+import { Linking, PlatformColor, StyleSheet, Text, View } from "react-native";
 
-import { Button } from "../components/Button";
 import { SettingsCaption, SettingsRow, SettingsSection, SettingsSwitchRow } from "./components";
 import { globalHotkeyStatus$ } from "../systems/GlobalHotkey";
 import { AI_SOURCE_IDS, AI_SOURCE_LABELS, normalizeAISources, settings$, type MusicProviderId } from "../systems/Settings";
@@ -45,29 +45,30 @@ export function GeneralSettingsContent() {
 
             <SettingsSection title="AI playlists">
                 <SettingsSwitchRow
-                    label="Show AI toolbar"
-                    description="Show source, Auto, and Prompt controls beneath the playlist."
+                    label="Enable AI playlists"
+                    description="Adds a small AI button to the playlist for adding songs automatically or from a prompt."
                     value={aiToolbarEnabled}
                     onValueChange={(value) => settings$.ai.toolbarEnabled.set(value)}
                 />
-            </SettingsSection>
-
-            <SettingsSection title="Default music sources">
-                <SettingsCaption>
-                    Playlists use these sources unless you choose an override in the playlist toolbar. Local copies are always preferred.
-                </SettingsCaption>
-                {AI_SOURCE_IDS.map((source) => {
-                    const enabled = defaultAISources.includes(source);
-                    return (
-                        <SettingsSwitchRow
-                            key={source}
-                            label={AI_SOURCE_LABELS[source]}
-                            value={enabled}
-                            disabled={enabled && defaultAISources.length === 1}
-                            onValueChange={(value) => toggleDefaultAISource(source, value)}
-                        />
-                    );
-                })}
+                {aiToolbarEnabled ? (
+                    <SettingsCaption>
+                        Find songs in these sources. A matching local copy is always preferred.
+                    </SettingsCaption>
+                ) : null}
+                {aiToolbarEnabled
+                    ? AI_SOURCE_IDS.map((source) => {
+                          const enabled = defaultAISources.includes(source);
+                          return (
+                              <SettingsSwitchRow
+                                  key={source}
+                                  label={AI_SOURCE_LABELS[source]}
+                                  value={enabled}
+                                  disabled={enabled && defaultAISources.length === 1}
+                                  onValueChange={(value) => toggleDefaultAISource(source, value)}
+                              />
+                          );
+                      })
+                    : null}
             </SettingsSection>
 
             <SettingsSection title="Shortcuts">
@@ -94,21 +95,19 @@ export function GeneralSettingsContent() {
             </SettingsSection>
 
             <SettingsSection title="About">
-                <View className="flex-row items-center gap-3">
-                    <View className="flex-1">
-                        <Text className="text-text-primary font-semibold text-sm">Version</Text>
-                        <Text className="text-text-secondary text-sm">{packageJson.version}</Text>
-                    </View>
-                    <Button
-                        variant="primary"
-                        icon="exclamationmark.circle"
-                        size="medium"
-                        onClick={() => Linking.openURL("https://github.com/LegendApp/legend-music/issues/new")}
-                    >
-                        <Text className="text-text-primary font-medium text-sm">Report an Issue</Text>
+                <SettingsRow label="Version">
+                    <Text style={styles.value}>{packageJson.version}</Text>
+                </SettingsRow>
+                <SettingsRow label="Feedback" description="Found a bug or have an idea? Open an issue on GitHub.">
+                    <Button onPress={() => Linking.openURL("https://github.com/LegendApp/legend-music/issues/new")}>
+                        Report an Issue
                     </Button>
-                </View>
+                </SettingsRow>
             </SettingsSection>
         </>
     );
 }
+
+const styles = StyleSheet.create({
+    value: { color: PlatformColor("secondaryLabelColor"), fontSize: 13 },
+});

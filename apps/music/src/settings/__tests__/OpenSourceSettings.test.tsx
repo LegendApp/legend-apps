@@ -2,7 +2,6 @@ import React, { type PropsWithChildren } from "react";
 import { Linking } from "react-native";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 
-import { Button } from "../../components/Button";
 import { OpenSourceSettingsContent } from "../OpenSourceSettings";
 import { SettingsRow } from "../components";
 
@@ -14,9 +13,7 @@ jest.mock("react-native", () => ({
     ...jest.requireActual("react-native"),
     Linking: { openURL: jest.fn() },
 }));
-jest.mock("../../components/TooltipProvider", () => ({
-    useTooltip: () => ({ showTooltip: jest.fn(), hideTooltip: jest.fn() }),
-}));
+jest.mock("@legendapp/spark/ui", () => ({ Button: "Button" }));
 
 const links = [
     ["Legend Music is free and open source", "https://github.com/LegendApp/legend-music"],
@@ -48,13 +45,13 @@ it("renders one row per link, each opening its unchanged URL", () => {
     expect(rows.map((row) => row.props.label)).toEqual(links.map(([label]) => label));
 
     for (const row of rows) {
-        act(() => row.findByType(Button).props.onClick({}));
+        act(() => row.findByType("Button" as never).props.onPress());
     }
     expect(openURL.mock.calls.map(([url]) => url)).toEqual(links.map(([, url]) => url));
 });
 
-it("uses one small button style with a single accent action", () => {
-    const buttons = renderer.root.findAllByType(Button).map((button) => button.props);
-    expect(buttons.every((props) => props.size === "small" && props.className === undefined)).toBe(true);
-    expect(buttons.map((props) => props.variant)).toEqual(["accent", ...Array(links.length - 1).fill("secondary")]);
+it("uses native push buttons with no accent fill", () => {
+    const buttons = renderer.root.findAllByType("Button" as never).map((button) => button.props);
+    expect(buttons).toHaveLength(links.length);
+    expect(buttons.every((props) => props.variant === undefined && props.size === undefined)).toBe(true);
 });

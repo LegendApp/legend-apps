@@ -1,24 +1,23 @@
 import { useValue } from "@legendapp/state/react";
 import { useCallback } from "react";
-import { Text, View } from "react-native";
-import { Button } from "../components/Button";
 import { useToast } from "../components/Toast";
 import { appleMusicProvider, appleMusicStatus$ } from "../providers/appleMusic/provider";
 import { refreshProviderPlaylists } from "../providers/registry";
 import { settings$ } from "../systems/Settings";
-import { SettingsRow, SettingsSection, SettingsSwitchRow } from "./components";
+import { SettingsCaption, SettingsConnectionRow, SettingsSection } from "./components";
 
 export function AppleMusicSettingsContent() {
     const showToast = useToast();
     const status = useValue(appleMusicStatus$);
-    const enabled = useValue(settings$.providers.appleMusic.enabled);
+    const connected = status.enabled && status.authenticated;
 
     const handleConnect = useCallback(async () => {
+        settings$.providers.appleMusic.enabled.set(true);
         try {
             await appleMusicProvider.login();
             await refreshProviderPlaylists();
-            showToast("Apple Music connected.");
         } catch (error) {
+            settings$.providers.appleMusic.enabled.set(false);
             showToast(error instanceof Error ? error.message : "Apple Music sign-in failed.", "error");
         }
     }, [showToast]);
@@ -26,40 +25,24 @@ export function AppleMusicSettingsContent() {
     const handleDisconnect = useCallback(async () => {
         try {
             await appleMusicProvider.logout();
+            settings$.providers.appleMusic.enabled.set(false);
             await refreshProviderPlaylists();
-            showToast("Apple Music disconnected.");
         } catch (error) {
             showToast(error instanceof Error ? error.message : "Could not disconnect Apple Music.", "error");
         }
     }, [showToast]);
 
     return (
-        <>
-            <SettingsSection>
-              <Text className="px-3 py-2 text-sm text-text-secondary">Uses MusicKit directly on this Mac—no Legend backend or manually managed developer token.</Text>
-                <SettingsSwitchRow
-                    label="Enable Apple Music"
-                    description="Makes Apple Music available to search and AI playlist generation."
-                    value={enabled}
-                    onValueChange={(value) => settings$.providers.appleMusic.enabled.set(value)}
-                />
-            </SettingsSection>
-            <SettingsSection title="Connection">
-                <SettingsRow
-                    label={status.authenticated ? status.displayName || "Apple Music" : "Not connected"}
-                    description={status.error ?? (status.authenticated
-                        ? `${status.detail}. MusicKit authorization and playback are ready.`
-                        : "Connect your Apple Music account. macOS may ask for Media & Apple Music access.")}>
-                  <View className="flex-row gap-2">
-                      <Button size="small" variant="accent" disabled={!enabled || status.isLoading} onClick={handleConnect}>
-                          {status.authenticated ? "Reconnect" : "Connect"}
-                      </Button>
-                      <Button size="small" variant="secondary" disabled={!status.authenticated} onClick={handleDisconnect}>
-                          Disconnect
-                      </Button>
-                  </View>
-                </SettingsRow>
-            </SettingsSection>
-        </>
+        <SettingsSection>
+            <SettingsCaption>Search and play Apple Music through MusicKit on this Mac.</SettingsCaption>
+            <SettingsConnectionRow
+                connected={connected}
+                label={connected ? status.displayName || "Apple Music" : "Not connected"}
+                description={status.error ?? (connected ? status.detail : "macOS may ask for Media & Apple Music access.")}
+                disabled={status.isLoading}
+                onConnect={handleConnect}
+                onDisconnect={handleDisconnect}
+            />
+        </SettingsSection>
     );
 }

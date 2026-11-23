@@ -15,6 +15,8 @@ import { SpotifySettingsContent } from "../SpotifySettings";
 import { ThemeSettingsContent } from "../ThemeSettings";
 import SettingsContainer from "../SettingsContainer";
 import { DroppableZone } from "../../components/dnd";
+import { appleMusicProvider, appleMusicStatus$ } from "../../providers/appleMusic/provider";
+import { spotifyProvider, spotifyStatus$ } from "../../providers/spotify/provider";
 import { SettingsRow, SettingsSwitchRow, SettingsSection } from "../components";
 
 jest.mock("@legendapp/spark/ui/settings", () => ({
@@ -23,7 +25,10 @@ jest.mock("@legendapp/spark/ui/settings", () => ({
     SettingsSection: ({ children }: PropsWithChildren) => children,
     SettingsRow: ({ children }: PropsWithChildren) => children,
     SettingsSwitchRow: () => null,
+    SettingsSelectRow: () => null,
 }));
+jest.mock("@legendapp/spark/ui", () => ({ Button: "Button" }));
+jest.mock("@legendapp/spark/clipboard", () => ({ setStringAsync: jest.fn() }));
 jest.mock("@legendapp/state/react-native", () => ({ $TextInput: require("react-native").TextInput }));
 jest.mock("@legendapp/spark/shortcuts/commands", () => ({ HotkeyCapture: () => null }));
 jest.mock("../../components/dnd", () => ({
@@ -58,9 +63,7 @@ afterEach(() => {
 it.each([
     [GeneralSettingsContent, "Display Hints", settings$.general.showHints],
     [GeneralSettingsContent, "Show Titlebar on Hover", settings$.general.showTitleBarOnHover],
-    [GeneralSettingsContent, "Show AI toolbar", settings$.ai.toolbarEnabled],
-    [AppleMusicSettingsContent, "Enable Apple Music", settings$.providers.appleMusic.enabled],
-    [SpotifySettingsContent, "Enable Spotify", settings$.providers.spotify.enabled],
+    [GeneralSettingsContent, "Enable AI playlists", settings$.ai.toolbarEnabled],
     [OverlaySettingsContent, "Enable overlay", settings$.overlay.enabled],
     [ThemeSettingsContent, "Liquid Glass", settings$.appearance.background.glassEnabled],
     [CustomizeUISettingsContent, "Enable playback controls", settings$.ui.playbackControlsEnabled],
@@ -77,6 +80,7 @@ it.each([
 });
 
 it("keeps at least one default music source enabled", () => {
+    settings$.ai.toolbarEnabled.set(true);
     settings$.ai.defaultSources.set(["local"]);
     render(<GeneralSettingsContent />);
     expect(getSwitch("Local Music")).toMatchObject({ value: true, disabled: true });
@@ -123,9 +127,10 @@ it("enables shortcut capture with the Global Hotkey switch", () => {
 });
 
 it.each([
-    ["Default music sources", GeneralSettingsContent, "Playlists use these sources"],
+    ["AI playlists", GeneralSettingsContent, "Find songs in these sources"],
     ["Playback Controls", CustomizeUISettingsContent, "Drag controls between Shown and Hidden"],
 ] as const)("renders the %s intro with native helper caption typography", (title, Page, intro) => {
+    settings$.ai.toolbarEnabled.set(true);
     render(<Page />);
     const section = renderer.root.findAllByType(SettingsSection).find((node) => node.props.title === title)!;
     const caption = section.findAllByType(Text).find((node) => node.props.children.startsWith?.(intro));
@@ -192,6 +197,45 @@ it("keeps playback chips compact and moves controls through the drop zones", () 
     act(() => settings$.ui.playback.set(initial));
 });
 
+it("shows AI source choices only while AI playlists are enabled", () => {
+    settings$.ai.toolbarEnabled.set(false);
+    render(<GeneralSettingsContent />);
+    const labels = () => renderer.root.findAllByType(SettingsSwitchRow).map((node) => node.props.label);
+    expect(labels()).not.toContain("Spotify");
+    act(() => settings$.ai.toolbarEnabled.set(true));
+    expect(labels()).toEqual(expect.arrayContaining(["Local Music", "Spotify", "Apple Music"]));
+});
+
+it("shows About as a version row and a native Report an Issue button", () => {
+    render(<GeneralSettingsContent />);
+    const version = renderer.root.findAllByType(SettingsRow).find((node) => node.props.label === "Version")!;
+    expect(version.findByType(Text).props.children).toMatch(/^\d+\.\d+\.\d+/);
+    expect(renderer.root.findAllByType("Button" as never).map((node) => node.props.children)).toEqual(["Report an Issue"]);
+});
+
+it.each([
+    ["Spotify", SpotifySettingsContent, spotifyProvider, spotifyStatus$, settings$.providers.spotify.enabled],
+    ["Apple Music", AppleMusicSettingsContent, appleMusicProvider, appleMusicStatus$, settings$.providers.appleMusic.enabled],
+] as const)("%s shows one connection action and connecting turns the service on", async (_name, Page, provider, status$, enabled$) => {
+    settings$.providers.spotify.clientId.set("client-id");
+    enabled$.set(false);
+    const login = jest.spyOn(provider, "login").mockResolvedValue(undefined as never);
+    render(<Page />);
+    const buttons = () => renderer.root.findAllByType("Button" as never)
+        .filter((node) => ["Connect", "Disconnect"].includes(node.props.children));
+    expect(renderer.root.findAllByType(SettingsSwitchRow)).toHaveLength(0);
+    expect(buttons().map((node) => node.props.children)).toEqual(["Connect"]);
+
+    await act(async () => { await buttons()[0].props.onPress(); });
+    expect(enabled$.peek()).toBe(true);
+    expect(login).toHaveBeenCalled();
+
+    act(() => status$.assign({ enabled: true, authenticated: true }));
+    expect(buttons().map((node) => node.props.children)).toEqual(["Disconnect"]);
+    login.mockRestore();
+    act(() => { enabled$.set(false); status$.assign({ enabled: false, authenticated: false }); });
+});
+
 it("uses the native title as the heading for each settings page", () => {
     render(<SettingsContainer initialPage="apple-music" />);
     const window = renderer.root.findByType(VirtualizedSettingsWindow);
@@ -199,7 +243,7 @@ it("uses the native title as the heading for each settings page", () => {
     const pages: ReactElement<SettingsPageProps>[] = window.props.children;
     expect(pages.map((page) => page.props.title)).toEqual(expect.arrayContaining(["Apple Music", "Overlay"]));
     for (const { props: { children, heading } } of pages) {
-        expect(heading).toBe(false);
+        expect(heading).toBeUndefined();
         expect(React.Children.only(children)).not.toHaveProperty("type", Text);
     }
 });

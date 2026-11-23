@@ -918,7 +918,7 @@ export async function scanLocalMusic(): Promise<void> {
     if (paths.length === 0) {
         localMusicState$.scanTrackProgress.set(0);
         localMusicState$.scanTrackTotal.set(0);
-        localMusicState$.error.set("No library paths configured");
+        localMusicState$.error.set(null);
         return;
     }
 
