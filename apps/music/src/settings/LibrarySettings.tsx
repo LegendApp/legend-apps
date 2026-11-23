@@ -122,7 +122,7 @@ export function LibrarySettingsContent() {
 
     return (
         <>
-            <SettingsSection title="Folders">
+            <SettingsSection>
                 {librarySettings.paths.length === 0 ? (
                     <SettingsCaption>Add a folder to build your library.</SettingsCaption>
                 ) : null}
