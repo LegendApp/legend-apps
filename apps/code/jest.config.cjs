@@ -4,6 +4,7 @@ module.exports = require("../../scripts/jest/spark.cjs")({
   testMatch: ["<rootDir>/apps/code/src/**/__tests__/**/*.test.tsx"],
   modulePathIgnorePatterns: ["<rootDir>/shell/.legend"],
   moduleNameMapper: {
+    "^@legend-apps/workspace/src/(.*)$": "<rootDir>/packages/workspace/src/$1",
     "^react-native$": "<rootDir>/apps/diff/jest/mocks/reactNativeMock.cjs",
   },
   transform: {

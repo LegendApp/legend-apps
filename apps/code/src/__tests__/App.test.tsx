@@ -13,7 +13,7 @@ jest.mock("@legendapp/spark/app/documents", () => ({
   useDocumentAppController: jest.fn(() => ({ status: "loading" })),
 }));
 jest.mock("@legend-apps/syntax-parser", () => ({ getSyntaxLanguageForPath: jest.fn() }));
-jest.mock("../codeWindows", () => ({ registerCodeWindows: jest.fn(), openCodeViewerWindow: jest.fn(), focusCodeViewerWindow: jest.fn() }));
+jest.mock("../codeWindows", () => ({ registerCodeWindows: jest.fn(), openCodeViewerWindow: jest.fn(async () => undefined), focusCodeViewerWindow: jest.fn() }));
 jest.mock("../codeBenchmark", () => ({ installCodeBenchmarkHook: jest.fn() }));
 jest.mock("../codeMenus", () => ({ codeMenuConfig: [] }));
 jest.mock("../codeViewerRequests", () => ({ codeAutomaticPairs$: require("@legendapp/state").observable(true), requestCodeViewerFile: jest.fn() }));
@@ -59,5 +59,28 @@ it("opens folders and new windows from the File menu and routes files to the foc
   expect(focusCodeViewerWindow).toHaveBeenLastCalledWith("code-viewer-2");
   await options.onOpenDocument!("/tmp/b.ts", controller as any);
   expect(openCodeViewerWindow).toHaveBeenCalledWith({ files: ["/tmp/b.ts"] });
+  await act(async () => renderer!.unmount());
+});
+
+it("shares an in-flight viewer between launch and document-open events for the same file", async () => {
+  const openViewer = jest.mocked(openCodeViewerWindow);
+  openViewer.mockClear();
+  let finishOpening!: () => void;
+  openViewer.mockImplementationOnce(() => new Promise(resolve => {
+    finishOpening = () => resolve({} as Awaited<ReturnType<typeof openCodeViewerWindow>>);
+  }));
+  const controller = { isDocumentWindowOpen: () => false, setDocumentWindowOpen: jest.fn() };
+  let renderer: ReturnType<typeof create>;
+  await act(async () => { renderer = create(<App />); });
+  const options = jest.mocked(useDocumentAppController).mock.lastCall![0];
+
+  const path = "/tmp/shared.ts";
+  const launch = options.onInitialOpen!([path], controller as any);
+  const open = options.onOpenDocument!(path, controller as any);
+  expect(openViewer).toHaveBeenCalledTimes(1);
+  expect(openViewer).toHaveBeenCalledWith({ files: [path] });
+  finishOpening();
+  await Promise.all([launch, open]);
+  expect(controller.setDocumentWindowOpen).toHaveBeenCalledTimes(2);
   await act(async () => renderer!.unmount());
 });
