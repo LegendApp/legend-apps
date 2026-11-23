@@ -177,17 +177,6 @@ function AIButtonsContent({ canUseAI, disabledReason, libraryTracks, onAddTracks
         [unavailableMessage, libraryTracks, onAddTracks, playlist, showToast, sources, state$],
     );
 
-    const handleSourceToggle = useCallback((source: MusicProviderId, checked: boolean) => {
-        const nextSources = checked
-            ? AI_SOURCE_IDS.filter((candidate) => candidate === source || sources.includes(candidate))
-            : sources.filter((candidate) => candidate !== source);
-        if (nextSources.length === 0) {
-            showToast("Choose at least one AI music source.", "error");
-            return;
-        }
-        settings$.ai.playlistSourceOverrides[playlist.id].set(nextSources);
-    }, [playlist.id, showToast, sources]);
-
     const handleSubmitPrompt = useCallback(() => {
         const trimmedPrompt = state$.prompt.peek().trim();
         if (!trimmedPrompt) {
@@ -206,16 +195,6 @@ function AIButtonsContent({ canUseAI, disabledReason, libraryTracks, onAddTracks
         });
         void handleGenerate(trimmedPrompt);
     }, [canGenerate, handleGenerate, showToast, unavailableMessage, state$]);
-
-    const handleAutoGenerate = useCallback(() => {
-        if (playlist.trackPaths.length === 0) {
-            const message = "Add at least one seed track for Auto, or use Prompt.";
-            showToast(message, "error");
-            return;
-        }
-
-        void handleGenerate();
-    }, [handleGenerate, playlist.trackPaths.length, showToast, state$]);
 
     const handleOpenMenu = useCallback(async (event: NativeMouseEvent) => {
         const items: MenuItem[] = [
@@ -245,59 +224,64 @@ function AIButtonsContent({ canUseAI, disabledReason, libraryTracks, onAddTracks
             settings$.ai.playlistSourceOverrides[playlist.id].delete();
         } else if (itemId.startsWith("source:")) {
             const source = itemId.slice("source:".length) as MusicProviderId;
-            handleSourceToggle(source, !sources.includes(source));
+            const nextSources = sources.includes(source)
+                ? sources.filter((candidate) => candidate !== source)
+                : AI_SOURCE_IDS.filter((candidate) => candidate === source || sources.includes(candidate));
+            if (nextSources.length === 0) {
+                showToast("Choose at least one AI music source.", "error");
+            } else {
+                settings$.ai.playlistSourceOverrides[playlist.id].set(nextSources);
+            }
         } else if (unavailableMessage !== null) {
             showToast(unavailableMessage, "error");
         } else if (itemId === "auto") {
-            handleAutoGenerate();
+            void handleGenerate();
         } else {
             state$.isPromptOpen.set(true);
         }
-    }, [handleAutoGenerate, handleSourceToggle, hasSourceOverride, playlist, showToast, sources, state$, unavailableMessage, windowId]);
+    }, [handleGenerate, hasSourceOverride, playlist, showToast, sources, state$, unavailableMessage, windowId]);
 
     return (
-        <>
-            <Show
-                if={state$.isPromptOpen}
-                else={
-                    <View className="absolute bottom-2 right-3 z-10">
-                        {isGenerating ? (
-                            <View className="size-7 items-center justify-center">
-                                <ActivityIndicator size="small" accessibilityLabel="Generating playlist suggestions" />
-                            </View>
-                        ) : (
-                            <Button
-                                size="small"
-                                variant="icon-bg"
-                                icon="sparkles"
-                                iconSize={13}
-                                accessibilityLabel="AI playlist"
-                                accessibilityRole="button"
-                                tooltip="AI playlist"
-                                onClick={handleOpenMenu}
-                            />
-                        )}
-                    </View>
-                }
-            >
-                <View className="px-3 py-2 flex-row items-center gap-2 border-t border-border-primary">
-                    <PromptInput prompt$={state$.prompt} onSubmit={handleSubmitPrompt} />
-                    <Button
-                        size="small"
-                        variant="icon"
-                        icon="xmark"
-                        iconSize={12}
-                        accessibilityLabel="Cancel prompt"
-                        accessibilityRole="button"
-                        onClick={() => {
-                            state$.isPromptOpen.set(false);
-                            state$.prompt.set("");
-                        }}
-                    />
-                    <PromptSubmit prompt$={state$.prompt} canGenerate={canGenerate} onSubmit={handleSubmitPrompt} />
+        <Show
+            if={state$.isPromptOpen}
+            else={
+                <View className="absolute bottom-2 right-3 z-10">
+                    {isGenerating ? (
+                        <View className="size-7 items-center justify-center">
+                            <ActivityIndicator size="small" accessibilityLabel="Generating playlist suggestions" />
+                        </View>
+                    ) : (
+                        <Button
+                            size="small"
+                            variant="icon-bg"
+                            icon="sparkles"
+                            iconSize={13}
+                            accessibilityLabel="AI playlist"
+                            accessibilityRole="button"
+                            tooltip="AI playlist"
+                            onClick={handleOpenMenu}
+                        />
+                    )}
                 </View>
-            </Show>
-        </>
+            }
+        >
+            <View className="px-3 py-2 flex-row items-center gap-2 border-t border-border-primary">
+                <PromptInput prompt$={state$.prompt} onSubmit={handleSubmitPrompt} />
+                <Button
+                    size="small"
+                    variant="icon"
+                    icon="xmark"
+                    iconSize={12}
+                    accessibilityLabel="Cancel prompt"
+                    accessibilityRole="button"
+                    onClick={() => {
+                        state$.isPromptOpen.set(false);
+                        state$.prompt.set("");
+                    }}
+                />
+                <PromptSubmit prompt$={state$.prompt} canGenerate={canGenerate} onSubmit={handleSubmitPrompt} />
+            </View>
+        </Show>
     );
 }
 
