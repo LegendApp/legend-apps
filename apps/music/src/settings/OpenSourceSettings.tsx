@@ -1,7 +1,7 @@
-import { Linking, Text, View } from "react-native";
+import { Linking, Text } from "react-native";
 
 import { Button } from "../components/Button";
-import { SettingsSection } from "./components";
+import { SettingsRow, SettingsSection } from "./components";
 
 interface Library {
     name: string;
@@ -67,60 +67,37 @@ const libraries: Library[] = [
     },
 ];
 
+function LinkButton({ label, url, variant = "secondary" }: { label: string; url: string; variant?: "accent" | "secondary" }) {
+    return (
+        <Button size="small" variant={variant} onClick={() => Linking.openURL(url)}>
+            <Text className="text-sm font-medium text-text-primary">{label}</Text>
+        </Button>
+    );
+}
+
 export function OpenSourceSettingsContent() {
-    const handleOpenLink = (url: string) => {
-        Linking.openURL(url);
-    };
-
-    const handleOpenLegendMusicSource = () => {
-        Linking.openURL("https://github.com/LegendApp/legend-music");
-    };
-
     return (
         <>
-            <SettingsSection title="Legend Music is Open Source">
-              <Text className="px-3 py-2 text-sm text-text-secondary">Legend Music is completely free and open source. Contribute to development, explore the code, or build your own version.</Text>
-                <Button
-                    onClick={handleOpenLegendMusicSource}
-                    className="self-start rounded-lg bg-accent-primary px-6 py-3 hover:bg-accent-secondary"
+            <SettingsSection>
+                <SettingsRow
+                    label="Legend Music is free and open source"
+                    description="Contribute to development, explore the code, or build your own version."
                 >
-                    <Text className="text-background-inverse font-semibold">View Source Code</Text>
-                </Button>
+                    <LinkButton label="View on GitHub" url="https://github.com/LegendApp/legend-music" variant="accent" />
+                </SettingsRow>
+                <SettingsRow
+                    label="Legend Kit"
+                    description="A comprehensive suite of Legend tools with premium apps built on Legend State, List, and Motion."
+                >
+                    <LinkButton label="Learn More" url="https://legendapp.com/kit" />
+                </SettingsRow>
             </SettingsSection>
 
-            <SettingsSection title="Legend Kit">
-              <Text className="px-3 py-2 text-sm text-text-secondary">A comprehensive suite of Legend tools with premium apps built on Legend State, List, and Motion.</Text>
-                <Button
-                    onClick={() => handleOpenLink("https://legendapp.com/kit")}
-                    className="self-start rounded-lg bg-accent-primary/80 px-4 py-2 hover:bg-accent-primary"
-                >
-                    <Text className="text-background-inverse font-medium text-sm">Learn More</Text>
-                </Button>
-            </SettingsSection>
-
-            <SettingsSection
-                title="Open Source Libraries"
-                // contentClassName="flex flex-col gap-3"
-            >
-              <Text className="px-3 py-2 text-sm text-text-secondary">Legend Music is built on top of these fantastic open source projects:</Text>
+            <SettingsSection title="Built With">
                 {libraries.map((library) => (
-                    <View
-                        key={library.name}
-                        className="flex-row items-center justify-between rounded-lg border border-border-primary bg-background-tertiary px-5 py-4"
-                    >
-                        <View className="flex-1 pr-6">
-                            <Text className="text-text-primary text-base font-semibold">{library.name}</Text>
-                            <Text className="mt-1 text-sm leading-relaxed text-text-secondary">
-                                {library.description}
-                            </Text>
-                        </View>
-                        <Button
-                            onClick={() => handleOpenLink(library.url)}
-                            className="rounded-lg border border-border-primary bg-background-secondary px-4 py-2 hover:bg-background-tertiary"
-                        >
-                            <Text className="text-text-primary text-sm font-medium">GitHub</Text>
-                        </Button>
-                    </View>
+                    <SettingsRow key={library.name} label={library.name} description={library.description}>
+                        <LinkButton label="GitHub" url={library.url} />
+                    </SettingsRow>
                 ))}
             </SettingsSection>
         </>
