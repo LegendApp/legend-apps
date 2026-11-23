@@ -1,6 +1,6 @@
 import { SFSymbol } from "@legendapp/spark/ui/symbol";
 import { useEffect, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
 import { getPathName } from "./fileTree";
 import { SidebarToggle, trafficLightsWidth, withAlpha } from "./titleBar";
 import type { WorkspaceColors } from "./WorkspaceSidebar";
@@ -21,12 +21,10 @@ export type DocumentTabBarProps = {
   onToggleSidebar?: () => void;
   sidebarOpen: boolean;
   paths: readonly string[];
-  style?: StyleProp<ViewStyle>;
-  /** The chrome theme's title bar height; the bar fills it. */
   titleBarHeight: number;
 };
 
-export function DocumentTabBar({ activePath, colors, onClose, onSelect, onToggleSidebar, sidebarOpen, paths, style, titleBarHeight }: DocumentTabBarProps) {
+export function DocumentTabBar({ activePath, colors, onClose, onSelect, onToggleSidebar, sidebarOpen, paths, titleBarHeight }: DocumentTabBarProps) {
   const scroll = useRef<ScrollView>(null);
   const frames = useRef(new Map<string, { width: number; x: number }>());
   const [scrollWidth, setScrollWidth] = useState(0);
@@ -51,7 +49,7 @@ export function DocumentTabBar({ activePath, colors, onClose, onSelect, onToggle
 
   return (
     // The title bar is transparent, so leave room for the traffic lights while the sidebar is hidden.
-    <View onLayout={event => setBarWidth(event.nativeEvent.layout.width)} style={[styles.root, { borderColor: colors.border, height: titleBarHeight, paddingLeft: leadingInset }, style]}>
+    <View onLayout={event => setBarWidth(event.nativeEvent.layout.width)} style={[styles.root, { borderColor: colors.border, height: titleBarHeight, paddingLeft: leadingInset }]}>
       {onToggleSidebar ? <SidebarToggle colors={colors} label={sidebarOpen ? "Hide Sidebar" : "Show Sidebar"} onPress={onToggleSidebar} /> : null}
       <ScrollView
         contentContainerStyle={styles.tabs}

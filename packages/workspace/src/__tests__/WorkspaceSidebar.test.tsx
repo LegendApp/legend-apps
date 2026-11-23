@@ -1,6 +1,5 @@
 import React from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
-import { openFileDialog } from "@legendapp/spark/dialogs";
 import { list, writeText } from "@legendapp/spark/files";
 import { useWorkspaceWindow } from "../useWorkspaceWindow";
 import { WorkspaceSidebar } from "../WorkspaceSidebar";
@@ -25,7 +24,6 @@ jest.mock("@legendapp/spark/files", () => ({
   stat: jest.fn(async (path: string) => ({ type: mockTree[path] === null ? "directory" : "file" })),
   writeText: jest.fn(async () => {}),
 }));
-jest.mock("@legendapp/spark/dialogs", () => ({ openFileDialog: jest.fn() }));
 jest.mock("@legendapp/spark/ui/symbol", () => ({ SFSymbol: () => null }));
 jest.mock("@legendapp/spark/ui/sidebar", () => {
   const React = require("react");
@@ -40,7 +38,7 @@ const colors = { border: "#ccc", foreground: "#000", muted: "#888", selection: "
 let workspace: ReturnType<typeof useWorkspaceWindow>;
 
 function Harness({ props, sidebarOpenSetting = true, sidebarColors = colors }: { props: WorkspaceWindowProps; sidebarOpenSetting?: boolean; sidebarColors?: typeof colors }) {
-  workspace = useWorkspaceWindow(props, { fileTypes: ["md"], onError: error => { throw error; }, sidebarOpenSetting });
+  workspace = useWorkspaceWindow(props, { sidebarOpenSetting });
   const { files, folders, tabs } = workspace.state;
   return (
     <WorkspaceSidebar
@@ -72,18 +70,13 @@ describe("WorkspaceSidebar", () => {
   beforeEach(() => jest.clearAllMocks());
   afterEach(() => act(async () => renderer.unmount()));
 
-  it("starts single files with the sidebar closed, then adds folders", async () => {
+  it("starts single files with the sidebar closed", async () => {
     await act(async () => { renderer = create(<Harness props={{ files: ["/x/one.md"] }} />); });
     expect(workspace.state.sidebarOpen).toBe(false);
     expect(labels()).toEqual([["one.md", true]]);
 
-    jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
-    await act(async () => workspace.chooseFolders());
-    expect(openFileDialog).toHaveBeenLastCalledWith({ multiple: true, selection: "directories" });
-    expect(workspace.state.sidebarOpen).toBe(true);
     expect(workspace.state.workspacePath).toBeNull();
     expect(writeText).not.toHaveBeenCalled();
-    expect(labels().map(([label]) => label)).toEqual(["repo", "src", "notes.md", "one.md"]);
   });
 
   it("refreshes mounted row colors when the theme changes without changing the files", async () => {
@@ -107,26 +100,20 @@ describe("WorkspaceSidebar", () => {
     expect(list).toHaveBeenCalledTimes(2);
   });
 
-  it("opens files as tabs and persists folders added to a workspace", async () => {
-    await act(async () => { renderer = create(<Harness props={{ folders: ["/repo"], workspacePath: "/data/w.json" }} />); });
+  it("opens files as tabs and saves workspace folders without overwriting other fields", async () => {
+    await act(async () => { renderer = create(<Harness props={{ folders: ["/repo", "/other"], workspacePath: "/data/w.json" }} />); });
     await press("notes.md");
     expect(workspace.state.tabs).toEqual({ active: "/repo/notes.md", paths: ["/repo/notes.md"] });
     expect(renderer.root.findByType("Sidebar" as never).props.selectedId).toBe("/repo/notes.md");
 
-    jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/other"] });
-    await act(async () => workspace.chooseFolders());
+    await act(async () => workspace.saveWorkspace());
     expect(writeText).toHaveBeenCalledWith("/data/w.json", '{\n  "folders": [\n    "/repo",\n    "/other"\n  ],\n  "theme": "dark"\n}\n');
-
-    jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/x/a.md", "/x/b.md"] });
-    await act(async () => { await workspace.chooseFiles(); });
-    expect(openFileDialog).toHaveBeenLastCalledWith({ filters: [{ extensions: ["md"] }], multiple: true, selection: "files" });
-    expect(workspace.state.files).toEqual(["/x/a.md", "/x/b.md"]);
   });
 
   it("saves a new workspace and remembers the sidebar choice only for folders", async () => {
     const onSidebarOpenChange = jest.fn();
     function Toggle({ props }: { props: WorkspaceWindowProps }) {
-      workspace = useWorkspaceWindow(props, { onError: error => { throw error; }, onSidebarOpenChange, sidebarOpenSetting: false });
+      workspace = useWorkspaceWindow(props, { onSidebarOpenChange, sidebarOpenSetting: false });
       return null;
     }
     await act(async () => { renderer = create(<Toggle props={{ files: ["/x/one.md"] }} />); });
@@ -134,11 +121,9 @@ describe("WorkspaceSidebar", () => {
     expect(workspace.state.sidebarOpen).toBe(true);
     expect(onSidebarOpenChange).not.toHaveBeenCalled();
 
-    await act(async () => renderer.update(<Toggle props={{}} />));
-    jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: ["/repo"] });
-    await act(async () => workspace.chooseFolders());
+    await act(async () => renderer.update(<Toggle key="folder" props={{ folders: ["/repo"] }} />));
     await act(async () => workspace.toggleSidebar());
-    expect(onSidebarOpenChange).toHaveBeenCalledWith(false);
+    expect(onSidebarOpenChange).toHaveBeenCalledWith(true);
     await act(async () => workspace.saveWorkspace());
     expect(workspace.state.workspacePath).toBe("/data/Workspaces/repo.json");
   });
