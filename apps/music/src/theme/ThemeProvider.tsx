@@ -2,6 +2,7 @@ import { createObservableFile } from "@legend-apps/storage";
 import { createAppTheme } from "@legend-apps/theme";
 import { useValue } from "@legendapp/state/react";
 import { useEffect, type ReactNode } from "react";
+import { useColorScheme } from "react-native";
 import { normalizeMusicAppearanceSettings, settings$ } from "../systems/Settings";
 import { colors } from "./colors";
 import { getMusicTheme } from "./musicThemes";
@@ -25,9 +26,11 @@ export const themeState$ = appTheme.themeState$;
 export function ThemeProvider({ children }: { children: ReactNode }) {
     const appearance = normalizeMusicAppearanceSettings(useValue(settings$.appearance));
 
+    const colors = getMusicTheme(appearance.theme, useColorScheme()).colors;
+
     useEffect(() => {
-        themeState$.customColors.dark.set(clone(getMusicTheme(appearance.theme).colors));
-    }, [appearance.theme]);
+        themeState$.customColors.dark.set(clone(colors));
+    }, [colors]);
 
     return <BaseThemeProvider>{children}</BaseThemeProvider>;
 }

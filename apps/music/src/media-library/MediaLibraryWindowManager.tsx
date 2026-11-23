@@ -9,7 +9,7 @@ import { perfCount, perfLog } from "@legend-apps/runtime-utils";
 import { WindowsNavigator } from "../windows";
 import { createLibraryWindowStyle, MEDIA_LIBRARY_DEFAULT_HEIGHT, MEDIA_LIBRARY_DEFAULT_WIDTH } from "./libraryWindowStyle";
 import { normalizeMusicAppearanceSettings, settings$ } from "../systems/Settings";
-import { getMusicTheme } from "../theme/musicThemes";
+import { getMusicTheme, getMusicWindowAppearance } from "../theme/musicThemes";
 const MEDIA_LIBRARY_WINDOW_KEY = "MediaLibraryWindow" as const;
 const MEDIA_LIBRARY_WINDOW_ID = WindowsNavigator.getId(MEDIA_LIBRARY_WINDOW_KEY);
 const MEDIA_LIBRARY_MIN_WIDTH = 360;
@@ -91,7 +91,7 @@ export const MediaLibraryWindowManager = () => {
                     options: {
                         position: { displayId: mainFrame.displayId, x, y },
                         ...{
-                            ...createLibraryWindowStyle(getMusicTheme(appearance.theme)),
+                            ...createLibraryWindowStyle(getMusicTheme(appearance.theme), getMusicWindowAppearance(appearance.theme)),
                             size: { width, height }
                         }
                     }

@@ -1,6 +1,6 @@
 import { getLegendDisplayTheme } from "@legend-apps/theme";
 import type { NavigatorWindowOptions } from "@legendapp/spark/windows";
-import type { MusicTheme } from "../theme/musicThemes";
+import type { getMusicWindowAppearance, MusicTheme } from "../theme/musicThemes";
 
 export const LIBRARY_SIDEBAR_WIDTH = 220;
 export const MEDIA_LIBRARY_DEFAULT_WIDTH = 640;
@@ -19,11 +19,11 @@ export function getLibraryInitialPaneMetrics({ width, height }: { width: number;
     };
 }
 
-export function createLibraryWindowStyle(theme: MusicTheme): NavigatorWindowOptions {
+export function createLibraryWindowStyle(theme: MusicTheme, appearance: ReturnType<typeof getMusicWindowAppearance>): NavigatorWindowOptions {
     // The library panes use the shared Uniwind background tokens.
     const { colors } = getLegendDisplayTheme(theme.appearance);
     return {
-        appearance: theme.appearance,
+        appearance,
         backgroundColor: theme.colors.background.secondary,
         macos: {
             startupSplitView: {

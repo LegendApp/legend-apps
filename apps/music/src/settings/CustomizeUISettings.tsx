@@ -1,15 +1,14 @@
 import { useObserveEffect, useValue } from "@legendapp/state/react";
-import { Fragment, useMemo } from "react";
-import { Text, View } from "react-native";
+import { useMemo } from "react";
+import { PlatformColor, Text, View } from "react-native";
 
 import { DragDropProvider, DraggableItem, DroppableZone } from "../components/dnd";
 import { usePlaybackControlLayout } from "../hooks/useUIControls";
-import { SettingsSection, SettingsSwitchRow } from "./components";
+import { SettingsCaption, SettingsSection, SettingsSwitchRow } from "./components";
 import { SUPPORT_PLAYLISTS } from "../systems/constants";
-import { Icon } from "../systems/Icon";
+import { SFSymbol } from "@legendapp/spark/ui/symbol";
 import { type PlaybackControlId, settings$, type UIControlLayout } from "../systems/Settings";
 import type { SFSymbols } from "../types/SFSymbols";
-import { cn } from "@legendapp/spark/ui/classnames";
 
 type ControlGroup = "shown" | "hidden";
 type ControlDragData<T extends string> = {
@@ -105,22 +104,18 @@ export function CustomizeUISettingsContent() {
     const normalizedPlaybackLayout = useNormalizedLayout(playbackLayout, PLAYBACK_CONTROL_DEFINITIONS);
 
     return (
-        <>
-            <DragDropProvider>
-                <View className="flex flex-col gap-8">
-                    <SettingsSection title="Playback Controls">
-                      <Text className="px-3 py-2 text-sm text-text-secondary">Drag controls between Shown and Hidden to curate the playback toolbar.</Text>
-                        <SettingsSwitchRow
-                            label="Enable playback controls"
-                            description="Show the playback toolbar beneath the Now Playing area."
-                            value={playbackControlsEnabled}
-                            onValueChange={(value) => settings$.ui.playbackControlsEnabled.set(value)}
-                        />
-                        <ControlLayoutEditor layout={normalizedPlaybackLayout} definitions={PLAYBACK_CONTROL_MAP} />
-                    </SettingsSection>
-                </View>
-            </DragDropProvider>
-        </>
+        <DragDropProvider>
+            <SettingsSection title="Playback Controls">
+                <SettingsCaption>Drag controls between Shown and Hidden to curate the playback toolbar.</SettingsCaption>
+                <SettingsSwitchRow
+                    label="Enable playback controls"
+                    description="Show the playback toolbar beneath the Now Playing area."
+                    value={playbackControlsEnabled}
+                    onValueChange={(value) => settings$.ui.playbackControlsEnabled.set(value)}
+                />
+                <ControlLayoutEditor layout={normalizedPlaybackLayout} definitions={PLAYBACK_CONTROL_MAP} />
+            </SettingsSection>
+        </DragDropProvider>
     );
 }
 
@@ -179,28 +174,21 @@ interface ControlLayoutEditorProps<T extends string> {
 }
 
 function ControlLayoutEditor<T extends string>({ layout, definitions }: ControlLayoutEditorProps<T>) {
-    const handleMove = (params: MoveControlParams<T>) => {
-        moveControl(params);
-    };
-
-    const shownItems = layout.shown;
-    const hiddenItems = layout.hidden;
-
     return (
-        <View className="flex flex-col gap-6">
+        <View className="gap-4 px-2.5 pb-2.5 pt-3">
             <ControlGroup
                 label="Shown"
-                items={shownItems}
+                items={layout.shown}
                 group="shown"
                 definitions={definitions}
-                onMove={handleMove}
+                onMove={moveControl}
             />
             <ControlGroup
                 label="Hidden"
-                items={hiddenItems}
+                items={layout.hidden}
                 group="hidden"
                 definitions={definitions}
-                onMove={handleMove}
+                onMove={moveControl}
             />
         </View>
     );
@@ -215,33 +203,35 @@ interface ControlGroupProps<T extends string> {
 }
 
 function ControlGroup<T extends string>({ label, items, group, definitions, onMove }: ControlGroupProps<T>) {
-    const zoneId = PLAYBACK_DRAG_ZONE_ID;
-    const hasItems = items.length > 0;
-
     return (
-        <View className="flex flex-col gap-3">
-            <Text className="text-sm font-semibold text-text-secondary">{label}</Text>
-            <View className="rounded-2xl border border-border-primary bg-white/5 py-2">
-                <View className={cn("flex flex-row flex-wrap items-center", hasItems ? undefined : "justify-center")}>
-                    <ControlDropZone targetGroup={group} index={0} onMove={onMove} isExpanded={!hasItems} />
+        <View className="gap-2">
+            <Text className="text-sm font-medium text-text-secondary">{label}</Text>
+            <View className="rounded-lg border border-border-primary bg-background-secondary p-2">
+                <View className="flex-row flex-wrap items-center gap-2">
                     {items.map((controlId, index) => (
-                        <Fragment key={`${group}-${controlId}`}>
+                        <View key={controlId}>
                             <DraggableItem<ControlDragData<T>>
                                 id={`playback-${controlId}`}
-                                zoneId={zoneId}
+                                zoneId={PLAYBACK_DRAG_ZONE_ID}
                                 data={() => ({ controlId, group })}
-                                className="flex-shrink-0"
+                                className="shrink-0"
                             >
                                 <ControlChip definition={definitions[controlId]} />
                             </DraggableItem>
-                            {index < items.length - 1 && (
-                                <ControlDropZone targetGroup={group} index={index + 1} onMove={onMove} />
-                            )}
-                        </Fragment>
+                            <ControlDropZone
+                                targetGroup={group}
+                                index={index}
+                                onMove={onMove}
+                                className="absolute -left-1 top-0 h-8 w-1"
+                            />
+                        </View>
                     ))}
-                    {hasItems && (
-                        <ControlDropZone targetGroup={group} index={items.length} onMove={onMove} isExpanded />
-                    )}
+                    <ControlDropZone
+                        targetGroup={group}
+                        index={items.length}
+                        onMove={onMove}
+                        className={items.length > 0 ? "-ml-2 h-8 flex-1" : "h-8 w-full"}
+                    />
                 </View>
             </View>
         </View>
@@ -252,27 +242,20 @@ interface ControlDropZoneProps<T extends string> {
     targetGroup: ControlGroup;
     index: number;
     onMove: (params: MoveControlParams<T>) => void;
-    isExpanded?: boolean;
+    className: string;
 }
+
+const dropHitSlop = { top: 4, bottom: 4, left: 5, right: 5 };
 
 function ControlDropZone<T extends string>({
     targetGroup,
     index,
     onMove,
-    isExpanded = false,
+    className,
 }: ControlDropZoneProps<T>) {
-    const dropId = `playback-${targetGroup}-drop-${index}`;
-    const baseClassName = isExpanded ? "px-2 h-10 flex-1 w-full basis-full" : "h-10 w-2 flex-shrink-0";
-    const indicatorClass = isExpanded
-        ? "rounded-2xl border border-emerald-500/40 bg-emerald-500/10"
-        : "rounded-full bg-emerald-500/40";
-    const dropHitSlop = isExpanded
-        ? { top: 12, bottom: 12, left: 8, right: 8 }
-        : { top: 12, bottom: 12, left: 16, right: 16 };
-
     return (
         <DroppableZone
-            id={dropId}
+            id={`playback-${targetGroup}-drop-${index}`}
             allowDrop={() => true}
             onDrop={(item) => {
                 const payload = item.data as ControlDragData<T>;
@@ -283,17 +266,12 @@ function ControlDropZone<T extends string>({
                     targetIndex: index,
                 });
             }}
-            className={baseClassName}
-            activeClassName="opacity-100"
+            className={className}
             hitSlop={dropHitSlop}
         >
             {(isActive) => (
                 <View
-                    className={cn(
-                        "h-full w-full transition-opacity",
-                        indicatorClass,
-                        isActive ? "opacity-100" : "opacity-0",
-                    )}
+                    className={`absolute inset-0 rounded bg-accent-primary/40 ${isActive ? "opacity-100" : "opacity-0"}`}
                 />
             )}
         </DroppableZone>
@@ -306,15 +284,11 @@ interface ControlChipProps<T extends string> {
 
 function ControlChip<T extends string>({ definition }: ControlChipProps<T>) {
     return (
-        <View className="flex-row items-center gap-3 rounded-xl border border-white/10 bg-black/40 px-3 py-2">
-            <View className="rounded-lg bg-white/10 p-2 pointer-events-none">
-                <Icon name={definition.icon} size={14} color="#fff" yOffset={definition.iconMarginTop} />
-            </View>
-            <View className="flex-col max-w-[160px]">
-                <Text className="text-xs font-semibold text-text-primary" numberOfLines={1} ellipsizeMode="tail">
-                    {definition.label}
-                </Text>
-            </View>
+        <View className="h-8 flex-row items-center gap-1.5 rounded-md border border-border-primary bg-background-tertiary px-2">
+            <SFSymbol name={definition.icon} size={16} color={PlatformColor("labelColor")} yOffset={definition.iconMarginTop} />
+            <Text className="text-text-primary" style={{ fontSize: 13, lineHeight: 16 }}>
+                {definition.label}
+            </Text>
         </View>
     );
 }

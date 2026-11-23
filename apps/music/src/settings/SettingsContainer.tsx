@@ -1,5 +1,6 @@
 import { PortalProvider } from "@gorhom/portal";
 import { useValue } from "@legendapp/state/react";
+import { PlatformColor, Text } from "react-native";
 import {
     VirtualizedSettingsWindow,
     SettingsPage,
@@ -17,7 +18,7 @@ import { ThemeSettingsContent } from "./ThemeSettings";
 import { SUPPORT_ACCOUNTS } from "../systems/constants";
 import { normalizeMusicAppearanceSettings, settings$ } from "../systems/Settings";
 import { ThemeProvider } from "../theme/ThemeProvider";
-import { getMusicThemeAppearance } from "../theme/musicThemes";
+import { getMusicWindowAppearance } from "../theme/musicThemes";
 import { WindowsNavigator } from "../windows";
 import { SpotifySettingsContent } from "./SpotifySettings";
 import { AppleMusicSettingsContent } from "./AppleMusicSettings";
@@ -25,44 +26,31 @@ import { AppleMusicSettingsContent } from "./AppleMusicSettings";
 const SETTINGS_WINDOW_IDENTIFIER = WindowsNavigator.getId("SettingsWindow");
 
 const settingsPages = [
-    <SettingsPage key="general" id="general" title="General" icon="gearshape">
-        <GeneralSettingsContent />
-    </SettingsPage>,
-    <SettingsPage key="hotkeys" id="hotkeys" title="Hotkeys" icon="keyboard">
-        <HotkeysSettingsContent />
-    </SettingsPage>,
-    <SettingsPage key="library" id="library" title="Library" icon="music.note.list">
-        <LibrarySettingsContent />
-    </SettingsPage>,
-    <SettingsPage key="spotify" id="spotify" title="Spotify" icon="music.note">
-        <SpotifySettingsContent />
-    </SettingsPage>,
-    <SettingsPage key="apple-music" id="apple-music" title="Apple Music" icon="music.note">
-        <AppleMusicSettingsContent />
-    </SettingsPage>,
-    <SettingsPage key="overlay" id="overlay" title="Overlay" icon="rectangle.on.rectangle">
-        <OverlaySettingsContent />
-    </SettingsPage>,
-    <SettingsPage key="theme" id="theme" title="Appearance" icon="paintbrush">
-        <ThemeSettingsContent />
-    </SettingsPage>,
-    <SettingsPage key="ui-customize" id="ui-customize" title="Customize UI" icon="slider.horizontal.3">
-        <CustomizeUISettingsContent />
-    </SettingsPage>,
+    { id: "general", title: "General", icon: "gearshape", Content: GeneralSettingsContent },
+    { id: "hotkeys", title: "Hotkeys", icon: "keyboard", Content: HotkeysSettingsContent },
+    { id: "library", title: "Library", icon: "music.note.list", Content: LibrarySettingsContent },
+    { id: "spotify", title: "Spotify", icon: "music.note", Content: SpotifySettingsContent },
+    { id: "apple-music", title: "Apple Music", icon: "music.note", Content: AppleMusicSettingsContent },
+    { id: "overlay", title: "Overlay", icon: "rectangle.on.rectangle", Content: OverlaySettingsContent },
+    { id: "theme", title: "Appearance", icon: "paintbrush", Content: ThemeSettingsContent },
+    { id: "ui-customize", title: "Customize UI", icon: "slider.horizontal.3", Content: CustomizeUISettingsContent },
     ...(SUPPORT_ACCOUNTS ? [
-        <SettingsPage key="account" id="account" title="Account" icon="person.crop.circle">
-            <AccountSettingsContent />
-        </SettingsPage>,
+        { id: "account", title: "Account", icon: "person.crop.circle", Content: AccountSettingsContent },
     ] : []),
-    <SettingsPage key="open-source" id="open-source" title="Open Source" icon="chevron.left.forwardslash.chevron.right">
-        <OpenSourceSettingsContent />
-    </SettingsPage>,
-];
+    { id: "open-source", title: "Open Source", icon: "chevron.left.forwardslash.chevron.right", Content: OpenSourceSettingsContent },
+].map(({ id, title, icon, Content }) => (
+    <SettingsPage key={id} id={id} title={title} icon={icon}>
+        <Text accessibilityRole="header" style={{ color: PlatformColor("labelColor"), fontSize: 15, fontWeight: "600" }}>
+            {title}
+        </Text>
+        <Content />
+    </SettingsPage>
+));
 
 export default function SettingsContainer({ initialPage }: { initialPage?: string }) {
     const initialSettingsPage = settingsPages.some(page => page.props.id === initialPage) ? initialPage : "general";
     const appearanceSettings = normalizeMusicAppearanceSettings(useValue(settings$.appearance));
-    const splitViewAppearance = getMusicThemeAppearance(appearanceSettings.theme);
+    const splitViewAppearance = getMusicWindowAppearance(appearanceSettings.theme);
 
     return (
         <ThemeProvider>

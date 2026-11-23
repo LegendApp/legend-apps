@@ -3,7 +3,7 @@ import { useObservable, useValue } from "@legendapp/state/react";
 import { $TextInput } from "@legendapp/state/react-native";
 import { View } from "react-native";
 import { Select } from "../components/Select";
-import { SettingsRow, SettingsSection, SettingsSwitchRow } from "./components";
+import { settingsInputFrame, settingsInputStyle, settingsInputText, SettingsRow, SettingsSection, SettingsSwitchRow } from "./components";
 import {
     OVERLAY_MAX_DISPLAY_DURATION_SECONDS,
     OVERLAY_MIN_DISPLAY_DURATION_SECONDS,
@@ -56,12 +56,15 @@ export function OverlaySettingsContent() {
                 <SettingsRow
                     label="Display duration"
                     description={`Number of seconds the overlay remains visible (${OVERLAY_MIN_DISPLAY_DURATION_SECONDS} - ${OVERLAY_MAX_DISPLAY_DURATION_SECONDS})`}>
-                  <$TextInput
-                      $value={durationText$}
-                      keyboardType="numeric"
-                      className="bg-background-primary text-text-primary border border-border-primary rounded-md px-3 py-1.5 w-20 text-center"
-                      accessibilityLabel="Overlay display duration"
-                  />
+                    <View className={`${settingsInputFrame} w-20`}>
+                        <$TextInput
+                            $value={durationText$}
+                            keyboardType="numeric"
+                            className={`${settingsInputText} text-center`}
+                            style={settingsInputStyle}
+                            accessibilityLabel="Overlay display duration"
+                        />
+                    </View>
                 </SettingsRow>
 
                 <SettingsRow

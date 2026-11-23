@@ -1,64 +1,65 @@
 import { useValue } from "@legendapp/state/react";
 import { useEffect } from "react";
-import { Text, TextInput, View } from "react-native";
-import { Button } from "../components/Button";
-import { SettingsRow, SettingsSection, SettingsSwitchRow } from "./components";
-import {
-    defaultMusicAppearance,
-    ensureMusicAppearanceSettings,
-    normalizeMusicAppearanceSettings,
-    settings$,
-} from "../systems/Settings";
-import { themeState$, useTheme } from "../theme/ThemeProvider";
-import { getMusicTheme, musicThemeOptions, type MusicThemeName } from "../theme/musicThemes";
-import { cn } from "@legendapp/spark/ui/classnames";
+import { PlatformColor, Pressable, Text, TextInput, View } from "react-native";
+import { settingsInputFrame, settingsInputStyle, settingsInputText, SettingsRow, SettingsSection, SettingsSwitchRow } from "./components";
+import { ensureMusicAppearanceSettings, normalizeMusicAppearanceSettings, settings$ } from "../systems/Settings";
+import { musicThemeOptions, musicThemes, type MusicTheme } from "../theme/musicThemes";
 
-function applyMusicTheme(themeName: MusicThemeName) {
-    const theme = getMusicTheme(themeName);
-    settings$.appearance.theme.set(theme.name);
-    themeState$.customColors.dark.set(JSON.parse(JSON.stringify(theme.colors)));
+function ThemePreview({ colors }: { colors: MusicTheme["colors"] }) {
+    return (
+        <View className="flex-1" style={{ backgroundColor: colors.background.primary }}>
+            <View className="h-2.5 flex-row items-center gap-0.5 px-1.5" style={{ backgroundColor: colors.background.tertiary }}>
+                {["#ff5f57", "#febc2e", "#28c840"].map((color) => (
+                    <View key={color} className="h-0.5 w-0.5 rounded-full" style={{ backgroundColor: color }} />
+                ))}
+            </View>
+            <View className="flex-1 flex-row">
+                <View className="w-1/3" style={{ backgroundColor: colors.background.secondary }} />
+                <View className="flex-1 gap-1 p-1.5">
+                    <View className="h-1 w-3/4 rounded-sm" style={{ backgroundColor: colors.accent.primary }} />
+                    <View className="h-1 rounded-sm" style={{ backgroundColor: colors.border.primary }} />
+                    <View className="h-1 rounded-sm" style={{ backgroundColor: colors.border.primary }} />
+                </View>
+            </View>
+        </View>
+    );
 }
 
 export function ThemeSettingsContent() {
-    const { resetTheme } = useTheme();
-    const appearance = normalizeMusicAppearanceSettings(useValue(settings$.appearance));
-    const selectedTheme = appearance.theme;
-    const background = appearance.background;
+    const { theme: selectedTheme, background } = normalizeMusicAppearanceSettings(useValue(settings$.appearance));
 
     useEffect(() => {
         ensureMusicAppearanceSettings();
     }, []);
 
-    const handleReset = () => {
-        resetTheme();
-        settings$.appearance.set(defaultMusicAppearance);
-        themeState$.customColors.dark.set(
-            JSON.parse(JSON.stringify(getMusicTheme(defaultMusicAppearance.theme).colors)),
-        );
-    };
-
     return (
         <>
             <SettingsSection title="Theme">
-              <View className="flex-row justify-end px-3 py-2"><Button onClick={handleReset} variant="secondary" className="px-3 py-1.5 h-auto">
-                        <Text className="text-sm text-text-primary">Reset</Text>
-                    </Button></View>
-                <View accessibilityRole="radiogroup" className="gap-2">
-                    {musicThemeOptions.map((theme) => {
-                        const isSelected = selectedTheme === theme.value;
+                <View accessibilityRole="radiogroup" className="flex-row gap-3 p-2.5">
+                    {musicThemeOptions.map(({ label, value }) => {
+                        const selected = selectedTheme === value;
                         return (
-                            <Button
-                                key={theme.value}
-                                className={cn(
-                                    "h-9 justify-center rounded-md border px-3",
-                                    isSelected
-                                        ? "border-accent-primary bg-background-tertiary"
-                                        : "border-border-primary bg-background-secondary",
-                                )}
-                                onClick={() => applyMusicTheme(theme.value)}
+                            <Pressable
+                                key={value}
+                                accessibilityLabel={label}
+                                accessibilityRole="radio"
+                                accessibilityState={{ checked: selected }}
+                                onPress={() => settings$.appearance.theme.set(value)}
+                                className="w-20 shrink items-center gap-1"
                             >
-                                <Text className="text-sm font-medium text-text-primary">{theme.label}</Text>
-                            </Button>
+                                <View
+                                    className="w-full rounded-lg border-2 p-0.5"
+                                    style={{ borderColor: selected ? PlatformColor("controlAccentColor") : "transparent" }}
+                                >
+                                    <View className="h-10 flex-row overflow-hidden rounded border" style={{ borderColor: PlatformColor("separatorColor") }}>
+                                        {value !== "dark" && <ThemePreview colors={musicThemes.light.colors} />}
+                                        {value !== "light" && <ThemePreview colors={musicThemes.dark.colors} />}
+                                    </View>
+                                </View>
+                                <Text style={{ color: PlatformColor(selected ? "labelColor" : "secondaryLabelColor"), fontSize: 11, lineHeight: 14 }}>
+                                    {label}
+                                </Text>
+                            </Pressable>
                         );
                     })}
                 </View>
@@ -73,26 +74,28 @@ export function ThemeSettingsContent() {
                 />
                 <SettingsRow
                     label="Background Color"
-                    description="Supports alpha, for example #00000044 or rgba(0, 0, 0, 0.27).">
-                  <View className="w-44">
-                      <View className="mb-2 flex-row items-center justify-end gap-2">
-                          <View
-                              className="h-5 w-5 rounded border border-border-primary"
-                              style={{ backgroundColor: background.color || "transparent" }}
-                          />
-                      </View>
-                      <TextInput
-                          value={background.color}
-                          onChangeText={(value) => settings$.appearance.background.color.set(value.trim())}
-                          placeholder="#00000044"
-                          autoCapitalize="none"
-                          autoCorrect={false}
-                          className="h-9 rounded-md border border-border-primary bg-background-secondary px-2 text-sm text-text-primary"
-                      />
-                  </View>
+                    description="Supports alpha, for example #00000044 or rgba(0, 0, 0, 0.27)."
+                >
+                    <View className="w-44 flex-row items-center gap-2">
+                        <View
+                            className="h-5 w-5 rounded border border-border-primary"
+                            style={{ backgroundColor: background.color }}
+                        />
+                        <View className={`${settingsInputFrame} flex-1`}>
+                            <TextInput
+                                accessibilityLabel="Background Color"
+                                value={background.color}
+                                onChangeText={(value) => settings$.appearance.background.color.set(value.trim())}
+                                placeholder="#00000044"
+                                autoCapitalize="none"
+                                autoCorrect={false}
+                                className={settingsInputText}
+                                style={settingsInputStyle}
+                            />
+                        </View>
+                    </View>
                 </SettingsRow>
             </SettingsSection>
-
         </>
     );
 }

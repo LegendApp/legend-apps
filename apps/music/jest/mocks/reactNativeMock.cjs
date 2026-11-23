@@ -35,6 +35,9 @@ module.exports = {
         Version: "15.0",
         select: (values) => values.macos ?? values.default,
     },
+    Appearance: { getColorScheme: () => "dark" },
+    PlatformColor: (name) => name,
+    useColorScheme: () => "dark",
     Pressable: createComponent("Pressable"),
     StyleSheet: {
         absoluteFillObject: {},

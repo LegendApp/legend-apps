@@ -4,7 +4,7 @@ import { SidebarSplitView, } from "@legendapp/spark/ui/split-view";
 import { setWindowOptions, showWindow } from "@legendapp/spark/windows";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { LayoutChangeEvent } from "react-native";
-import { Platform, StyleSheet, View } from "react-native";
+import { Platform, StyleSheet, useColorScheme, View } from "react-native";
 import { DragDropProvider } from "../components/dnd";
 import { MediaLibraryView } from "../components/MediaLibrary";
 import { MediaLibrarySidebar } from "../components/MediaLibrary/Sidebar";
@@ -15,19 +15,20 @@ import { HiddenTextInput } from "../systems/keyboard/HookKeyboard";
 import { normalizeMusicAppearanceSettings, settings$ } from "../systems/Settings";
 import { stateSaved$ } from "../systems/State";
 import { ThemeProvider } from "../theme/ThemeProvider";
-import { getMusicTheme } from "../theme/musicThemes";
+import { getMusicTheme, getMusicWindowAppearance } from "../theme/musicThemes";
 import { WindowProvider, WindowsNavigator } from "../windows";
 import { createLibraryWindowStyle, getLibraryInitialPaneMetrics, LIBRARY_SIDEBAR_WIDTH } from "./libraryWindowStyle";
 const MEDIA_LIBRARY_WINDOW_ID = WindowsNavigator.getId("MediaLibraryWindow");
 export default function MediaLibraryWindow() {
     const isMacOS = Platform.OS === "macos";
     const appearanceSettings = normalizeMusicAppearanceSettings(useValue(settings$.appearance));
-    const musicTheme = getMusicTheme(appearanceSettings.theme);
+    const musicTheme = getMusicTheme(appearanceSettings.theme, useColorScheme());
+    const windowAppearance = getMusicWindowAppearance(appearanceSettings.theme);
     const windowShownRef = useRef(false);
     const [initialPaneMetrics] = useState(() => getLibraryInitialPaneMetrics(stateSaved$.libraryWindowSize.peek()));
     const updateWindowStyle = useCallback(() => setWindowOptions(MEDIA_LIBRARY_WINDOW_ID, {
-        ...createLibraryWindowStyle(musicTheme)
-    }), [musicTheme]);
+        ...createLibraryWindowStyle(musicTheme, windowAppearance),
+    }), [musicTheme, windowAppearance]);
     const handleLayout = useCallback((event: LayoutChangeEvent) => {
         const { width, height } = event.nativeEvent.layout;
         if (width > 0 && height > 0) {
@@ -56,7 +57,7 @@ export default function MediaLibraryWindow() {
                 <PortalProvider>
                     <TooltipProvider>
                         <DragDropProvider>
-                            {isMacOS ? (<SidebarSplitView appearance={musicTheme.appearance} className="flex-1 bg-background-primary" contentMinWidth={360} initialPaneMetrics={initialPaneMetrics} onLayout={handleLayout} onResize={event => { if (event.phase === "ready") handleSplitViewReady(); }} sidebarMinWidth={LIBRARY_SIDEBAR_WIDTH} style={styles.root}
+                            {isMacOS ? (<SidebarSplitView appearance={windowAppearance} className="flex-1 bg-background-primary" contentMinWidth={360} initialPaneMetrics={initialPaneMetrics} onLayout={handleLayout} onResize={event => { if (event.phase === "ready") handleSplitViewReady(); }} sidebarMinWidth={LIBRARY_SIDEBAR_WIDTH} style={styles.root}
                                   sidebar={<View className="min-w-0 flex-1 bg-background-secondary" style={styles.sidebarPane}><MediaLibrarySidebar /></View>}
                                   content={<View className="min-w-0 flex-1 bg-background-primary"><ToastProvider><TrackList /></ToastProvider></View>}
                                 />) : (<MediaLibraryView />)}

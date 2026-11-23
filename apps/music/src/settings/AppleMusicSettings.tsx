@@ -35,7 +35,7 @@ export function AppleMusicSettingsContent() {
 
     return (
         <>
-            <SettingsSection title="Apple Music">
+            <SettingsSection>
               <Text className="px-3 py-2 text-sm text-text-secondary">Uses MusicKit directly on this Mac—no Legend backend or manually managed developer token.</Text>
                 <SettingsSwitchRow
                     label="Enable Apple Music"

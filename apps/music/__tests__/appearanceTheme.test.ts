@@ -7,19 +7,24 @@ import {
 } from "../src/systems/Settings";
 import {
     getMusicTheme,
-    getMusicThemeAppearance,
+    getMusicWindowAppearance,
     isMusicThemeName,
     musicThemeOptions,
 } from "../src/theme/musicThemes";
 
 describe("music appearance themes", () => {
-    it("uses local light and dark theme options", () => {
+    it("offers Light, Dark, and Auto and resolves Auto from the system", () => {
         expect(musicThemeOptions).toEqual([
-            { label: "Dark", value: "dark" },
             { label: "Light", value: "light" },
+            { label: "Dark", value: "dark" },
+            { label: "Auto", value: "auto" },
         ]);
-        expect(getMusicThemeAppearance("dark")).toBe("dark");
-        expect(getMusicThemeAppearance("light")).toBe("light");
+        expect(getMusicTheme("dark").appearance).toBe("dark");
+        expect(getMusicTheme("light", "dark").appearance).toBe("light");
+        expect(getMusicTheme("auto", "dark").appearance).toBe("dark");
+        expect(getMusicTheme("auto", "light").appearance).toBe("light");
+        expect(getMusicWindowAppearance("auto")).toBe("system");
+        expect(normalizeMusicAppearanceSettings({ theme: "auto" }).theme).toBe("auto");
     });
 
     it("falls back to the dark theme for invalid theme names", () => {

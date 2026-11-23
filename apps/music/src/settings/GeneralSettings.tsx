@@ -3,7 +3,7 @@ import { HotkeyCapture } from "@legendapp/spark/shortcuts/commands";
 import { Linking, Text, View } from "react-native";
 
 import { Button } from "../components/Button";
-import { SettingsRow, SettingsSection, SettingsSwitchRow } from "./components";
+import { SettingsCaption, SettingsRow, SettingsSection, SettingsSwitchRow } from "./components";
 import { globalHotkeyStatus$ } from "../systems/GlobalHotkey";
 import { AI_SOURCE_IDS, AI_SOURCE_LABELS, normalizeAISources, settings$, type MusicProviderId } from "../systems/Settings";
 import { state$ } from "../systems/State";
@@ -53,9 +53,9 @@ export function GeneralSettingsContent() {
             </SettingsSection>
 
             <SettingsSection title="Default music sources">
-                <Text className="px-3 py-2 text-sm text-text-secondary">
+                <SettingsCaption>
                     Playlists use these sources unless you choose an override in the playlist toolbar. Local copies are always preferred.
-                </Text>
+                </SettingsCaption>
                 {AI_SOURCE_IDS.map((source) => {
                     const enabled = defaultAISources.includes(source);
                     return (

@@ -1,5 +1,7 @@
-export type MusicThemeName = "dark" | "light";
-export type MusicThemeAppearance = "dark" | "light";
+import { Appearance, type ColorSchemeName } from "react-native";
+
+type MusicThemeAppearance = "dark" | "light";
+export type MusicThemeName = MusicThemeAppearance | "auto";
 
 export interface MusicThemeColors {
     background: {
@@ -28,11 +30,11 @@ export interface MusicTheme {
     appearance: MusicThemeAppearance;
     colors: MusicThemeColors;
     label: string;
-    name: MusicThemeName;
+    name: MusicThemeAppearance;
     windowBackground: string;
 }
 
-export const musicThemes: Record<MusicThemeName, MusicTheme> = {
+export const musicThemes: Record<MusicThemeAppearance, MusicTheme> = {
     dark: {
         appearance: "dark",
         colors: {
@@ -91,19 +93,24 @@ export const musicThemes: Record<MusicThemeName, MusicTheme> = {
     },
 };
 
-export const musicThemeOptions = Object.values(musicThemes).map((theme) => ({
-    label: theme.label,
-    value: theme.name,
-}));
+export const musicThemeOptions = [
+    { label: musicThemes.light.label, value: "light" },
+    { label: musicThemes.dark.label, value: "dark" },
+    { label: "Auto", value: "auto" },
+] as const;
 
 export function isMusicThemeName(value: unknown): value is MusicThemeName {
-    return value === "dark" || value === "light";
+    return value === "dark" || value === "light" || value === "auto";
 }
 
-export function getMusicTheme(themeName: unknown): MusicTheme {
-    return isMusicThemeName(themeName) ? musicThemes[themeName] : musicThemes.dark;
+export function getMusicTheme(themeName: unknown, systemScheme?: ColorSchemeName): MusicTheme {
+    if (themeName === "auto") {
+        const scheme = systemScheme === undefined ? Appearance.getColorScheme() : systemScheme;
+        return scheme === "light" ? musicThemes.light : musicThemes.dark;
+    }
+    return themeName === "light" ? musicThemes.light : musicThemes.dark;
 }
 
-export function getMusicThemeAppearance(themeName: unknown): MusicThemeAppearance {
-    return getMusicTheme(themeName).appearance;
+export function getMusicWindowAppearance(themeName: MusicThemeName) {
+    return themeName === "auto" ? "system" : themeName;
 }

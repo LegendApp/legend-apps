@@ -1,7 +1,7 @@
 import { GlassView } from "@legendapp/spark/ui/glass";
 import { useValue } from "@legendapp/state/react";
 import { useEffect, type ReactNode } from "react";
-import { StyleSheet, View, type LayoutChangeEvent } from "react-native";
+import { StyleSheet, useColorScheme, View, type LayoutChangeEvent } from "react-native";
 import {
     ensureMusicAppearanceSettings,
     normalizeMusicAppearanceSettings,
@@ -18,7 +18,7 @@ export function MusicBackground({ children, onLayout }: MusicBackgroundProps) {
     const appearance = useValue(settings$.appearance);
     const normalizedAppearance = normalizeMusicAppearanceSettings(appearance);
     const themeName = normalizedAppearance.theme;
-    const theme = getMusicTheme(themeName);
+    const theme = getMusicTheme(themeName, useColorScheme());
     const background = normalizedAppearance.background;
     const rootBackgroundColor = background.glassEnabled ? "transparent" : theme.windowBackground;
 

@@ -1,5 +1,7 @@
-import React, { type PropsWithChildren } from "react";
+import React, { type PropsWithChildren, type ReactElement } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
+import { Pressable, Text, TextInput, View } from "react-native";
+import { VirtualizedSettingsWindow, type SettingsPageProps } from "@legendapp/spark/ui/settings";
 import { HotkeyCapture } from "@legendapp/spark/shortcuts/commands";
 
 import { settings$ } from "../../systems/Settings";
@@ -11,21 +13,29 @@ import { GeneralSettingsContent } from "../GeneralSettings";
 import { OverlaySettingsContent } from "../OverlaySettings";
 import { SpotifySettingsContent } from "../SpotifySettings";
 import { ThemeSettingsContent } from "../ThemeSettings";
-import { SettingsSwitchRow } from "../components";
+import SettingsContainer from "../SettingsContainer";
+import { DroppableZone } from "../../components/dnd";
+import { SettingsSwitchRow, SettingsSection } from "../components";
 
 jest.mock("@legendapp/spark/ui/settings", () => ({
+    SettingsPage: () => null,
+    VirtualizedSettingsWindow: () => null,
     SettingsSection: ({ children }: PropsWithChildren) => children,
     SettingsRow: ({ children }: PropsWithChildren) => children,
     SettingsSwitchRow: () => null,
 }));
-jest.mock("@legendapp/state/react-native", () => ({ $TextInput: () => null }));
+jest.mock("@legendapp/state/react-native", () => ({ $TextInput: require("react-native").TextInput }));
 jest.mock("@legendapp/spark/shortcuts/commands", () => ({ HotkeyCapture: () => null }));
 jest.mock("../../components/dnd", () => ({
     DragDropProvider: ({ children }: PropsWithChildren) => children,
     DraggableItem: ({ children }: PropsWithChildren) => children,
     DroppableZone: () => null,
 }));
+jest.mock("../../windows", () => ({ WindowsNavigator: { getId: () => "settings" } }));
+jest.mock("../HotkeysSettings", () => ({ HotkeysSettingsContent: () => null }));
+jest.mock("../LibrarySettings", () => ({ LibrarySettingsContent: () => null }));
 jest.mock("../../components/TooltipProvider", () => ({
+    TooltipProvider: ({ children }: PropsWithChildren) => children,
     useTooltip: () => ({ showTooltip: jest.fn(), hideTooltip: jest.fn() }),
 }));
 
@@ -110,4 +120,78 @@ it("enables shortcut capture with the Global Hotkey switch", () => {
 
     act(() => getSwitch("Global Hotkey").onValueChange(false));
     expect(capture().disabled).toBe(true);
+});
+
+it.each([
+    ["Default music sources", GeneralSettingsContent, "Playlists use these sources"],
+    ["Playback Controls", CustomizeUISettingsContent, "Drag controls between Shown and Hidden"],
+] as const)("renders the %s intro with native helper caption typography", (title, Page, intro) => {
+    render(<Page />);
+    const section = renderer.root.findAllByType(SettingsSection).find((node) => node.props.title === title)!;
+    const caption = section.findAllByType(Text).find((node) => node.props.children.startsWith?.(intro));
+    expect(caption?.props.style).toMatchObject({
+        color: "secondaryLabelColor",
+        fontSize: 11,
+        lineHeight: 14,
+    });
+});
+
+it("selects a theme with three radio tiles and no Reset", () => {
+    const initial = settings$.appearance.theme.peek();
+    render(<ThemeSettingsContent />);
+    const radios = renderer.root.findAllByType(Pressable).filter((node) => node.props.accessibilityRole === "radio");
+    expect(radios.map((node) => node.props.accessibilityLabel)).toEqual(["Light", "Dark", "Auto"]);
+    expect(renderer.root.findAllByType(Text).some((node) => node.props.children === "Reset")).toBe(false);
+    act(() => radios[2].props.onPress());
+    expect(radios[2].props.accessibilityState.checked).toBe(true);
+    expect(settings$.appearance.theme.peek()).toBe("auto");
+    act(() => settings$.appearance.theme.set(initial));
+});
+
+it("aligns the Background Color input and swatch in one row", () => {
+    render(<ThemeSettingsContent />);
+    const input = renderer.root.findByType(TextInput);
+    const row = renderer.root.findAllByType(View).find((node) =>
+        node.props.className?.includes("flex-row items-center") && node.findAllByType(TextInput).includes(input));
+    expect(row?.findAllByType(View).some((node) => node.props.style?.backgroundColor === settings$.appearance.background.color.peek())).toBe(true);
+    expect(input.props.style).toMatchObject({ fontSize: 13, paddingVertical: 0 });
+});
+
+it("uses the same single-line input style for Overlay duration", () => {
+    render(<OverlaySettingsContent />);
+    expect(renderer.root.findByType(TextInput).props.style).toMatchObject({ fontSize: 13, paddingVertical: 0 });
+});
+
+it("keeps playback chips compact and moves controls through the drop zones", () => {
+    const initial = settings$.ui.playback.peek();
+    settings$.ui.playback.set({ shown: ["previous", "next"] });
+    render(<CustomizeUISettingsContent />);
+    const findView = (className: string) => renderer.root.findAllByType(View).filter((node) => node.props.className === className);
+    expect(findView("flex-row flex-wrap items-center gap-2")).toHaveLength(2);
+    expect(renderer.root.findAllByType(View).some((node) => node.props.className?.startsWith("h-8 flex-row items-center"))).toBe(true);
+
+    const drop = (id: string, controlId: string, group: "shown" | "hidden") => {
+        const zone = renderer.root.findAllByType(DroppableZone).find((node) => node.props.id === id)!;
+        act(() => zone.props.onDrop({ data: { controlId, group } }));
+    };
+    drop("playback-shown-drop-0", "next", "shown");
+    expect(settings$.ui.playback.peek().shown).toEqual(["next", "previous"]);
+    drop("playback-hidden-drop-0", "next", "shown");
+    expect(settings$.ui.playback.peek().shown).toEqual(["previous"]);
+    drop("playback-shown-drop-1", "next", "hidden");
+    expect(settings$.ui.playback.peek().shown).toEqual(["previous", "next"]);
+    act(() => settings$.ui.playback.set(initial));
+});
+
+it("renders a matching heading inside each scrollable settings page", () => {
+    render(<SettingsContainer initialPage="apple-music" />);
+    const window = renderer.root.findByType(VirtualizedSettingsWindow);
+    expect(window.props.defaultPageId).toBe("apple-music");
+    const pages: ReactElement<SettingsPageProps>[] = window.props.children;
+    expect(pages.map((page) => page.props.title)).toEqual(expect.arrayContaining(["Apple Music", "Overlay"]));
+    for (const { props: { children, title } } of pages) {
+        const [heading] = React.Children.toArray(children) as ReactElement<{ accessibilityRole: string; children: string }>[];
+        expect(heading.type).toBe(Text);
+        expect(heading.props).toMatchObject({ accessibilityRole: "header", children: title });
+    }
 });

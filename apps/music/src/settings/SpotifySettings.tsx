@@ -11,7 +11,7 @@ import {
     spotifyWebPlayer$,
 } from "../providers/spotify/provider";
 import { settings$ } from "../systems/Settings";
-import { SettingsRow, SettingsSection, SettingsSwitchRow } from "./components";
+import { settingsInputFrame, settingsInputStyle, settingsInputText, SettingsRow, SettingsSection, SettingsSwitchRow } from "./components";
 
 export function SpotifySettingsContent() {
     const showToast = useToast();
@@ -41,7 +41,7 @@ export function SpotifySettingsContent() {
 
     return (
         <>
-            <SettingsSection title="Spotify">
+            <SettingsSection>
               <Text className="px-3 py-2 text-sm text-text-secondary">Search your catalog, browse playlists, and play tracks through Spotify Web Playback. Premium is required for playback.</Text>
                 <SettingsSwitchRow
                     label="Enable Spotify"
@@ -53,15 +53,17 @@ export function SpotifySettingsContent() {
                     label="Client ID"
                     description="Personal integration: create your own Spotify developer app and paste its Client ID here.">
                   <View className="w-64 flex-row items-center gap-2">
-                      <TextInput
-                          value={clientId ?? ""}
-                          onChangeText={(value) => settings$.providers.spotify.clientId.set(value.trim())}
-                          placeholder="Spotify Client ID"
-                          placeholderTextColor="rgba(255,255,255,0.35)"
-                          autoCapitalize="none"
-                          autoCorrect={false}
-                          className="flex-1 rounded-md border border-border-primary bg-background-tertiary px-3 py-2 text-sm text-text-primary"
-                      />
+                      <View className={`${settingsInputFrame} flex-1`}>
+                          <TextInput
+                              value={clientId ?? ""}
+                              onChangeText={(value) => settings$.providers.spotify.clientId.set(value.trim())}
+                              placeholder="Spotify Client ID"
+                              autoCapitalize="none"
+                              autoCorrect={false}
+                              className={settingsInputText}
+                              style={settingsInputStyle}
+                          />
+                      </View>
                       <Button size="small" variant="secondary" onClick={() => Linking.openURL("https://developer.spotify.com/dashboard")}>
                           Dashboard
                       </Button>
