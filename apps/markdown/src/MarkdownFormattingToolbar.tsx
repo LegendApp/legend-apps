@@ -12,6 +12,12 @@ import {
 } from "./markdownSettings";
 import { markdownToolbarItemMap } from "./markdownToolbarItems";
 
+declare module "react-native" {
+  interface PressableProps {
+    tooltip?: string;
+  }
+}
+
 type MarkdownFormattingToolbarPlacement = "top" | "bottom";
 
 export function MarkdownFormattingToolbar({
@@ -56,6 +62,7 @@ export function MarkdownFormattingToolbar({
         }
       }}
       style={[styles.button, buttonStyle]}
+      tooltip={item.accessibilityLabel}
     >
       {item.icon ? (
         <SFSymbol color={iconColor} name={item.icon} size={14} style={styles.icon} />

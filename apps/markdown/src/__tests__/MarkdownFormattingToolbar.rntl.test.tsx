@@ -80,6 +80,9 @@ describe("MarkdownFormattingToolbar", () => {
     expect(commands.toggleBold).toHaveBeenCalledTimes(1);
     expect(onInsertLink).toHaveBeenCalledTimes(1);
     expect(commands.insertLink).not.toHaveBeenCalled();
+    for (const label of ["Paragraph", "Bold", "Italic", "Link"]) {
+      expect(view.getAllByLabelText(label)[0].props.tooltip).toBe(label);
+    }
     await view.unmount();
   });
 });
