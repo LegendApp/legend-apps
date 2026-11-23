@@ -25,3 +25,12 @@ test("all app profiles preserve separate native identities, storage names and re
   assert.equal(diff.SparkLifecycleConfiguration.mainWindow.reopenBehavior, "visibleWindows");
   assert.equal(diff.SparkLifecycleConfiguration.mainWindow.closeBehavior, "request");
 });
+
+test("Diff and Git start with full-size content before AppKit restores their saved frames", async () => {
+  for (const app of ["diff", "git"] as const) {
+    const { infoPlist } = debugLaunchProfile(await loadAppManifest(app));
+    assert.equal(infoPlist.SparkWindowConfiguration.titleBarStyle, "overlay");
+    assert.equal(infoPlist.SparkLifecycleConfiguration.mainWindow.toolbarStyle, "unified");
+    assert.equal(infoPlist.SparkLifecycleConfiguration.mainWindow.autosaveName, `RCTAppDelegateMainWindow.${app}`);
+  }
+});

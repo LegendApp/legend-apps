@@ -70,7 +70,7 @@ export async function openWorktreeWindow(path: string, repoName: string, title: 
   register();
   const existing = await getWindow(id).catch(() => null);
   if (existing) { await showWindow(id, { focus: true }); return existing; }
-  return openWindow({ id, component: worktreeWindowModule, props: { windowId: id, initialPath: path, repoName }, title, size: { width: 1100, height: 720 }, appearance: "system", transparent: true });
+  return openWindow({ id, component: worktreeWindowModule, props: { windowId: id, initialPath: path, repoName }, title, size: { width: 1100, height: 720 }, appearance: "system", transparent: true, titleBarStyle: "overlay" });
 }
 
 const settingsModule = () => require("./settings/SettingsWindow") as typeof import("./settings/SettingsWindow");

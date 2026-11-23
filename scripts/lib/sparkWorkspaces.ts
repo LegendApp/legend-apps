@@ -75,6 +75,7 @@ export function sparkConfig(manifest: AppManifest, mode: "dev" | "release" = "de
       ...(manifest.id === "music" ? { minSize: { width: 200, height: 300 }, titleBarStyle: "hidden", appearance: "dark", transparent: true } : {}),
       ...(["chat-history", "diff", "git", "photos"].includes(manifest.id) ? { minSize: { width: 640, height: 460 } } : {}),
       ...(manifest.id === "photos" ? { titleBarStyle: "hidden" } : {}),
+      ...(["diff", "git"].includes(manifest.id) ? { titleBarStyle: "overlay" } : {}),
     },
     macos: {
       bundleIdentifier: manifest.bundleIds.macos,
