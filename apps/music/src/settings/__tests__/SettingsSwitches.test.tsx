@@ -15,7 +15,7 @@ import { SpotifySettingsContent } from "../SpotifySettings";
 import { ThemeSettingsContent } from "../ThemeSettings";
 import SettingsContainer from "../SettingsContainer";
 import { DroppableZone } from "../../components/dnd";
-import { SettingsSwitchRow, SettingsSection } from "../components";
+import { SettingsRow, SettingsSwitchRow, SettingsSection } from "../components";
 
 jest.mock("@legendapp/spark/ui/settings", () => ({
     SettingsPage: () => null,
@@ -146,6 +146,15 @@ it("selects a theme with three radio tiles and no Reset", () => {
     expect(radios[2].props.accessibilityState.checked).toBe(true);
     expect(settings$.appearance.theme.peek()).toBe("auto");
     act(() => settings$.appearance.theme.set(initial));
+});
+
+it("renders the theme picker in the Theme settings row accessory", () => {
+    render(<ThemeSettingsContent />);
+    const row = renderer.root.findAllByType(SettingsRow).find((node) => node.props.label === "Theme");
+    expect(row).toBeDefined();
+    expect(row?.props.children.props.className).toBe("flex-row items-center gap-3");
+    expect(row?.props.children.props.accessibilityRole).toBe("radiogroup");
+    expect(renderer.root.findAllByType(SettingsSection).some((section) => section.props.title === "Theme")).toBe(false);
 });
 
 it("aligns the Background Color input and swatch in one row", () => {

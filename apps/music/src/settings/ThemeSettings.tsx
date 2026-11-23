@@ -34,35 +34,37 @@ export function ThemeSettingsContent() {
 
     return (
         <>
-            <SettingsSection title="Theme">
-                <View accessibilityRole="radiogroup" className="flex-row gap-3 p-2.5">
-                    {musicThemeOptions.map(({ label, value }) => {
-                        const selected = selectedTheme === value;
-                        return (
-                            <Pressable
-                                key={value}
-                                accessibilityLabel={label}
-                                accessibilityRole="radio"
-                                accessibilityState={{ checked: selected }}
-                                onPress={() => settings$.appearance.theme.set(value)}
-                                className="w-20 shrink items-center gap-1"
-                            >
-                                <View
-                                    className="w-full rounded-lg border-2 p-0.5"
-                                    style={{ borderColor: selected ? PlatformColor("controlAccentColor") : "transparent" }}
+            <SettingsSection>
+                <SettingsRow label="Theme">
+                    <View accessibilityRole="radiogroup" className="flex-row items-center gap-3">
+                        {musicThemeOptions.map(({ label, value }) => {
+                            const selected = selectedTheme === value;
+                            return (
+                                <Pressable
+                                    key={value}
+                                    accessibilityLabel={label}
+                                    accessibilityRole="radio"
+                                    accessibilityState={{ checked: selected }}
+                                    onPress={() => settings$.appearance.theme.set(value)}
+                                    className="w-20 shrink items-center gap-1"
                                 >
-                                    <View className="h-10 flex-row overflow-hidden rounded border" style={{ borderColor: PlatformColor("separatorColor") }}>
-                                        {value !== "dark" && <ThemePreview colors={musicThemes.light.colors} />}
-                                        {value !== "light" && <ThemePreview colors={musicThemes.dark.colors} />}
+                                    <View
+                                        className="w-full rounded-lg border-2 p-0.5"
+                                        style={{ borderColor: selected ? PlatformColor("controlAccentColor") : "transparent" }}
+                                    >
+                                        <View className="h-10 flex-row overflow-hidden rounded border" style={{ borderColor: PlatformColor("separatorColor") }}>
+                                            {value !== "dark" && <ThemePreview colors={musicThemes.light.colors} />}
+                                            {value !== "light" && <ThemePreview colors={musicThemes.dark.colors} />}
+                                        </View>
                                     </View>
-                                </View>
-                                <Text style={{ color: PlatformColor(selected ? "labelColor" : "secondaryLabelColor"), fontSize: 11, lineHeight: 14 }}>
-                                    {label}
-                                </Text>
-                            </Pressable>
-                        );
-                    })}
-                </View>
+                                    <Text style={{ color: PlatformColor(selected ? "labelColor" : "secondaryLabelColor"), fontSize: 11, lineHeight: 14 }}>
+                                        {label}
+                                    </Text>
+                                </Pressable>
+                            );
+                        })}
+                    </View>
+                </SettingsRow>
             </SettingsSection>
 
             <SettingsSection title="Background">
