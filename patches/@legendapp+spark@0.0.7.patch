@@ -1,0 +1,169 @@
+diff --git a/vendor/node_modules/@legendapp/spark-ui/macos/appkit-split-view/RNSidebarSplitViewComponent.mm b/vendor/node_modules/@legendapp/spark-ui/macos/appkit-split-view/RNSidebarSplitViewComponent.mm
+index 0000000..0000000 100644
+--- a/vendor/node_modules/@legendapp/spark-ui/macos/appkit-split-view/RNSidebarSplitViewComponent.mm
++++ b/vendor/node_modules/@legendapp/spark-ui/macos/appkit-split-view/RNSidebarSplitViewComponent.mm
+@@ -216,6 +216,8 @@ static void RNSidebarSplitViewApplyColorOverlay(NSView *view, NSColor *color, CG
+ @interface RNSidebarSplitViewNativeSplitView : NSSplitView
+ /// YES while the user drags a divider.
+ @property (nonatomic, readonly) BOOL trackingDivider;
++/// Replaces the window-color gap and its hairline when set. Clear draws nothing.
++@property (nonatomic, strong) NSColor *customDividerColor;
+ @end
+ 
+ @implementation RNSidebarSplitViewNativeSplitView
+@@ -255,6 +257,11 @@ - (void)drawDividerInRect:(NSRect)rect
+   } else {
+     gap.size.height = MAX(rect.size.height, self.dividerThickness);
+   }
++  if (_customDividerColor) {
++    [_customDividerColor setFill];
++    NSRectFillUsingOperation(gap, NSCompositingOperationSourceOver);
++    return;
++  }
+   [NSColor.windowBackgroundColor setFill];
+   NSRectFill(gap);
+   [self.dividerColor setFill];
+@@ -299,7 +306,9 @@ - (void)paneFrameDidChange:(NSNotification *)notification
+ // List and content panes are opaque in the window background color, as AppKit panes are. React content
+ // follows a native resize one commit later; until then the newly exposed strip matches the window instead
+ // of showing a white stripe. The sidebar container stays clear so its native material shows.
++// A custom divider color replaces that fill, so a clear divider leaves the panes clear too.
+ @interface RNSidebarSplitViewPaneView : NSView
++@property (nonatomic, strong) NSColor *fillColor;
+ @end
+ 
+ @implementation RNSidebarSplitViewPaneView
+@@ -310,7 +319,7 @@ - (BOOL)wantsUpdateLayer
+ 
+ - (void)updateLayer
+ {
+-  self.layer.backgroundColor = NSColor.windowBackgroundColor.CGColor;
++  self.layer.backgroundColor = (_fillColor ?: NSColor.windowBackgroundColor).CGColor;
+ }
+ 
+ - (void)viewDidChangeEffectiveAppearance
+@@ -553,6 +562,7 @@ @implementation RNSidebarSplitViewComponent {
+   NSString *_sidebarTitlebarOverlayColorValue;
+   CGFloat _sidebarTitlebarOverlayOpacity;
+   NSView *_sidebarTitlebarMaterialView;
++  NSString *_dividerColorValue;
+   NSSplitViewItemAccessoryViewController *_sidebarScrollEdgeAccessory API_AVAILABLE(macos(26.0));
+   NSLayoutConstraint *_sidebarScrollEdgeHeight;
+ #else
+@@ -1527,6 +1537,20 @@ - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &
+ }
+ 
+ #if TARGET_OS_OSX
++- (void)applyDividerColor:(NSColor *)light dark:(NSColor *)dark
++{
++  NSColor *color = light && dark ? [NSColor colorWithName:nil dynamicProvider:^NSColor *(NSAppearance *appearance) {
++    return [appearance bestMatchFromAppearancesWithNames:@[ NSAppearanceNameAqua, NSAppearanceNameDarkAqua ]] == NSAppearanceNameDarkAqua ? dark : light;
++  }] : light;
++  RNSidebarSplitViewNativeSplitView *split = (RNSidebarSplitViewNativeSplitView *)_splitViewController.splitView;
++  split.customDividerColor = color;
++  split.needsDisplay = YES;
++  for (RNSidebarSplitViewPaneView *pane in @[ _contentContainer, _listContainer, _inspectorContainer ]) {
++    pane.fillColor = color;
++    pane.needsDisplay = YES;
++  }
++}
++
+ - (void)flushSplitViewProps
+ {
+   if (_splitViewPropsScheduled) [self applySplitViewProps];
+@@ -1639,6 +1663,12 @@ - (void)applySplitViewProps
+   _contentTitlebarOverlayOpacity = nextContentTitlebarOverlayOpacity;
+   _sidebarTitlebarOverlayColorValue = nextSidebarTitlebarOverlayColorValue;
+   _sidebarTitlebarOverlayOpacity = nextSidebarTitlebarOverlayOpacity;
++  NSString *nextDividerColorValue = [NSString stringWithFormat:@"%s %s", newProps.dividerColor.c_str(), newProps.dividerColorDark.c_str()];
++  if (![_dividerColorValue isEqualToString:nextDividerColorValue]) {
++    _dividerColorValue = nextDividerColorValue;
++    [self applyDividerColor:RNSidebarSplitViewColorFromHexString([NSString stringWithUTF8String:newProps.dividerColor.c_str()])
++                       dark:RNSidebarSplitViewColorFromHexString([NSString stringWithUTF8String:newProps.dividerColorDark.c_str()])];
++  }
+   if (shouldRecreateContentTitlebarMaterial) {
+     [self removeContentTitlebarMaterial];
+   }
+@@ -1768,6 +1798,8 @@ - (void)prepareForRecycle
+   _contentTitlebarOverlayOpacity = 0;
+   _sidebarTitlebarOverlayColorValue = nil;
+   _sidebarTitlebarOverlayOpacity = 0;
++  _dividerColorValue = nil;
++  [self applyDividerColor:nil dark:nil];
+   [self removeContentTitlebarMaterial];
+   [self removeSidebarTitlebarMaterial];
+   [self applyAppearance];
+diff --git a/vendor/node_modules/@legendapp/spark-ui/src/appkit-split-view/SidebarSplitViewNativeComponent.ts b/vendor/node_modules/@legendapp/spark-ui/src/appkit-split-view/SidebarSplitViewNativeComponent.ts
+index 0000000..0000000 100644
+--- a/vendor/node_modules/@legendapp/spark-ui/src/appkit-split-view/SidebarSplitViewNativeComponent.ts
++++ b/vendor/node_modules/@legendapp/spark-ui/src/appkit-split-view/SidebarSplitViewNativeComponent.ts
+@@ -35,6 +35,8 @@ export interface NativeProps extends ViewProps {
+   contentTitlebarOverlayColor?: string;
+   contentTitlebarOverlayOpacity?: Double;
+   contentMinWidth?: Double;
++  dividerColor?: string;
++  dividerColorDark?: string;
+   hasInspector?: boolean;
+   hasList?: boolean;
+   inspectorCollapsed?: boolean;
+diff --git a/vendor/node_modules/@legendapp/spark-ui/src/appkit-split-view/index.tsx b/vendor/node_modules/@legendapp/spark-ui/src/appkit-split-view/index.tsx
+index 0000000..0000000 100644
+--- a/vendor/node_modules/@legendapp/spark-ui/src/appkit-split-view/index.tsx
++++ b/vendor/node_modules/@legendapp/spark-ui/src/appkit-split-view/index.tsx
+@@ -10,6 +10,8 @@ export interface SidebarSplitViewPaneMetrics { contentHeight: number; contentWid
+ export interface SidebarSplitViewPaneOrigins { sidebarX: number; sidebarY: number; contentX: number; contentY: number; listX: number; listY: number; inspectorX: number; inspectorY: number }
+ /** A pane that is absent or collapsed reports a zero width and height. */
+ export interface SidebarSplitViewResizeEvent extends SidebarSplitViewPaneMetrics, SidebarSplitViewPaneOrigins { listHeight: number; listWidth: number; inspectorHeight: number; inspectorWidth: number; height: number; phase: "provisional" | "ready" }
++/** #RRGGBB or #RRGGBBAA, or one per appearance. */
++type SidebarSplitViewDividerColor = string | { light: string; dark: string };
+ export interface SplitViewTitleBarOverlay { color: string; opacity?: number }
+ export interface SplitViewTitleBarOptions {
+   content?: { height?: number; material?: SidebarSplitViewTitlebarMaterial; overlay?: SplitViewTitleBarOverlay };
+@@ -39,6 +41,8 @@ export interface SidebarSplitViewProps extends Omit<SpecializedViewProps, "child
+   /** Used only for initial layout, before native measurements arrive. */
+   initialPaneMetrics?: SidebarSplitViewPaneMetrics;
+   titleBar?: SplitViewTitleBarOptions;
++  /** Fills the dividers and the panes' native backing (seen only while React content catches up with a resize) instead of the window color and a separator hairline. `#00000000` leaves both clear, so whatever is behind the split view shows. */
++  dividerColor?: SidebarSplitViewDividerColor;
+   onResize?: (event: SidebarSplitViewResizeEvent) => void;
+   /** Fires when AppKit collapses or expands the sidebar itself (View > Hide Sidebar, the toolbar button). Not called for `sidebarCollapsed` changes. */
+   onSidebarCollapsedChange?: (collapsed: boolean) => void;
+@@ -57,13 +61,19 @@ function keys(value: unknown, allowed: readonly string[]) {
+   if (!value || typeof value !== "object" || Array.isArray(value)) throw new SparkError("E_INVALID_ARGUMENT", "Expected title-bar options");
+   for (const key of Object.keys(value)) if (!allowed.includes(key)) throw new SparkError("E_UNSUPPORTED_OPTION", `Unknown title-bar option: ${key}`);
+ }
++const hex = (value: unknown) => typeof value === "string" && /^#(?:[\da-f]{6}|[\da-f]{8})$/i.test(value);
++function dividerColors(value?: SidebarSplitViewDividerColor) {
++  if (value === undefined || hex(value)) return [value as string | undefined, undefined];
++  if (value && typeof value === "object" && hex(value.light) && hex(value.dark) && Object.keys(value).length === 2) return [value.light, value.dark];
++  throw new SparkError("E_INVALID_ARGUMENT", "Expected a #RRGGBB or #RRGGBBAA divider color, or { light, dark }");
++}
+ function overlay(value?: SplitViewTitleBarOverlay) {
+   if (value === undefined) return;
+   keys(value, ["color", "opacity"]);
+-  if (typeof value.color !== "string" || !/^#(?:[\da-f]{6}|[\da-f]{8})$/i.test(value.color)) throw new SparkError("E_INVALID_ARGUMENT", "Expected #RRGGBB or #RRGGBBAA title-bar color");
++  if (!hex(value.color)) throw new SparkError("E_INVALID_ARGUMENT", "Expected #RRGGBB or #RRGGBBAA title-bar color");
+   if (value.opacity !== undefined) finite(value.opacity, "overlay opacity", 0, 1);
+ }
+-export function SidebarSplitView({ sidebar, content, list, children, appearance: theme = "system", contentMinWidth = 320, sidebarMinWidth = 180, sidebarWidth, listMinWidth = 240, listWidth, inspector, inspectorMinWidth = 220, inspectorWidth, inspectorCollapsed = false, sidebarCollapsed = false, initialPaneMetrics, titleBar = {}, onResize, onSidebarCollapsedChange, onInspectorCollapsedChange, ref, onError, ...props }: SidebarSplitViewProps) {
++export function SidebarSplitView({ sidebar, content, list, children, appearance: theme = "system", contentMinWidth = 320, sidebarMinWidth = 180, sidebarWidth, listMinWidth = 240, listWidth, inspector, inspectorMinWidth = 220, inspectorWidth, inspectorCollapsed = false, sidebarCollapsed = false, initialPaneMetrics, titleBar = {}, dividerColor, onResize, onSidebarCollapsedChange, onInspectorCollapsedChange, ref, onError, ...props }: SidebarSplitViewProps) {
+   appearance(theme); finite(contentMinWidth, "minimum content width"); finite(sidebarMinWidth, "minimum sidebar width"); finite(listMinWidth, "minimum list width");
+   if (sidebarWidth !== undefined) finite(sidebarWidth, "sidebar width", sidebarMinWidth);
+   if (listWidth !== undefined) finite(listWidth, "list width", listMinWidth);
+@@ -78,6 +88,7 @@ export function SidebarSplitView({ sidebar, content, list, children, appearance:
+   if (titleBar.content !== undefined) { keys(titleBar.content, ["height", "material", "overlay"]); if (titleBar.content.height !== undefined) finite(titleBar.content.height, "title-bar height"); }
+   if (titleBar.sidebar !== undefined) keys(titleBar.sidebar, ["overlay"]);
+   overlay(titleBar.content?.overlay); overlay(titleBar.sidebar?.overlay);
++  const [dividerLight, dividerDark] = dividerColors(dividerColor);
+   const material = titleBar.content?.material ?? "none";
+   if (!["none", "glass", "titlebar", "headerView", "hudWindow", "sidebar", "windowBackground"].includes(material)) throw new SparkError("E_INVALID_ARGUMENT", "Invalid title-bar material");
+   callback(onResize, "resize"); callback(onSidebarCollapsedChange, "sidebar collapsed change"); callback(onInspectorCollapsedChange, "inspector collapsed change");
+@@ -102,7 +113,7 @@ export function SidebarSplitView({ sidebar, content, list, children, appearance:
+   };
+   if (control.failed) return <View {...props} ref={control.ref} style={[{ flexDirection: "row" }, props.style]}>{sidebarCollapsed ? null : sidebar}{list}{content}{inspectorCollapsed ? null : inspector}</View>;
+   return <NativeSplitView {...props} ref={control.ref} appearance={theme} contentMinWidth={contentMinWidth} sidebarMinWidth={sidebarMinWidth} sidebarWidth={sidebarWidth} hasList={hasList} listMinWidth={listMinWidth} listWidth={listWidth} sidebarCollapsed={sidebarCollapsed} onSplitViewDidResize={resize} onSidebarCollapsedChange={collapsedChange("sidebar", onSidebarCollapsedChange)}
+-    hasInspector={hasInspector} inspectorMinWidth={inspectorMinWidth} inspectorWidth={inspectorWidth} inspectorCollapsed={inspectorCollapsed} onInspectorCollapsedChange={collapsedChange("inspector", onInspectorCollapsedChange)}
++    dividerColor={dividerLight} dividerColorDark={dividerDark} hasInspector={hasInspector} inspectorMinWidth={inspectorMinWidth} inspectorWidth={inspectorWidth} inspectorCollapsed={inspectorCollapsed} onInspectorCollapsedChange={collapsedChange("inspector", onInspectorCollapsedChange)}
+     contentTitlebarHeight={titleBar.content?.height ?? 0} contentTitlebarMaterial={material} contentTitlebarOverlayColor={titleBar.content?.overlay?.color} contentTitlebarOverlayOpacity={titleBar.content?.overlay?.opacity ?? (titleBar.content?.overlay ? 1 : 0)}
+     sidebarTitlebarOverlayColor={titleBar.sidebar?.overlay?.color} sidebarTitlebarOverlayOpacity={titleBar.sidebar?.overlay?.opacity ?? (titleBar.sidebar?.overlay ? 1 : 0)}>
+     <View key="sidebar" style={{ position: "absolute", top: paneMetrics?.sidebarY ?? 0, left: paneMetrics?.sidebarX ?? 0, minWidth: 0, height: paneMetrics?.sidebarHeight, width: paneMetrics?.sidebarWidth ?? (sidebarCollapsed ? 0 : sidebarWidth ?? sidebarMinWidth) }}>{sidebar}</View>

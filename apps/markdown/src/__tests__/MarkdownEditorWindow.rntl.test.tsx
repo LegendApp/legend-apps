@@ -199,28 +199,21 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
     });
   });
 
-  it("puts the sidebar and the pane cards on one surface of clear glass with a page-color overlay at 0.8", async () => {
+  it("puts the sidebar and the pane cards on one surface of clear glass with a page-color overlay at 0.8, through a clear divider", async () => {
     const view = await render(<MarkdownEditorWindow files={["/Alpha.md", "/Beta.md"]} />);
-    const surfaces = () => view.getAllByTestId("mock-glass").map(glass => glass.parent!);
-    const [sidebar, content] = surfaces();
-    for (const surface of [sidebar, content]) {
+    const [window, sidebar] = view.getAllByTestId("mock-glass").map(glass => glass.parent!);
+    for (const surface of [window, sidebar]) {
       expect(surface.props.pointerEvents).toBe("none");
       expect((surface.children[0] as TestInstance).props.glassStyle).toBe("clear");
       expect((surface.children[1] as TestInstance).props.style).toEqual(expect.arrayContaining([{ opacity: 0.8 }]));
     }
-    expect(StyleSheet.flatten(sidebar.props.style)).toEqual(StyleSheet.flatten(content.props.style));
+    expect(StyleSheet.flatten(sidebar.props.style)).toEqual(StyleSheet.flatten(window.props.style));
     expect(within(sidebar.parent!).getByText("Add Folder…")).toBeTruthy();
-    expect(within(content.parent!).getAllByLabelText("Beta.md").some(node => node.props.accessibilityRole === "tab")).toBe(true);
-    expect(within(content.parent!).getByTestId("markdown-pane-p0")).toBeTruthy();
-
-    // The same surface covers the split view's divider between the sidebar and the content, and follows it.
-    const splitView = sidebar.parent!.parent!;
-    const resize = (sidebarWidth: number, contentX: number) => act(async () => splitView.props.onResize({ contentX, sidebarWidth, sidebarX: 0 }));
-    await resize(220, 221);
-    expect(surfaces()).toHaveLength(3);
-    expect(StyleSheet.flatten(surfaces()[2].props.style)).toMatchObject({ left: 220, width: 1 });
-    await resize(0, 0);
-    expect(surfaces()).toHaveLength(2);
+    // The window's surface runs behind the whole split view, divider and content pane included.
+    const splitView = window.parent!.children[1] as TestInstance;
+    expect(splitView.props.dividerColor).toBe("#00000000");
+    expect(within(splitView).getAllByLabelText("Beta.md").some(node => node.props.accessibilityRole === "tab")).toBe(true);
+    expect(within(splitView).getByTestId("markdown-pane-p0")).toBeTruthy();
     await view.unmount();
   });
 

@@ -141,7 +141,8 @@
     "lottie-react-native@7.3.8": "patches/lottie-react-native@7.3.8.patch",
     "react-native-worklets@0.12.2": "patches/react-native-worklets@0.12.2.patch",
     "number-flow-react-native@0.5.1": "patches/number-flow-react-native@0.5.1.patch",
-    "@react-native-windows/cli@0.83.2": "patches/@react-native-windows+cli+0.83.2.patch"
+    "@react-native-windows/cli@0.83.2": "patches/@react-native-windows+cli+0.83.2.patch",
+    "@legendapp/spark@0.0.7": "patches/@legendapp+spark@0.0.7.patch"
   },
   "catalog": {
     "react": "19.2.0",
