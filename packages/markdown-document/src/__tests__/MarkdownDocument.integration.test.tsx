@@ -1285,6 +1285,20 @@ describe("MarkdownDocument mounted editing", () => {
     expectUniqueBlockIds(adapter);
   });
 
+  it("switches files without flashing the loading text", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([block("first", 0, "First")]));
+    const { renderer } = await renderDocument({ adapter });
+    const loadingTexts = () => renderer.root.findAll(node => node.children.includes("Loading document..."));
+    jest.spyOn(adapter, "load").mockReturnValueOnce(new Promise(() => {}));
+    await act(async () => {
+      renderer.update(<MarkdownDocument adapter={adapter} filename="other.md" savePolicy={{ autosave: false }} />);
+      await Promise.resolve();
+    });
+    expect(adapter.load).toHaveBeenCalledWith("other.md");
+    expect(loadingTexts()).toHaveLength(0);
+    await act(async () => renderer.unmount());
+  });
+
   it("does not send native history commands to the non-overlay container", async () => {
     const adapter = new MountedEditorAdapter(snapshot([block("first", 0, "First")]));
     const commands = React.createRef<MarkdownDocumentCommands>();

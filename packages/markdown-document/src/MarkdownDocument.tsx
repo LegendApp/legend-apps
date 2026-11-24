@@ -571,6 +571,8 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       return state.status === "error" ? state.error.message : undefined;
     });
     const [reloadVersion, setReloadVersion] = useState(0);
+    // After a first document, switching files shows a blank page rather than flashing the loading text.
+    const hasLoadedDocumentRef = useRef(false);
     const onDirtyChangeRef = useLatestRef(onDirtyChange);
     const onCommandStateChangeRef = useLatestRef(onCommandStateChange);
     const onErrorRef = useLatestRef(onError);
@@ -2728,6 +2730,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           blockDataSourceRef.current = nextBlockDataSource;
           setBlockDataSource(nextBlockDataSource);
           blockDataRevision$.set(nextBlockDataSource.getRevision());
+          hasLoadedDocumentRef.current = true;
           documentState$.set({ status: "loaded", snapshot });
           if (autoFocusFirstBlock) {
             const firstBlock = snapshot.initialBlocks[0];
@@ -3807,9 +3810,11 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     if (documentStatus === "loading") {
       return (
         <View style={[styles.container, styles.centered, theme?.backgroundColor ? { backgroundColor: theme.backgroundColor } : null, style]}>
-          <Text style={[styles.statusText, theme?.mutedForegroundColor ? { color: theme.mutedForegroundColor } : null]}>
-            Loading document...
-          </Text>
+          {hasLoadedDocumentRef.current ? null : (
+            <Text style={[styles.statusText, theme?.mutedForegroundColor ? { color: theme.mutedForegroundColor } : null]}>
+              Loading document...
+            </Text>
+          )}
         </View>
       );
     }
