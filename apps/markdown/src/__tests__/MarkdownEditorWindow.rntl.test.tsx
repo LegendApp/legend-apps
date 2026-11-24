@@ -201,11 +201,10 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
 
   it("puts the pane cards on one Liquid Glass chrome that meets AppKit's sidebar glass through a clear divider", async () => {
     const view = await render(<MarkdownEditorWindow files={["/Alpha.md", "/Beta.md"]} />);
-    const glass = () => view.getByTestId("mock-glass");
-    expect(view.getAllByTestId("mock-glass")).toHaveLength(1);
-    const surface = glass().parent!;
+    const glass = view.getByTestId("mock-glass");
+    const surface = glass.parent!;
     expect(surface.props.pointerEvents).toBe("none");
-    expect(glass().props.glassStyle).toBeUndefined();
+    expect(glass.props.glassStyle).toBeUndefined();
     expect((surface.children[1] as TestInstance).props.style).toEqual(expect.arrayContaining([{ opacity: 0.8 }]));
     // The split view sits over the glass, divider clear, with the pane cards in its content.
     const splitView = surface.parent!.children[1] as TestInstance;
@@ -216,7 +215,7 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
     const sidebar = splitView.children[0] as TestInstance;
     expect(within(sidebar).getByText("Add Folder…")).toBeTruthy();
     expect(StyleSheet.flatten((sidebar.children[0] as TestInstance).props.style).opacity).toBe(0.8);
-    const left = () => StyleSheet.flatten(glass().parent!.props.style).left;
+    const left = () => StyleSheet.flatten(surface.props.style).left;
     expect(left()).toBe(0);
     await act(async () => splitView.props.onResize({ contentX: 221, sidebarWidth: 220, sidebarX: 0 }));
     expect(left()).toBe(220);
