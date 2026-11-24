@@ -264,6 +264,8 @@ test("catalog version mismatches in workspace links force Bun to relink them", t
 
   assert.equal(installSparkWorkspace(f.options, () => {
     assert.equal(fs.existsSync(appLink), false);
+    // Bun links back the package the workspace removed before installing, with the app's entry.
+    f.write("project/node_modules/@legendapp/spark/package.json", { version: "0.0.5" });
     fs.symlinkSync(path.relative(path.dirname(appLink), path.join(f.project, "node_modules/.bun/spark-new")), appLink);
   }), "installed");
   assert.equal(JSON.parse(fs.readFileSync(path.join(appLink, "package.json"), "utf8")).version, "0.0.5");
@@ -288,6 +290,33 @@ test("a missing nested Spark lock dependency removes Spark and reinstalls it", t
     f.write(`${sdk}/package.json`, { name: "@legendapp/spark", version: "0.0.5" });
     f.write(`${sdk}/node_modules/ws/package.json`, { name: "ws", version: "8.21.0" });
   }), "installed");
+  assert.equal(installSparkWorkspace({ ...f.options, offline: true }, () => assert.fail("unexpected install")), "skipped");
+});
+
+test("a changed Spark patch relinks Spark from scratch, not in place", t => {
+  const f = fixture(t);
+  const spark = "project/node_modules/@legendapp/spark";
+  f.write(`${spark}/package.json`, { name: "@legendapp/spark", version: "0.0.7" });
+  f.write(`${spark}/node_modules/ws/package.json`, { name: "ws", version: "8.21.0" });
+  f.write("project/bun.lock", { packages: {
+    "@legendapp/spark": ["@legendapp/spark@0.0.7", "", { dependencies: { ws: "8.21.0" } }],
+    "@legendapp/spark/ws": ["ws@8.21.0", "", {}],
+  } });
+  fs.mkdirSync(path.join(f.project, "node_modules"), { recursive: true });
+  fs.writeFileSync(f.stamp, f.hash());
+  // Editing the patch is what makes Bun rebuild the package on the next install.
+  fs.appendFileSync(path.join(f.repoRoot, "patches/local.patch"), " ");
+
+  const install = () => {
+    // An in-place rebuild loses the dependencies that cannot hoist; a package Bun did not
+    // find is linked anew together with them.
+    const directory = path.join(f.project, "node_modules/@legendapp/spark");
+    const existed = fs.existsSync(directory);
+    fs.rmSync(directory, { recursive: true, force: true });
+    f.write(`${spark}/package.json`, { name: "@legendapp/spark", version: "0.0.7" });
+    if (!existed) f.write(`${spark}/node_modules/ws/package.json`, { name: "ws", version: "8.21.0" });
+  };
+  assert.equal(installSparkWorkspace(f.options, install), "installed");
   assert.equal(installSparkWorkspace({ ...f.options, offline: true }, () => assert.fail("unexpected install")), "skipped");
 });
 
@@ -473,9 +502,14 @@ export function prepareSparkWorkspace(manifest) {
   for (const file of ["spark-app.ts", "spark-warm.ts", "lib/localSpark.cjs", "lib/sparkInstall.ts"]) {
     f.write(`scripts/${file}`, fs.readFileSync(path.resolve("scripts", file), "utf8"));
   }
+  const sdkLink = "node_modules/@legendapp/spark";
+  const sdk = path.join(f.repoRoot, sdkLink);
+  const sdkStore = path.join(f.repoRoot, "spark-sdk");
   f.write("bin/bun", `#!/usr/bin/env node
 const fs = require("node:fs"), path = require("node:path");
 fs.appendFileSync(${JSON.stringify(path.join(f.repoRoot, "attempts"))}, JSON.stringify([path.basename(process.cwd()), process.argv.slice(2)]) + "\\n");
+// Bun links the SDK it finds missing, as an install does after the workspace removes it.
+if (!fs.existsSync(${JSON.stringify(sdk)}) && fs.existsSync(${JSON.stringify(sdkStore)})) fs.cpSync(${JSON.stringify(sdkStore)}, ${JSON.stringify(sdk)}, { recursive: true });
 process.exit(fs.existsSync(${JSON.stringify(path.join(f.repoRoot, "fail"))}) ? 23 : 0);
 `);
   fs.chmodSync(path.join(f.repoRoot, "bin/bun"), 0o755);
@@ -490,7 +524,13 @@ process.exit(fs.existsSync(${JSON.stringify(path.join(f.repoRoot, "fail"))}) ? 2
   });
   const attempts = () => fs.existsSync(path.join(f.repoRoot, "attempts"))
     ? fs.readFileSync(path.join(f.repoRoot, "attempts"), "utf8").trim().split("\n").map(line => JSON.parse(line)) : [];
-  return { ...f, invoke, attempts };
+  // Bun can only link the SDK back from the store it downloaded, so every SDK file a test
+  // writes goes to the store too.
+  const write = (file: string, content: string | object) => {
+    f.write(file, content);
+    if (file.startsWith(`${sdkLink}/`)) f.write(path.join("spark-sdk", file.slice(sdkLink.length + 1)), content);
+  };
+  return { ...f, write, invoke, attempts };
 }
 
 function nativeFixture(f: ReturnType<typeof cliFixture>) {

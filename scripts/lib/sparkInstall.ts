@@ -245,13 +245,15 @@ function installUnlocked(options: InstallOptions, execute: typeof runInstall): "
   // A failed install must not leave a previously valid stamp behind.
   fs.rmSync(stamp, { force: true });
   const inputs = sparkInstallHash(project, options.repoRoot, false);
-  const staleSpark = sparkNestedDependencyMismatches(project).length > 0;
   try {
     for (const link of catalogInstallMismatches(project)) {
       try { if (fs.lstatSync(link).isSymbolicLink()) fs.unlinkSync(link); }
       catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
     }
-    if (staleSpark) fs.rmSync(path.join(nodeModules, "@legendapp/spark"), { recursive: true, force: true });
+    // When a patch's content changes, Bun rebuilds that package in place and leaves the
+    // dependencies that cannot hoist (Spark's typescript and ws) out of its node_modules.
+    // A package that is already gone is linked anew together with them.
+    fs.rmSync(path.join(nodeModules, "@legendapp/spark"), { recursive: true, force: true });
     execute(["install", "--linker", "hoisted", "--prefer-offline"], options);
     const mismatches = catalogInstallMismatches(project);
     if (mismatches.length) throw new SparkInstallError(`${appId}: catalog dependencies still resolve incorrectly: ${mismatches.map(link => path.relative(project, link)).join(", ")}.`);
