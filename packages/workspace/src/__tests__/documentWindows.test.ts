@@ -1,5 +1,5 @@
 import { addWindowListener, openWindow } from "@legendapp/spark/windows";
-import { createDocumentWindowRegistry, openDocumentWindow, trackDocumentWindow } from "../documentWindows";
+import { createDocumentWindowRegistry, isDocumentWindowFocused, openDocumentWindow, trackDocumentWindow } from "../documentWindows";
 
 const mockFocusListeners = new Map<string, (event: { focused: boolean }) => void>();
 
@@ -63,5 +63,17 @@ describe("document windows", () => {
     expect(registry.active()).toBe("target-a");
     registry.register("c", "target-c");
     expect(registry.active()).toBe("target-c");
+  });
+
+  it("knows when another of the app's windows takes focus", async () => {
+    const untrack = trackDocumentWindow("focus-a");
+    await Promise.resolve();
+    expect(isDocumentWindowFocused()).toBe(true);
+    mockFocusListeners.get("focus-a")?.({ focused: false });
+    expect(isDocumentWindowFocused()).toBe(false);
+    mockFocusListeners.get("focus-a")?.({ focused: true });
+    expect(isDocumentWindowFocused()).toBe(true);
+    untrack();
+    expect(isDocumentWindowFocused()).toBe(false);
   });
 });

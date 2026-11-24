@@ -15,6 +15,8 @@ const maxTabWidth = 220;
 export type DocumentTabBarProps = {
   activePath: string | null;
   colors: WorkspaceColors;
+  /** False for a split pane that is not focused; its active tab is drawn quieter. */
+  focused?: boolean;
   onClose: (path: string) => void;
   onSelect: (path: string) => void;
   /** Shows the sidebar toggle first in the bar; leave it out when the sidebar shows its own. */
@@ -24,7 +26,7 @@ export type DocumentTabBarProps = {
   titleBarHeight: number;
 };
 
-export function DocumentTabBar({ activePath, colors, onClose, onSelect, onToggleSidebar, sidebarOpen, paths, titleBarHeight }: DocumentTabBarProps) {
+export function DocumentTabBar({ activePath, colors, focused = true, onClose, onSelect, onToggleSidebar, sidebarOpen, paths, titleBarHeight }: DocumentTabBarProps) {
   const scroll = useRef<ScrollView>(null);
   const frames = useRef(new Map<string, { width: number; x: number }>());
   const [scrollWidth, setScrollWidth] = useState(0);
@@ -65,6 +67,7 @@ export function DocumentTabBar({ activePath, colors, onClose, onSelect, onToggle
         {paths.map((path, index) => (
           <DocumentTab
             active={path === activePath}
+            focused={focused}
             // A hairline separates neighbouring inactive tabs, as in Safari; the active tab needs none.
             separated={index > 0 && path !== activePath && paths[index - 1] !== activePath}
             colors={colors}
@@ -85,8 +88,9 @@ export function DocumentTabBar({ activePath, colors, onClose, onSelect, onToggle
   );
 }
 
-function DocumentTab({ active, colors, onClose, onLayout, onSelect, separated, title, width }: {
+function DocumentTab({ active, colors, focused, onClose, onLayout, onSelect, separated, title, width }: {
   active: boolean;
+  focused: boolean;
   separated: boolean;
   colors: WorkspaceColors;
   onClose: () => void;
@@ -97,7 +101,7 @@ function DocumentTab({ active, colors, onClose, onLayout, onSelect, separated, t
 }) {
   const [hovered, setHovered] = useState(false);
   const [closeHovered, setCloseHovered] = useState(false);
-  const fill = active ? withAlpha(colors.foreground, 0.09) : hovered ? withAlpha(colors.foreground, 0.05) : undefined;
+  const fill = active ? withAlpha(colors.foreground, focused ? 0.09 : 0.04) : hovered ? withAlpha(colors.foreground, 0.05) : undefined;
   return (
     <Pressable
       accessibilityLabel={title}
@@ -110,7 +114,7 @@ function DocumentTab({ active, colors, onClose, onLayout, onSelect, separated, t
       style={[styles.tab, { width }, fill !== undefined && { backgroundColor: fill }]}
     >
       {separated && !hovered ? <View style={[styles.separator, { backgroundColor: colors.border }]} /> : null}
-      <Text numberOfLines={1} style={[styles.title, { color: active ? colors.foreground : colors.muted }, active && styles.activeTitle]}>{title}</Text>
+      <Text numberOfLines={1} style={[styles.title, { color: active && focused ? colors.foreground : colors.muted }, active && styles.activeTitle]}>{title}</Text>
       {/* The close button overlays the leading padding, so titles never shift; it shows on the active and hovered tabs. */}
       <Pressable
         accessibilityLabel={`Close ${title}`}

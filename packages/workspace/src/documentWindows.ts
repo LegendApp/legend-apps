@@ -5,10 +5,17 @@ import type { WorkspaceWindowProps } from "./workspaceState";
 
 const liveWindowIds = new Set<string>();
 const focusOrder: string[] = [];
+let focusedWindowId: string | null = null;
 const documentWindowHotkeyRouter = createHotkeyRouter();
 const sidebarHotkeyDefinitions = [{ id: "toggleSidebar", title: "Toggle Sidebar", defaultBindings: ["Cmd+Ctrl+s"] }];
 
+/** Whether a document window, rather than another of the app's windows, is key. */
+export function isDocumentWindowFocused() {
+  return focusedWindowId !== null;
+}
+
 function noteFocus(windowId: string) {
+  focusedWindowId = windowId;
   const index = focusOrder.indexOf(windowId);
   if (index >= 0) focusOrder.splice(index, 1);
   focusOrder.push(windowId);
@@ -43,9 +50,12 @@ export function trackDocumentWindow(windowId: string, onFocus?: () => void) {
   let disposed = false;
   let registration: AsyncRegistration | undefined;
   void addWindowListener(windowId, "focusChanged", event => {
-    if (!disposed && event.focused) {
+    if (disposed) return;
+    if (event.focused) {
       noteFocus(windowId);
       onFocus?.();
+    } else if (focusedWindowId === windowId) {
+      focusedWindowId = null;
     }
   }).then(value => {
     if (disposed) void value.remove().catch(console.error);
@@ -54,6 +64,7 @@ export function trackDocumentWindow(windowId: string, onFocus?: () => void) {
   return () => {
     disposed = true;
     liveWindowIds.delete(windowId);
+    if (focusedWindowId === windowId) focusedWindowId = null;
     const index = focusOrder.indexOf(windowId);
     if (index >= 0) focusOrder.splice(index, 1);
     void registration?.remove().catch(console.error);
