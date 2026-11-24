@@ -145,6 +145,83 @@ index 2d83643..79d3685 100644
  }
  
  - (BOOL)canPreventGestureRecognizer:(__unused UIGestureRecognizer *)preventedGestureRecognizer
+diff --git a/ReactApple/Libraries/RCTUIKit/RCTUIView.m b/ReactApple/Libraries/RCTUIKit/RCTUIView.m
+index 1952885..ef8eaec 100644
+--- a/ReactApple/Libraries/RCTUIKit/RCTUIView.m
++++ b/ReactApple/Libraries/RCTUIKit/RCTUIView.m
+@@ -12,6 +12,22 @@
+ #import <QuartzCore/QuartzCore.h>
+ #import "RCTUIView.h"
+ 
++@interface NSWindow (RCTTitlebarDragRegion)
++- (void)_setNeedsToResetDragMargins:(BOOL)needsReset;
++@end
++
++// AppKit caches the title-bar drag region and refreshes it only for views it has already found
++// there. React mounts and lays out whole subtrees, so a control can land in the title bar unseen.
++static void RCTUIViewResetTitlebarDragRegion(NSView *view)
++{
++  NSWindow *window = view.window;
++  if (window.titlebarAppearsTransparent && (window.styleMask & NSWindowStyleMaskFullSizeContentView) &&
++      NSMaxY([view convertRect:view.bounds toView:nil]) > NSMaxY(window.contentLayoutRect) &&
++      [window respondsToSelector:@selector(_setNeedsToResetDragMargins:)]) {
++    [window _setNeedsToResetDragMargins:YES];
++  }
++}
++
+ // UIView
+ 
+ @implementation RCTUIView
+@@ -98,15 +114,48 @@ - (BOOL)isFirstResponder {
+ 
+ - (void)viewDidMoveToWindow
+ {
++  RCTUIViewResetTitlebarDragRegion(self);
+   [self didMoveToWindow];
+ }
+ 
++- (void)setFrameOrigin:(NSPoint)newOrigin
++{
++  [super setFrameOrigin:newOrigin];
++  RCTUIViewResetTitlebarDragRegion(self);
++}
++
++- (void)setFrameSize:(NSSize)newSize
++{
++  [super setFrameSize:newSize];
++  RCTUIViewResetTitlebarDragRegion(self);
++}
++
+ - (BOOL)mouseDownCanMoveWindow{
+ 	return _mouseDownCanMoveWindow;
+ }
+ 
+ - (void)setMouseDownCanMoveWindow:(BOOL)mouseDownCanMoveWindow{
+-	_mouseDownCanMoveWindow = mouseDownCanMoveWindow;
++	if (_mouseDownCanMoveWindow != mouseDownCanMoveWindow) {
++		_mouseDownCanMoveWindow = mouseDownCanMoveWindow;
++		RCTUIViewResetTitlebarDragRegion(self);
++	}
++}
++
++- (NSRect)_opaqueRectForWindowMoveWhenInTitlebar
++{
++  return self.mouseDownCanMoveWindow ? NSZeroRect : self.bounds;
++}
++
++- (void)mouseDown:(NSEvent *)event
++{
++  NSWindow *window = self.window;
++  if (!self.mouseDownCanMoveWindow && window.titlebarAppearsTransparent &&
++      (window.styleMask & NSWindowStyleMaskFullSizeContentView) &&
++      event.locationInWindow.y > NSMaxY(window.contentLayoutRect)) {
++    // AppKit can start a window drag when this mouse-down reaches the window.
++    return;
++  }
++  [super mouseDown:event];
+ }
+ 
+ - (BOOL)isFlipped
 diff --git a/ReactCommon/react/renderer/core/ShadowNode.cpp b/ReactCommon/react/renderer/core/ShadowNode.cpp
 index 7b89467..cf125b8 100644
 --- a/ReactCommon/react/renderer/core/ShadowNode.cpp
