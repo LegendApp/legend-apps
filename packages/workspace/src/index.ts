@@ -7,3 +7,4 @@ export * from "./workspaceFiles";
 export * from "./workspaceMenus";
 export * from "./WorkspaceSidebar";
 export * from "./workspaceState";
+export * from "./paneLayout";
