@@ -26,11 +26,13 @@ import {
   getPaneHeir,
   getPaneIds,
   layoutPanes,
+  movePaneTab,
   openPaneTab,
   paneGap,
   renamePaneTab,
   setSplitFraction,
   splitPane,
+  splitPaneWithTab,
   useDocumentWindow,
   useWorkspaceWindow,
   WorkspaceSidebar,
@@ -39,7 +41,7 @@ import {
   type PaneLayout,
 } from "@legend-apps/workspace";
 import { closeWindow } from "@legendapp/spark/windows";
-import { getPaneCardColor, MarkdownPaneArea, MarkdownPaneChrome } from "./MarkdownPaneArea";
+import { getPaneCardColor, MarkdownPaneArea, MarkdownPaneChrome, PaneTabDropTarget, type TabDropZone } from "./MarkdownPaneArea";
 import { useValue } from "@legendapp/state/react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { InteractionManager, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
@@ -97,6 +99,8 @@ import { untitledMarkdownAdapter } from "./untitledMarkdownAdapter";
 import { refreshMarkdownEditorMenuState } from "./markdownEditorActions";
 
 const newMarkdownFileName = "Untitled.md";
+/** A dragged tab carries its path under this type. */
+const tabDragType = "application/x-legend-markdown-tab";
 
 type MarkdownDocumentSession = ReturnType<typeof useMarkdownDocumentSession>;
 type MarkdownFormattingToolbarMode = ReturnType<typeof useMarkdownFormattingToolbarModeSetting>;
@@ -131,7 +135,12 @@ type PaneCommands = Omit<Parameters<typeof useMarkdownMenus>[0]["paneCommands"],
 type PaneCommandState = Parameters<typeof useMarkdownMenus>[0]["paneCommandState"];
 
 type PaneActions = {
+  /** Whether the tab being dragged in this window can drop on that part of the pane. */
+  canDropTab: (paneId: string, zone: TabDropZone) => boolean;
   closeTab: (paneId: string, path: string) => void;
+  dragTab: (paneId: string, path: string) => void;
+  /** Drops the dragged tab at a slot in the pane's bar, into the pane, or on an edge to split it. */
+  dropTab: (paneId: string, drop: number | TabDropZone) => void;
   focus: (paneId: string) => void;
   openTab: (paneId: string, path: string) => void;
   register: (paneId: string, prepareForClose: () => Promise<boolean>) => () => void;
@@ -163,6 +172,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
     if (keepsFolders) setMarkdownSidebarFoldersSetting(workspaceFolders);
   }, [keepsFolders, workspaceFolders]);
   useDocumentWindow(windowId, workspace.toggleSidebar, refreshMarkdownEditorMenuState);
+  const reportError = useCallback((error: unknown) => console.error(error), []);
 
   const [initialPanes] = useState(() => {
     const opensFiles = !!files || !!workspacePath || !!getLaunchMarkdownFile(launchArguments) || shouldLaunchNewMarkdownDocument(launchArguments);
@@ -192,14 +202,39 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
     x: paneGap,
     y: 0,
   }), [areaSize, layout.root]);
+  const framesRef = useRef(frames);
+  framesRef.current = frames;
   const focusedFrame = frames.find(frame => frame.id === layout.focused);
   const canSplitRight = canSplitPane(focusedFrame, "horizontal");
   const canSplitDown = canSplitPane(focusedFrame, "vertical");
   const hasOtherPanes = layout.root.kind === "split";
 
   const paneClosers = useRef(new Map<string, () => Promise<boolean>>());
+  const tabDrag = useRef<{ paneId: string; path: string } | null>(null);
   const paneActions = useMemo<PaneActions>(() => ({
+    canDropTab: (paneId, zone) => {
+      const drag = tabDrag.current;
+      if (!drag) return false;
+      if (zone === "center") return drag.paneId !== paneId;
+      const ownOnlyTab = drag.paneId === paneId && layoutRef.current.panes[paneId]?.paths.length === 1;
+      return !ownOnlyTab && canSplitPane(framesRef.current.find(frame => frame.id === paneId), zone === "left" || zone === "right" ? "horizontal" : "vertical");
+    },
     closeTab: (paneId, path) => setLayout(current => closePaneTab(current, paneId, path)),
+    dragTab: (paneId, path) => { tabDrag.current = { paneId, path }; },
+    dropTab: (paneId, drop) => {
+      const drag = tabDrag.current;
+      tabDrag.current = null;
+      if (!drag) return;
+      const { paneId: from, path } = drag;
+      void (async () => {
+        // The shown document leaves its pane, so save it first and the destination opens what the user sees.
+        const leaves = layoutRef.current.panes[from]?.active === path && !(from === paneId && typeof drop === "number");
+        if (leaves && !await (paneClosers.current.get(from)?.() ?? true)) return;
+        setLayout(current => typeof drop === "number" ? movePaneTab(current, from, path, paneId, drop)
+          : drop === "center" ? movePaneTab(current, from, path, paneId, current.panes[paneId]?.paths.length ?? 0)
+          : splitPaneWithTab(current, from, path, paneId, drop));
+      })().catch(reportError);
+    },
     focus: paneId => setLayout(current => focusPane(current, paneId), false),
     openTab: (paneId, path) => {
       openWorkspaceTab(path);
@@ -213,7 +248,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
       renameWorkspaceTab(from, to);
       setLayout(current => renamePaneTab(current, paneId, from, to), false);
     },
-  }), [openWorkspaceTab, renameWorkspaceTab, setLayout]);
+  }), [openWorkspaceTab, renameWorkspaceTab, reportError, setLayout]);
   const resize = useCallback((splitId: string, fraction: number, animated: boolean) => {
     setLayout(current => setSplitFraction(current, splitId, fraction), animated);
   }, [setLayout]);
@@ -240,7 +275,6 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
     () => getMarkdownMeasurementSignature(markdownLayout, markdownStyle),
     [markdownLayout, markdownStyle],
   );
-  const reportError = useCallback((error: unknown) => console.error(error), []);
   const openSettingsWindow = useMarkdownSettingsWindow({
     backgroundColor: displayTheme.colors.windowBackground,
     onError: reportError,
@@ -583,54 +617,57 @@ function MarkdownPane({
             sidebarOpen={!onToggleSidebar}
             paths={tabs.paths}
             separated={false}
+            tabDrag={{ onDragStart: path => actions.dragTab(paneId, path), onDrop: index => actions.dropTab(paneId, index), type: tabDragType }}
             titleBarHeight={titleBarHeight}
           />
         </View>
       )}
       tabBarHeight={titleBarHeight}
     >
-      {/* Clicking anywhere in a pane focuses it without taking the click from the editor. */}
-      <View onStartShouldSetResponderCapture={() => { actions.focus(paneId); return false; }} style={styles.root} testID={`markdown-pane-${paneId}`}>
-        {focused ? (
-          <FocusedPaneBindings
-            closeActiveTab={closeActiveTab}
-            commandState={commandState}
-            commands={commands}
-            nativeWindowAppearance={nativeWindowAppearance}
-            onFind={() => setFindVisible(true)}
+      <PaneTabDropTarget accepts={zone => actions.canDropTab(paneId, zone)} color={colors.primary ?? colors.foreground} onDrop={zone => actions.dropTab(paneId, zone)} type={tabDragType}>
+        {/* Clicking anywhere in a pane focuses it without taking the click from the editor. */}
+        <View onStartShouldSetResponderCapture={() => { actions.focus(paneId); return false; }} style={styles.root} testID={`markdown-pane-${paneId}`}>
+          {focused ? (
+            <FocusedPaneBindings
+              closeActiveTab={closeActiveTab}
+              commandState={commandState}
+              commands={commands}
+              nativeWindowAppearance={nativeWindowAppearance}
+              onFind={() => setFindVisible(true)}
+              onInsertLink={insertLink}
+              session={session}
+              windowBackgroundColor={windowBackgroundColor}
+              windowId={windowId}
+              windowMenus={windowMenus}
+            />
+          ) : null}
+          <MarkdownFileWatcher session={session} />
+          {findVisible && <View className="flex-row items-center gap-3 border-b border-border bg-background px-4 py-2">
+            <TextInput accessibilityLabel="Find in document" autoFocus className="flex-1 text-foreground"
+              value={findQuery} onChangeText={setFindQuery} onSubmitEditing={() => { void find(); }} placeholder="Find…" />
+            <Pressable accessibilityRole="button" accessibilityLabel="Previous match" onPress={() => { void find(true); }}><Text className="text-foreground">Previous</Text></Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel="Next match" onPress={() => { void find(); }}><Text className="text-foreground">Next</Text></Pressable>
+            <Text className="text-muted">{findStatus}</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel="Close Find" onPress={() => setFindVisible(false)}><Text className="text-foreground">Done</Text></Pressable>
+          </View>}
+          <MarkdownEditorSessionContent
+            autosaveEnabled={autosaveEnabled}
+            backgroundStyle={backgroundStyle}
+            dangerColor={dangerColor}
+            foregroundColor={colors.foreground}
+            formattingToolbarMode={formattingToolbarMode}
+            isLinkPopoverOpen={isLinkPopoverOpen}
+            markdownLayout={markdownLayout}
+            markdownStyle={markdownStyle}
+            onApplyLink={applyLink}
+            onCancelLink={() => setIsLinkPopoverOpen(false)}
             onInsertLink={insertLink}
+            renderSelectionToolbar={renderSelectionToolbar}
             session={session}
-            windowBackgroundColor={windowBackgroundColor}
-            windowId={windowId}
-            windowMenus={windowMenus}
+            theme={theme}
           />
-        ) : null}
-        <MarkdownFileWatcher session={session} />
-        {findVisible && <View className="flex-row items-center gap-3 border-b border-border bg-background px-4 py-2">
-          <TextInput accessibilityLabel="Find in document" autoFocus className="flex-1 text-foreground"
-            value={findQuery} onChangeText={setFindQuery} onSubmitEditing={() => { void find(); }} placeholder="Find…" />
-          <Pressable accessibilityRole="button" accessibilityLabel="Previous match" onPress={() => { void find(true); }}><Text className="text-foreground">Previous</Text></Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel="Next match" onPress={() => { void find(); }}><Text className="text-foreground">Next</Text></Pressable>
-          <Text className="text-muted">{findStatus}</Text>
-          <Pressable accessibilityRole="button" accessibilityLabel="Close Find" onPress={() => setFindVisible(false)}><Text className="text-foreground">Done</Text></Pressable>
-        </View>}
-        <MarkdownEditorSessionContent
-          autosaveEnabled={autosaveEnabled}
-          backgroundStyle={backgroundStyle}
-          dangerColor={dangerColor}
-          foregroundColor={colors.foreground}
-          formattingToolbarMode={formattingToolbarMode}
-          isLinkPopoverOpen={isLinkPopoverOpen}
-          markdownLayout={markdownLayout}
-          markdownStyle={markdownStyle}
-          onApplyLink={applyLink}
-          onCancelLink={() => setIsLinkPopoverOpen(false)}
-          onInsertLink={insertLink}
-          renderSelectionToolbar={renderSelectionToolbar}
-          session={session}
-          theme={theme}
-        />
-      </View>
+        </View>
+      </PaneTabDropTarget>
     </MarkdownPaneChrome>
   );
 }

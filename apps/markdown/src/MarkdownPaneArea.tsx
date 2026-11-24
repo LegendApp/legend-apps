@@ -1,9 +1,11 @@
+import { DragDropView, type DragOverEvent } from "@legendapp/spark/drag-drop";
 import {
   clampSplitFraction,
   collapsePaneRect,
   findSplit,
   getPanePlacement,
   paneGap,
+  type PaneEdge,
   type PaneFrame,
   type PaneNode,
   type PaneRect,
@@ -186,6 +188,66 @@ function AnimatedRect({ animate, children, enterFrom, rect }: { animate: boolean
   );
 }
 
+export type TabDropZone = PaneEdge | "center";
+
+/** Which part of a card a dragged tab is over: the outer quarter of each side splits the pane there, the middle moves the tab in. */
+export function getTabDropZone({ x, y }: Pick<DragOverEvent, "x" | "y">, { height, width }: { height: number; width: number }): TabDropZone {
+  const distances: [PaneEdge, number][] = [["left", x / width], ["right", 1 - x / width], ["top", y / height], ["bottom", 1 - y / height]];
+  const [edge, distance] = distances.reduce((nearest, next) => next[1] < nearest[1] ? next : nearest);
+  return distance < 0.25 ? edge : "center";
+}
+
+function getZoneRect(zone: TabDropZone, { height, width }: { height: number; width: number }): PaneRect {
+  const inset = 4;
+  const rect = { height: height - 2 * inset, width: width - 2 * inset, x: inset, y: inset };
+  if (zone === "left" || zone === "right") rect.width = width / 2 - 1.5 * inset;
+  if (zone === "top" || zone === "bottom") rect.height = height / 2 - 1.5 * inset;
+  if (zone === "right") rect.x = width / 2 + inset / 2;
+  if (zone === "bottom") rect.y = height / 2 + inset / 2;
+  return rect;
+}
+
+/**
+ * A card that takes dragged tabs, as in Xcode and VS Code: a tinted rect shows the half a new pane would take,
+ * or the whole card for a move, and glides between them like the panes do.
+ */
+export function PaneTabDropTarget({ accepts, children, color, onDrop, type }: {
+  accepts: (zone: TabDropZone) => boolean;
+  children: ReactNode;
+  color: string;
+  onDrop: (zone: TabDropZone) => void;
+  type: string;
+}) {
+  const [size, setSize] = useState({ height: 0, width: 0 });
+  const [zone, setZone] = useState<TabDropZone | null>(null);
+  const zoneAt = (event: DragOverEvent) => {
+    const over = getTabDropZone(event, size);
+    return accepts(over) ? over : accepts("center") ? "center" : null;
+  };
+  return (
+    <DragDropView
+      acceptedOperations={["move"]}
+      acceptedTypes={[type]}
+      onDragLeave={() => setZone(null)}
+      onDragOver={event => setZone(zoneAt(event))}
+      onDrop={event => {
+        setZone(null);
+        const dropped = zoneAt(event);
+        if (dropped) onDrop(dropped);
+      }}
+      onLayout={(event: LayoutChangeEvent) => setSize(event.nativeEvent.layout)}
+      style={styles.area}
+    >
+      {children}
+      {zone ? (
+        <AnimatedRect animate rect={getZoneRect(zone, size)}>
+          {() => <View pointerEvents="none" style={[styles.dropZone, { backgroundColor: `${color.slice(0, 7)}26`, borderColor: color }]} />}
+        </AnimatedRect>
+      ) : null}
+    </DragDropView>
+  );
+}
+
 function SplitDivider({ onResize, root, split }: { onResize: MarkdownPaneAreaProps["onResize"]; root: PaneNode; split: SplitFrame }) {
   const latest = useRef({ onResize, root, split });
   latest.current = { onResize, root, split };
@@ -250,6 +312,12 @@ const styles = StyleSheet.create({
     borderRadius: cardRadius,
     flex: 1,
     overflow: "hidden",
+  },
+  dropZone: {
+    borderCurve: "continuous",
+    borderRadius: cardRadius - 4,
+    borderWidth: 1,
+    flex: 1,
   },
   divider: {
     position: "absolute",

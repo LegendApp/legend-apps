@@ -26,6 +26,7 @@ const manifest = {
       "@legendapp/spark/ui",
       "@legendapp/spark/context-menu",
       "@legendapp/spark/dialogs",
+      "@legendapp/spark/drag-drop",
       "@legendapp/spark/files",
       "@legendapp/spark/shortcuts",
       "@legend-apps/markdown-block-editor",

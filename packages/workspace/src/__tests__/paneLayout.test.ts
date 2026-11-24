@@ -9,10 +9,12 @@ import {
   focusAdjacentPane,
   getPaneIds,
   layoutPanes,
+  movePaneTab,
   openPaneTab,
   parsePaneLayout,
   setSplitFraction,
   splitPane,
+  splitPaneWithTab,
   type PaneLayout,
 } from "../paneLayout";
 
@@ -106,6 +108,57 @@ describe("closePaneTab", () => {
   it("keeps the last pane even with no tabs", () => {
     const closed = closePaneTab(closePaneTab(one(), "p0", "/a.md"), "p0", "/b.md");
     expect(closed.panes.p0).toEqual({ active: null, paths: [] });
+  });
+});
+
+describe("tab drag", () => {
+  // p0 holds a and b; p1 on the right holds c.
+  const two = () => closePaneTab(openPaneTab(splitPane(one(), "horizontal"), "p1", "/c.md"), "p1", "/a.md");
+
+  it("moves a tab into another pane's bar at the drop slot and focuses it", () => {
+    const layout = movePaneTab(two(), "p0", "/b.md", "p1", 0);
+    expect(layout.panes.p0).toEqual({ active: "/a.md", paths: ["/a.md"] });
+    expect(layout.panes.p1).toEqual({ active: "/b.md", paths: ["/b.md", "/c.md"] });
+    expect(layout.focused).toBe("p1");
+  });
+
+  it("reorders within a pane, counting the slot before the tab leaves", () => {
+    const layout = movePaneTab(one(), "p0", "/a.md", "p0", 2);
+    expect(layout.panes.p0).toEqual({ active: "/a.md", paths: ["/b.md", "/a.md"] });
+  });
+
+  it("closes a split pane whose last tab leaves", () => {
+    const layout = movePaneTab(two(), "p1", "/c.md", "p0", 1);
+    expect(getPaneIds(layout.root)).toEqual(["p0"]);
+    expect(layout.panes.p0).toEqual({ active: "/c.md", paths: ["/a.md", "/c.md", "/b.md"] });
+    expect(layout.focused).toBe("p0");
+  });
+
+  it("splits the target pane on the dropped edge with just the dragged tab", () => {
+    const right = splitPaneWithTab(one(), "p0", "/b.md", "p0", "right");
+    expect(right.root).toMatchObject({ kind: "split", axis: "horizontal", first: { id: "p0" }, second: { id: "p1" } });
+    expect(right.panes).toEqual({ p0: { active: "/a.md", paths: ["/a.md"] }, p1: { active: "/b.md", paths: ["/b.md"] } });
+    expect(right.focused).toBe("p1");
+    const top = splitPaneWithTab(one(), "p0", "/b.md", "p0", "top");
+    expect(top.root).toMatchObject({ kind: "split", axis: "vertical", first: { id: "p1" }, second: { id: "p0" } });
+  });
+
+  it("closes the source pane when its last tab splits another pane", () => {
+    const layout = splitPaneWithTab(two(), "p1", "/c.md", "p0", "bottom");
+    expect(getPaneIds(layout.root)).toEqual(["p0", "p2"]);
+    expect(layout.root).toMatchObject({ kind: "split", axis: "vertical" });
+    expect(layout.panes.p2).toEqual({ active: "/c.md", paths: ["/c.md"] });
+    expect(layout.focused).toBe("p2");
+  });
+
+  it("does not split a pane with its own only tab", () => {
+    const layout = two();
+    expect(splitPaneWithTab(layout, "p1", "/c.md", "p1", "left")).toBe(layout);
+  });
+
+  it("persists the result", () => {
+    const layout = splitPaneWithTab(two(), "p1", "/c.md", "p0", "bottom");
+    expect(parsePaneLayout(JSON.parse(JSON.stringify(layout)))).toEqual(layout);
   });
 });
 

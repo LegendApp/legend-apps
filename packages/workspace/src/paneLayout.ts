@@ -159,6 +159,33 @@ export function closePaneTab(layout: PaneLayout, paneId: string, path: string): 
   return next.panes[paneId]?.paths.length === 0 ? closePane(next, paneId) : next;
 }
 
+/** Moves a tab into another pane's bar (or along its own) at `index`, activating and focusing it. A split pane it empties closes. */
+export function movePaneTab(layout: PaneLayout, fromId: string, path: string, toId: string, index: number): PaneLayout {
+  if (!layout.panes[fromId]?.paths.includes(path) || !layout.panes[toId]) return layout;
+  const from = layout.panes[toId].paths.indexOf(path);
+  const at = from >= 0 && from < index ? index - 1 : index;
+  const next = updateTabs(fromId === toId ? layout : closePaneTab(layout, fromId, path), toId, tabs => {
+    const paths = tabs.paths.filter(tab => tab !== path);
+    return { active: path, paths: [...paths.slice(0, at), path, ...paths.slice(at)] };
+  });
+  return { ...next, focused: toId };
+}
+
+export type PaneEdge = "bottom" | "left" | "right" | "top";
+
+/** Splits `targetId` along `edge` with a new pane holding just the dragged tab, as Xcode and VS Code do. A split pane it empties closes. */
+export function splitPaneWithTab(layout: PaneLayout, fromId: string, path: string, targetId: string, edge: PaneEdge): PaneLayout {
+  const tabs = layout.panes[fromId];
+  if (!tabs?.paths.includes(path) || !layout.panes[targetId] || (fromId === targetId && tabs.paths.length === 1)) return layout;
+  const split = splitPane(layout, edge === "left" || edge === "right" ? "horizontal" : "vertical", targetId);
+  const newId = `p${layout.nextId}`;
+  // splitPane puts the new pane second; a leading edge swaps it first.
+  const root = edge === "left" || edge === "top"
+    ? mapNode(split.root, node => node.kind === "split" && node.id === `s${layout.nextId}` ? { ...node, first: node.second, second: node.first } : undefined)
+    : split.root;
+  return closePaneTab({ ...split, panes: { ...split.panes, [newId]: { active: path, paths: [path] } }, root }, fromId, path);
+}
+
 /** Lays the tree out in `rect`: side-by-side panes keep a gap between them; stacked panes share an edge. */
 export function layoutPanes(node: PaneNode, rect: PaneRect, frames: { panes: PaneFrame[]; splits: SplitFrame[] } = { panes: [], splits: [] }) {
   if (node.kind === "pane") {

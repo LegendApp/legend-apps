@@ -1,3 +1,4 @@
+import { DragDropView, type DragOverEvent, type DragPayload } from "@legendapp/spark/drag-drop";
 import { SFSymbol } from "@legendapp/spark/ui/symbol";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
@@ -25,10 +26,14 @@ export type DocumentTabBarProps = {
   paths: readonly string[];
   /** Draws a hairline under the bar; leave it off when the bar sits on glass above a card. */
   separated?: boolean;
+  /** Lets tabs drag between bars: each tab carries its path under the `type` MIME type, and the bar takes drops at a slot. */
+  tabDrag?: TabDrag;
   titleBarHeight: number;
 };
 
-export function DocumentTabBar({ activePath, colors, focused = true, onClose, onSelect, onToggleSidebar, sidebarOpen, paths, separated = true, titleBarHeight }: DocumentTabBarProps) {
+export type TabDrag = { onDragStart: (path: string) => void; onDrop: (index: number) => void; type: string };
+
+export function DocumentTabBar({ activePath, colors, focused = true, onClose, onSelect, onToggleSidebar, sidebarOpen, paths, separated = true, tabDrag, titleBarHeight }: DocumentTabBarProps) {
   const scroll = useRef<ScrollView>(null);
   const frames = useRef(new Map<string, { width: number; x: number }>());
   const [scrollWidth, setScrollWidth] = useState(0);
@@ -51,10 +56,18 @@ export function DocumentTabBar({ activePath, colors, focused = true, onClose, on
   revealRef.current = reveal;
   useEffect(() => revealRef.current(), [activePath, paths, scrollWidth]);
 
-  return (
-    // The title bar is transparent, so leave room for the traffic lights while the sidebar is hidden.
-    <View onLayout={event => setBarWidth(event.nativeEvent.layout.width)} style={[styles.root, { borderColor: colors.border, height: titleBarHeight, paddingLeft: leadingInset }, !separated && styles.unseparated]}>
-      {onToggleSidebar ? <SidebarToggle colors={colors} label={sidebarOpen ? "Hide Sidebar" : "Show Sidebar"} onPress={onToggleSidebar} /> : null}
+  // The slot a dragged tab would drop into: before the first tab whose middle is past the pointer.
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
+  const slotAt = ({ x }: DragOverEvent) => paths.filter(path => {
+    const frame = frames.current.get(path);
+    return frame && frame.x + frame.width / 2 < x + offset.current;
+  }).length;
+  const after = dropIndex === null ? undefined : frames.current.get(paths[dropIndex]);
+  const before = dropIndex === null ? undefined : frames.current.get(paths[dropIndex - 1]);
+  const markerX = after ? after.x - tabGap / 2 : before && before.x + before.width + tabGap / 2;
+
+  const tabs = (
+    <>
       <ScrollView
         contentContainerStyle={styles.tabs}
         horizontal
@@ -73,6 +86,7 @@ export function DocumentTabBar({ activePath, colors, focused = true, onClose, on
             // A hairline separates neighbouring inactive tabs, as in Safari; the active tab needs none.
             separated={index > 0 && path !== activePath && paths[index - 1] !== activePath}
             colors={colors}
+            drag={tabDrag && { onDragStart: () => tabDrag.onDragStart(path), payload: { data: { [tabDrag.type]: path } } }}
             key={path}
             onClose={() => onClose(path)}
             onLayout={event => {
@@ -84,17 +98,41 @@ export function DocumentTabBar({ activePath, colors, focused = true, onClose, on
             width={tabWidth}
           />
         ))}
+        {markerX === undefined ? null : <View pointerEvents="none" style={[styles.dropMarker, { backgroundColor: colors.primary ?? colors.foreground, left: markerX - 1 }]} />}
       </ScrollView>
       <View style={styles.dragSpace} />
+    </>
+  );
+
+  return (
+    // The title bar is transparent, so leave room for the traffic lights while the sidebar is hidden.
+    <View onLayout={event => setBarWidth(event.nativeEvent.layout.width)} style={[styles.root, { borderColor: colors.border, height: titleBarHeight, paddingLeft: leadingInset }, !separated && styles.unseparated]}>
+      {onToggleSidebar ? <SidebarToggle colors={colors} label={sidebarOpen ? "Hide Sidebar" : "Show Sidebar"} onPress={onToggleSidebar} /> : null}
+      {tabDrag ? (
+        <DragDropView
+          acceptedOperations={["move"]}
+          acceptedTypes={[tabDrag.type]}
+          onDragLeave={() => setDropIndex(null)}
+          onDragOver={event => setDropIndex(slotAt(event))}
+          onDrop={event => {
+            setDropIndex(null);
+            tabDrag.onDrop(slotAt(event));
+          }}
+          style={styles.dropTarget}
+        >
+          {tabs}
+        </DragDropView>
+      ) : tabs}
     </View>
   );
 }
 
-function DocumentTab({ active, colors, focused, onClose, onLayout, onSelect, separated, title, width }: {
+function DocumentTab({ active, colors, drag, focused, onClose, onLayout, onSelect, separated, title, width }: {
   active: boolean;
   focused: boolean;
   separated: boolean;
   colors: WorkspaceColors;
+  drag?: { onDragStart: () => void; payload: DragPayload };
   onClose: () => void;
   onLayout: (event: LayoutChangeEvent) => void;
   onSelect: () => void;
@@ -104,14 +142,14 @@ function DocumentTab({ active, colors, focused, onClose, onLayout, onSelect, sep
   const [hovered, setHovered] = useState(false);
   const [closeHovered, setCloseHovered] = useState(false);
   const fill = active ? withAlpha(colors.foreground, focused ? 0.09 : 0.04) : hovered ? withAlpha(colors.foreground, 0.05) : undefined;
-  return (
+  const tab = (
     <Pressable
       accessibilityLabel={title}
       accessibilityRole="tab"
       accessibilityState={{ selected: active }}
       onHoverIn={() => setHovered(true)}
       onHoverOut={() => setHovered(false)}
-      onLayout={onLayout}
+      onLayout={drag ? undefined : onLayout}
       onPress={onSelect}
       style={[styles.tab, { width }, fill !== undefined && { backgroundColor: fill }]}
     >
@@ -133,6 +171,12 @@ function DocumentTab({ active, colors, focused, onClose, onLayout, onSelect, sep
       </Pressable>
     </Pressable>
   );
+  // The native drag lifts a snapshot of the tab; a click without movement still selects it.
+  return drag ? (
+    <DragDropView acceptedOperations={[]} dragPreview="snapshot" onDragStart={drag.onDragStart} onLayout={onLayout} source={drag.payload} sourceOperations={["move"]}>
+      {tab}
+    </DragDropView>
+  ) : tab;
 }
 
 const styles = StyleSheet.create({
@@ -147,6 +191,19 @@ const styles = StyleSheet.create({
     height: 16,
     justifyContent: "center",
     width: 16,
+  },
+  dropMarker: {
+    borderRadius: 1,
+    height: 18,
+    position: "absolute",
+    width: 2,
+  },
+  dropTarget: {
+    alignSelf: "stretch",
+    alignItems: "center",
+    flex: 1,
+    flexDirection: "row",
+    gap,
   },
   dragSpace: {
     alignSelf: "stretch",

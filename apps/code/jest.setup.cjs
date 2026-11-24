@@ -11,3 +11,9 @@ jest.mock("@legendapp/spark/ui/sidebar", () => {
   };
 });
 jest.mock("@legendapp/spark/ui/symbol", () => ({ SFSymbol: () => null }));
+jest.mock("@legendapp/spark/drag-drop", () => {
+  const React = require("react");
+  const { View } = require("react-native");
+
+  return { DragDropView: props => React.createElement(View, props) };
+});

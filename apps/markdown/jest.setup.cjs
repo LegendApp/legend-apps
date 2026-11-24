@@ -21,6 +21,13 @@ jest.mock("@legendapp/spark/menus", () => ({
   useMenu: jest.fn(),
 }));
 
+jest.mock("@legendapp/spark/drag-drop", () => {
+  const React = require("react");
+  const { View } = require("react-native");
+
+  return { DragDropView: props => React.createElement(View, props) };
+});
+
 // Mock Fabric hosts, not their JS wrappers or the design-system controls.
 jest.mock("@legendapp/spark-ui/src/radio-group/RadioGroupNativeComponent", () => "SparkRadioGroup");
 jest.mock("@legendapp/spark-ui/src/native-select/NativeSelectNativeComponent", () => "NativeSelect");

@@ -548,6 +548,51 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
       await other.unmount();
     });
 
+    it("drags tabs between panes: onto a bar slot, onto an edge to split, closing an emptied pane", async () => {
+      jest.useFakeTimers();
+      const { createPaneLayout, openPaneTab, splitPane } = jest.requireActual("@legend-apps/workspace");
+      const saved = openPaneTab(splitPane(createPaneLayout({ active: "/docs/a.md", paths: ["/docs/a.md", "/docs/b.md"] }), "horizontal"), "p1", "/docs/c.md");
+      mockSavedPaneLayout = JSON.parse(JSON.stringify({ ...saved, panes: { ...saved.panes, p1: { active: "/docs/c.md", paths: ["/docs/c.md"] } } }));
+      const view = await render(<MarkdownEditorWindow />);
+      await measure(view);
+      type Node = ReturnType<typeof paneRect>;
+      const findAll = (node: Node, match: (node: Node) => boolean): Node[] => [
+        ...(match(node) ? [node] : []),
+        ...node.children.flatMap(child => typeof child === "string" ? [] : findAll(child as Node, match)),
+      ];
+      const drag = (paneId: string, path: string) => act(async () => {
+        findAll(paneRect(view, paneId), node => node.props.source?.data?.["application/x-legend-markdown-tab"] === path)[0].props.onDragStart();
+      });
+      const targets = (paneId: string) => findAll(paneRect(view, paneId), node => typeof node.props.onDrop === "function");
+      const tabsOf = (paneId: string) => within(paneRect(view, paneId)).queryAllByLabelText(/\.md$/).filter(node => node.props.accessibilityRole === "tab").map(node => node.props.accessibilityLabel);
+
+      // Onto p1's right edge: p1 splits and the new pane holds just the tab.
+      await drag("p0", "/docs/b.md");
+      const card = targets("p1").find(node => node.props.onLayout)!;
+      await act(async () => card.props.onLayout({ nativeEvent: { layout: { height: 770, width: 594 } } }));
+      await act(async () => card.props.onDragOver({ operation: "move", x: 580, y: 300 }));
+      await act(async () => card.props.onDrop({ operation: "move", x: 580, y: 300 }));
+      expect(tabsOf("p0")).toEqual(["a.md"]);
+      expect(tabsOf("p2")).toEqual(["b.md"]);
+      expect(paneStyle(view, "p2").left).toBeGreaterThan(paneStyle(view, "p1").left);
+
+      // Onto p0's bar before a.md: p1 loses its last tab and closes; its shown document is saved first.
+      mockSession.prepareCurrentDocumentForClose.mockClear();
+      await drag("p1", "/docs/c.md");
+      await act(async () => targets("p0").find(node => !node.props.onLayout)!.props.onDrop({ operation: "move", x: -10, y: 10 }));
+      expect(mockSession.prepareCurrentDocumentForClose).toHaveBeenCalledWith({ autosaveEnabled: true, reason: "close" });
+      expect(view.queryByTestId("markdown-pane-p1")).toBeNull();
+      expect(tabsOf("p0")).toEqual(["c.md", "a.md"]);
+
+      await act(async () => { jest.advanceTimersByTime(300); });
+      const { setMarkdownPaneLayoutSetting } = jest.requireMock("../markdownSettings");
+      expect(setMarkdownPaneLayoutSetting).toHaveBeenLastCalledWith(expect.objectContaining({
+        focused: "p0",
+        panes: { p0: { active: "/docs/c.md", paths: ["/docs/c.md", "/docs/a.md"] }, p2: { active: "/docs/b.md", paths: ["/docs/b.md"] } },
+      }));
+      await view.unmount();
+    });
+
     it("resizes live while dragging a divider and evens a split on double-click", async () => {
       const view = await render(<MarkdownEditorWindow files={["/docs/a.md"]} />);
       await measure(view);
