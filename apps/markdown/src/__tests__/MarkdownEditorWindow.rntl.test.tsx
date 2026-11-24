@@ -1,5 +1,6 @@
 import { act, fireEvent, render, within } from "@testing-library/react-native";
 import { watch } from "@legendapp/spark/files";
+import { beforeWindowClose } from "@legendapp/spark/windows";
 import { observable } from "@legendapp/state";
 import React from "react";
 import { StyleSheet, Text } from "react-native";
@@ -7,11 +8,14 @@ import type { TestInstance } from "test-renderer";
 import { MarkdownEditorWindow } from "../MarkdownEditorWindow";
 import { newMarkdownDocumentLaunchArgument } from "../markdownFiles";
 import { getLastMarkdownDocumentPath, getMarkdownStartupBehaviorSetting } from "../markdownSettings";
-import { useMarkdownAppExit, useMarkdownWindowCloseRequest } from "../useMarkdownDocumentEvents";
+import { useMarkdownAppExit } from "../useMarkdownDocumentEvents";
 import type { MarkdownDocumentSessionState } from "../useMarkdownDocumentSession";
 
 const mockUseMarkdownAppExit = useMarkdownAppExit as jest.MockedFunction<typeof useMarkdownAppExit>;
-const mockUseMarkdownWindowCloseRequest = useMarkdownWindowCloseRequest as jest.MockedFunction<typeof useMarkdownWindowCloseRequest>;
+const mockBeforeWindowClose = jest.mocked(beforeWindowClose);
+const { useMarkdownDocumentSession: mockUseMarkdownDocumentSession } = jest.requireMock<{
+  useMarkdownDocumentSession: jest.Mock<typeof mockSession, []>;
+}>("../useMarkdownDocumentSession");
 const mockWatchFiles = watch as jest.MockedFunction<typeof watch>;
 
 const mockMarkdownE2EEditorSmoke = jest.fn((props: { autoSelectBlocks?: boolean; variant?: string }) => (
@@ -67,6 +71,11 @@ const mockSession = {
   setSaveState: jest.fn(),
 };
 
+jest.mock("@legendapp/spark/windows", () => ({
+  addWindowListener: jest.fn(async () => ({ remove: jest.fn(async () => {}) })),
+  beforeWindowClose: jest.fn(async () => ({ remove: jest.fn(async () => {}) })),
+}));
+
 jest.mock("@legendapp/spark/ui/glass", () => ({
   GlassView: (props: object) => require("react").createElement(require("react-native").View, { ...props, testID: "mock-glass" }),
 }));
@@ -116,13 +125,13 @@ jest.mock("../MarkdownFloatingSurface", () => ({
 }));
 
 jest.mock("../useMarkdownDocumentSession", () => ({
-  useMarkdownDocumentSession: () => mockSession,
+  useMarkdownDocumentSession: jest.fn(() => mockSession),
 }));
 
 jest.mock("../useMarkdownDocumentEvents", () => ({
   getStartupMarkdownPath: jest.requireActual("../useMarkdownDocumentEvents").getStartupMarkdownPath,
   useMarkdownAppExit: jest.fn(),
-  useMarkdownWindowCloseRequest: jest.fn(),
+  useMarkdownWindowCloseRequest: jest.requireActual("../useMarkdownDocumentEvents").useMarkdownWindowCloseRequest,
   useRecentMarkdownDocumentOpener: jest.fn(),
 }));
 
@@ -178,7 +187,7 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
     mockWatchFiles.mockClear();
     mockWatchFiles.mockResolvedValue({ remove: jest.fn(async () => {}) });
     mockUseMarkdownAppExit.mockClear();
-    mockUseMarkdownWindowCloseRequest.mockClear();
+    mockBeforeWindowClose.mockClear();
     mockSessionState$.assign({
       conflict: null,
       commandState: { canCommitAndBlur: false, canRedo: false, canUndo: false },
@@ -266,12 +275,6 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
       autosaveEnabled: true,
       handleError: mockSession.handleError,
       prepareCurrentDocumentForClose: mockSession.prepareCurrentDocumentForClose,
-    });
-    expect(mockUseMarkdownWindowCloseRequest).toHaveBeenCalledWith({
-      autosaveEnabled: true,
-      handleError: mockSession.handleError,
-      prepareCurrentDocumentForClose: mockSession.prepareCurrentDocumentForClose,
-      windowId: "markdown-editor",
     });
     await view.unmount();
   });
@@ -468,6 +471,60 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
       expect(menus().paneCommandState.hasOtherPanes).toBe(false);
       await view.unmount();
       jest.useRealTimers();
+    });
+
+    it("checks both dirty panes before allowing their window to close", async () => {
+      const { createPaneLayout, openPaneTab, splitPane } = jest.requireActual("@legend-apps/workspace");
+      const layout = createPaneLayout({ active: "/docs/a.md", paths: ["/docs/a.md"] });
+      mockSavedPaneLayout = openPaneTab(splitPane(layout, "horizontal"), "p1", "/docs/b.md");
+
+      const makeDirtySession = (filename: string) => {
+        const sessionState$ = observable({ ...mockSessionState$.peek(), filename, isDirty: true });
+        return {
+          ...mockSession,
+          sessionState$,
+          prepareCurrentDocumentForClose: jest.fn(async () => {
+            sessionState$.isDirty.set(false);
+            return true;
+          }),
+        };
+      };
+      const first = makeDirtySession("/docs/a.md");
+      const second = makeDirtySession("/docs/b.md");
+      second.prepareCurrentDocumentForClose.mockResolvedValueOnce(false);
+      const sessions = [first, second];
+      mockUseMarkdownDocumentSession.mockImplementation(() => {
+        const [session] = React.useState(() => sessions.shift()!);
+        return session;
+      });
+
+      let guard: Parameters<typeof beforeWindowClose>[1] | undefined;
+      const remove = jest.fn(async () => { guard = undefined; });
+      mockBeforeWindowClose.mockImplementation(async (_windowId, handler) => {
+        if (guard) throw Object.assign(new Error("Window already has a close guard"), { code: "E_BUSY" });
+        guard = handler;
+        return { remove };
+      });
+
+      const view = await render(<MarkdownEditorWindow />);
+      try {
+        await act(async () => { expect(await guard!()).toBe(false); });
+        expect(first.prepareCurrentDocumentForClose).toHaveBeenCalledWith({ autosaveEnabled: true, reason: "close" });
+        expect(second.prepareCurrentDocumentForClose).toHaveBeenCalledWith({ autosaveEnabled: true, reason: "close" });
+        expect(first.sessionState$.isDirty.peek()).toBe(false);
+        expect(second.sessionState$.isDirty.peek()).toBe(true);
+
+        await act(async () => { expect(await guard!()).toBe(true); });
+        expect(second.sessionState$.isDirty.peek()).toBe(false);
+        expect(mockBeforeWindowClose).toHaveBeenCalledTimes(1);
+        expect(mockBeforeWindowClose).toHaveBeenCalledWith("markdown-editor", expect.any(Function), expect.any(Object));
+      } finally {
+        await view.unmount();
+        mockSavedPaneLayout = undefined;
+        mockUseMarkdownDocumentSession.mockImplementation(() => mockSession);
+        mockBeforeWindowClose.mockResolvedValue({ remove: jest.fn(async () => {}) });
+      }
+      expect(remove).toHaveBeenCalledTimes(1);
     });
 
     it("restores saved panes, tabs and focus in the main window", async () => {

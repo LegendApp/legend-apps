@@ -303,6 +303,18 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
   }), [addFolder, newFile, newFolder, openSettingsWindow, workspace.saveWorkspace, workspaceFolders.length]);
 
   const e2eRun = getMarkdownE2ERunFromLaunchArguments(launchArguments);
+  useMarkdownWindowCloseRequest({
+    windowId: e2eRun ? undefined : windowId,
+    handleError: reportError,
+    prepareWindowForClose: async () => {
+      for (const id of getPaneIds(layoutRef.current.root)) {
+        const prepareForClose = paneClosers.current.get(id);
+        if (prepareForClose && !await prepareForClose()) return false;
+      }
+      return true;
+    },
+  });
+
   const workspaceColors = displayTheme.colors;
 
   if (e2eRun) {
@@ -561,7 +573,6 @@ function MarkdownPane({
   }, [measurementSignature, documentCommandsRef]);
 
   useMarkdownAppExit({ autosaveEnabled, handleError, prepareCurrentDocumentForClose });
-  useMarkdownWindowCloseRequest({ autosaveEnabled, handleError, prepareCurrentDocumentForClose, windowId });
 
   return (
     <MarkdownPaneChrome

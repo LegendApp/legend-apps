@@ -77,15 +77,24 @@ export function useMarkdownAppExit({ autosaveEnabled, handleError, prepareCurren
   }, []);
 }
 
-export function useMarkdownWindowCloseRequest({ autosaveEnabled, handleError, prepareCurrentDocumentForClose, windowId }: Pick<DocumentEventsOptions, "handleError" | "prepareCurrentDocumentForClose" | "windowId"> & { autosaveEnabled: boolean }) {
-  const latest = useRef({ autosaveEnabled, handleError, prepareCurrentDocumentForClose });
-  latest.current = { autosaveEnabled, handleError, prepareCurrentDocumentForClose };
+export function useMarkdownWindowCloseRequest({
+  handleError,
+  prepareWindowForClose,
+  windowId,
+}: {
+  handleError: (error: unknown) => void;
+  prepareWindowForClose: () => Promise<boolean>;
+  windowId: string | undefined;
+}) {
+  const latest = useRef({ handleError, prepareWindowForClose });
+  latest.current = { handleError, prepareWindowForClose };
   const teardown = useRef(Promise.resolve());
   useEffect(() => {
+    if (windowId === undefined) return;
     let active = true;
     const onError = (error: unknown) => latest.current.handleError(error);
     const subscription = ownRegistration(teardown.current.then(() => beforeWindowClose(windowId, () => active
-      ? latest.current.prepareCurrentDocumentForClose({ autosaveEnabled: latest.current.autosaveEnabled, reason: "close" })
+      ? latest.current.prepareWindowForClose()
       : false, { onError })), onError);
     return () => {
       active = false;
