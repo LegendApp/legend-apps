@@ -13,9 +13,7 @@ import {
 type DocumentEventsOptions = {
   flushCurrentDocumentBeforeTransition: (reason?: "new" | "open" | "quit") => Promise<boolean>;
   handleError: (error: unknown) => void;
-  launchArguments?: string[];
   openSelectedFile: (path: string) => void;
-  openUntitledDocument: () => void;
   prepareCurrentDocumentForClose: (options: { autosaveEnabled: boolean; reason?: "close" | "quit" }) => Promise<boolean>;
   windowId: string;
 };
@@ -37,28 +35,6 @@ export function getStartupMarkdownPath(launchArguments: string[] | undefined) {
   return getLastMarkdownDocumentPath()
     ?? getRecentMarkdownFiles().find((file) => isMarkdownPath(file.path))?.path
     ?? null;
-}
-
-export function useMarkdownStartupDocument({
-  launchArguments,
-  openSelectedFile,
-  openUntitledDocument,
-}: Pick<DocumentEventsOptions, "launchArguments" | "openSelectedFile" | "openUntitledDocument">) {
-  const startupHandledRef = useRef(false);
-
-  useEffect(() => {
-    if (startupHandledRef.current) {
-      return;
-    }
-    startupHandledRef.current = true;
-
-    const startupPath = getStartupMarkdownPath(launchArguments);
-    if (startupPath) {
-      openSelectedFile(startupPath);
-    } else {
-      openUntitledDocument();
-    }
-  }, [launchArguments, openSelectedFile, openUntitledDocument]);
 }
 
 export function useRecentMarkdownDocumentOpener({

@@ -2,16 +2,9 @@ import { render, waitFor } from "@testing-library/react-native";
 import React from "react";
 import { beforeWindowClose } from "@legendapp/spark/windows";
 import { beforeQuit } from "@legendapp/spark/app";
-import { newMarkdownDocumentLaunchArgument } from "../markdownFiles";
-import {
-  getLastMarkdownDocumentPath,
-  getMarkdownStartupBehaviorSetting,
-} from "../markdownSettings";
-import { useMarkdownAppExit, useMarkdownWindowCloseRequest, useMarkdownStartupDocument } from "../useMarkdownDocumentEvents";
+import { useMarkdownAppExit, useMarkdownWindowCloseRequest } from "../useMarkdownDocumentEvents";
 
 const mockAddAppExitListener = beforeQuit as jest.MockedFunction<typeof beforeQuit>;
-const mockGetLastMarkdownDocumentPath = getLastMarkdownDocumentPath as jest.MockedFunction<typeof getLastMarkdownDocumentPath>;
-const mockGetMarkdownStartupBehaviorSetting = getMarkdownStartupBehaviorSetting as jest.MockedFunction<typeof getMarkdownStartupBehaviorSetting>;
 
 jest.mock("@legendapp/spark/app", () => ({
   beforeQuit: jest.fn(),
@@ -56,31 +49,11 @@ function AppExitHarness({
   return null;
 }
 
-function StartupHarness({
-  launchArguments,
-  openSelectedFile,
-  openUntitledDocument,
-}: {
-  launchArguments?: string[];
-  openSelectedFile: (path: string) => void;
-  openUntitledDocument: () => void;
-}) {
-  useMarkdownStartupDocument({
-    launchArguments,
-    openSelectedFile,
-    openUntitledDocument,
-  });
-
-  return null;
-}
-
 describe("useMarkdownAppExit", () => {
   beforeEach(() => {
     (beforeWindowClose as jest.Mock).mockClear();
     mockAddAppExitListener.mockReset();
     mockAddAppExitListener.mockResolvedValue({ remove: jest.fn(async () => {}) });
-    mockGetLastMarkdownDocumentPath.mockReturnValue(null);
-    mockGetMarkdownStartupBehaviorSetting.mockReturnValue("newDocument");
   });
 
   it("prepares the document for quit before completing a requested app exit", async () => {
@@ -158,30 +131,11 @@ describe("useMarkdownAppExit", () => {
     await view.unmount();
     registration.mockImplementation(async () => ({ remove: jest.fn(async () => {}) }));
   });
-
-  it("opens an untitled document when the new-document launch hint is present", async () => {
-    const openSelectedFile = jest.fn();
-    const openUntitledDocument = jest.fn();
-    mockGetMarkdownStartupBehaviorSetting.mockReturnValue("lastDocument");
-    mockGetLastMarkdownDocumentPath.mockReturnValue("/tmp/recent.md");
-
-    render(
-      <StartupHarness
-        launchArguments={[newMarkdownDocumentLaunchArgument]}
-        openSelectedFile={openSelectedFile}
-        openUntitledDocument={openUntitledDocument}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(openUntitledDocument).toHaveBeenCalledTimes(1);
-    });
-    expect(openSelectedFile).not.toHaveBeenCalled();
-  });
 });
 
 it("keeps one window close guard while autosave and close callbacks change", async () => {
   const remove = jest.fn(async () => {});
+  jest.mocked(beforeWindowClose).mockClear();
   jest.mocked(beforeWindowClose).mockResolvedValue({ remove });
   const first = jest.fn(async () => true), second = jest.fn(async () => false);
   const handleError = jest.fn();

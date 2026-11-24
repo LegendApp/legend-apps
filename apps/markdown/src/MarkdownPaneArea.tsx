@@ -3,6 +3,7 @@ import {
   collapsePaneRect,
   findSplit,
   getPanePlacement,
+  paneGap,
   type PaneFrame,
   type PaneNode,
   type PaneRect,
@@ -12,7 +13,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Animated, Easing, PanResponder, StyleSheet, View, type LayoutChangeEvent, type ViewStyle } from "react-native";
 
 /** Silica's pane glide: 300 ms that settles without overshoot. */
-export const paneAnimationDuration = 300;
+const paneAnimationDuration = 300;
 const paneEasing = Easing.bezier(0.25, 0.1, 0.25, 1);
 const cardRadius = 10;
 const doubleClickMs = 350;
@@ -22,7 +23,7 @@ const resizeCursors = {
   vertical: "row-resize" as unknown as ViewStyle["cursor"],
 };
 
-export type MarkdownPaneAreaProps = {
+type MarkdownPaneAreaProps = {
   /** False while a divider drags, so panes follow the pointer without easing. */
   animate: boolean;
   cardColor: string;
@@ -30,7 +31,7 @@ export type MarkdownPaneAreaProps = {
   hairlineColor: string;
   onResize: (splitId: string, fraction: number, animate: boolean) => void;
   onSizeChange: (size: { height: number; width: number }) => void;
-  renderPane: (paneId: string, frame: PaneFrame) => ReactNode;
+  renderPane: (frame: PaneFrame) => ReactNode;
   root: PaneNode;
   splits: SplitFrame[];
   tabBarHeight: number;
@@ -50,7 +51,7 @@ export function getPaneCardColor(background: string, appearance: "dark" | "light
   }).join("")}`;
 }
 
-type LeavingPane = { from: PaneFrame; id: string; to: PaneRect };
+type LeavingPane = { from: PaneFrame; to: PaneRect };
 
 /**
  * Lays document panes out as rounded cards over the window's glass. Split, close and even-out glide;
@@ -72,8 +73,8 @@ export function MarkdownPaneArea({ animate, cardColor, frames, hairlineColor, on
     }
     for (const old of before.frames) {
       const placement = getPanePlacement(before.root, old.id);
-      if (placement && !frames.some(frame => frame.id === old.id) && !leaving.current.some(pane => pane.id === old.id)) {
-        leaving.current = [...leaving.current, { from: old, id: old.id, to: collapsePaneRect(old, placement) }];
+      if (placement && !frames.some(frame => frame.id === old.id) && !leaving.current.some(pane => pane.from.id === old.id)) {
+        leaving.current = [...leaving.current, { from: old, to: collapsePaneRect(old, placement) }];
       }
     }
   }
@@ -91,13 +92,13 @@ export function MarkdownPaneArea({ animate, cardColor, frames, hairlineColor, on
   return (
     <View onLayout={(event: LayoutChangeEvent) => onSizeChange(event.nativeEvent.layout)} style={styles.area} testID="markdown-pane-area">
       {leaving.current.map(pane => (
-        <AnimatedRect animate enterFrom={pane.from} key={`leaving-${pane.id}`} rect={pane.to}>
+        <AnimatedRect animate enterFrom={pane.from} key={`leaving-${pane.from.id}`} rect={pane.to}>
           {() => <View style={[styles.card, { backgroundColor: cardColor, borderColor: hairlineColor, marginTop: tabBarHeight }]} />}
         </AnimatedRect>
       ))}
       {frames.map(frame => (
         <AnimatedRect animate={glide} enterFrom={enterFrom.get(frame.id)} key={frame.id} rect={frame}>
-          {content => renderPane(frame.id, { ...frame, ...content })}
+          {content => renderPane({ ...content, id: frame.id })}
         </AnimatedRect>
       ))}
       {splits.map(split => (
@@ -109,8 +110,7 @@ export function MarkdownPaneArea({ animate, cardColor, frames, hairlineColor, on
 
 /**
  * A pane's tab row on the glass above its card: solid page color, 10 pt continuous corners, a hairline and a
- * soft shadow. The card follows the animated frame while the content keeps the final `frame` size, so the
- * editor lays out once per change rather than on every animation frame.
+ * soft shadow. Existing pane content keeps its previous layout size until the glide ends.
  */
 export function MarkdownPaneChrome({ cardColor, children, frame, hairlineColor, tabBar, tabBarHeight }: {
   cardColor: string;
@@ -206,7 +206,7 @@ function SplitDivider({ onResize, root, split }: { onResize: MarkdownPaneAreaPro
       if (Math.abs(delta) < 1 && !drag.current.moved) return;
       drag.current.moved = true;
       const size = horizontal ? frame.width : frame.height;
-      const gap = horizontal ? 6 : 0;
+      const gap = horizontal ? paneGap : 0;
       resize(frame.id, clampSplitFraction(node, size, drag.current.fraction + delta / (size + gap)), false);
     },
     onPanResponderRelease: () => {

@@ -84,7 +84,7 @@ export function splitPane(layout: PaneLayout, axis: PaneAxis, paneId = layout.fo
 function removeNode(node: PaneNode, paneId: string): { heir?: string; node: PaneNode } {
   if (node.kind === "pane") return { node };
   for (const [side, other] of [[node.first, node.second], [node.second, node.first]] as const) {
-    if (side.kind === "pane" && side.id === paneId) return { heir: getPaneIds(other)[side === node.first ? 0 : getPaneIds(other).length - 1], node: other };
+    if (side.kind === "pane" && side.id === paneId) return { heir: getPaneIds(other).at(side === node.first ? 0 : -1), node: other };
   }
   const first = removeNode(node.first, paneId);
   if (first.heir) return { heir: first.heir, node: { ...node, first: first.node } };
@@ -156,7 +156,7 @@ export function renamePaneTab(layout: PaneLayout, paneId: string, from: string, 
 /** Closes a tab; a split pane left with no tabs closes too. */
 export function closePaneTab(layout: PaneLayout, paneId: string, path: string): PaneLayout {
   const next = updateTabs(layout, paneId, tabs => closeDocumentTab(tabs, path));
-  return next.panes[paneId]?.paths.length === 0 && getPaneHeir(next, paneId) ? closePane(next, paneId) : next;
+  return next.panes[paneId]?.paths.length === 0 ? closePane(next, paneId) : next;
 }
 
 /** Lays the tree out in `rect`: side-by-side panes keep a gap between them; stacked panes share an edge. */
@@ -229,15 +229,17 @@ function parseNode(value: unknown, ids: Set<string>): PaneNode | undefined {
   if (node.kind !== "split" || (node.axis !== "horizontal" && node.axis !== "vertical")) return undefined;
   if (typeof node.fraction !== "number" || !(node.fraction > 0 && node.fraction < 1)) return undefined;
   const first = parseNode(node.first, ids);
-  const second = first && parseNode(node.second, ids);
-  return second ? { kind: "split", id: node.id, axis: node.axis, fraction: node.fraction, first: first!, second } : undefined;
+  if (!first) return undefined;
+  const second = parseNode(node.second, ids);
+  return second ? { kind: "split", id: node.id, axis: node.axis, fraction: node.fraction, first, second } : undefined;
 }
 
 /** Reads a saved layout; anything missing or inconsistent gives undefined, so the window falls back to one pane. */
 export function parsePaneLayout(value: unknown): PaneLayout | undefined {
   if (!value || typeof value !== "object") return undefined;
   const saved = value as Record<string, unknown>;
-  const root = parseNode(saved.root, new Set());
+  const nodeIds = new Set<string>();
+  const root = parseNode(saved.root, nodeIds);
   if (!root || typeof saved.focused !== "string" || typeof saved.nextId !== "number" || !saved.panes || typeof saved.panes !== "object") return undefined;
   const ids = getPaneIds(root);
   const panes: Record<string, DocumentTabs> = {};
@@ -247,7 +249,11 @@ export function parsePaneLayout(value: unknown): PaneLayout | undefined {
     panes[id] = tabs;
   }
   if (!ids.includes(saved.focused)) return undefined;
-  const highestId = Math.max(...[...JSON.stringify(root).matchAll(/"id":"[ps](\d+)"/g)].map(match => Number(match[1])), 0);
+  let highestId = 0;
+  for (const id of nodeIds) {
+    const match = /^[ps](\d+)$/.exec(id);
+    if (match) highestId = Math.max(highestId, Number(match[1]));
+  }
   return { focused: saved.focused, nextId: Math.max(saved.nextId, highestId + 1), panes, root };
 }
 

@@ -5,6 +5,8 @@ import React from "react";
 import { StyleSheet, Text } from "react-native";
 import type { TestInstance } from "test-renderer";
 import { MarkdownEditorWindow } from "../MarkdownEditorWindow";
+import { newMarkdownDocumentLaunchArgument } from "../markdownFiles";
+import { getLastMarkdownDocumentPath, getMarkdownStartupBehaviorSetting } from "../markdownSettings";
 import { useMarkdownAppExit, useMarkdownWindowCloseRequest } from "../useMarkdownDocumentEvents";
 import type { MarkdownDocumentSessionState } from "../useMarkdownDocumentSession";
 
@@ -118,9 +120,8 @@ jest.mock("../useMarkdownDocumentSession", () => ({
 }));
 
 jest.mock("../useMarkdownDocumentEvents", () => ({
-  getStartupMarkdownPath: jest.fn(() => null),
+  getStartupMarkdownPath: jest.requireActual("../useMarkdownDocumentEvents").getStartupMarkdownPath,
   useMarkdownAppExit: jest.fn(),
-  useMarkdownStartupDocument: jest.fn(),
   useMarkdownWindowCloseRequest: jest.fn(),
   useRecentMarkdownDocumentOpener: jest.fn(),
 }));
@@ -140,6 +141,8 @@ let mockSavedPaneLayout: unknown;
 
 jest.mock("../markdownSettings", () => ({
   applyMarkdownThemeSetting: jest.fn(),
+  getLastMarkdownDocumentPath: jest.fn(),
+  getMarkdownStartupBehaviorSetting: jest.fn(),
   getMarkdownPaneLayoutSetting: () => jest.requireActual("@legend-apps/workspace").parsePaneLayout(mockSavedPaneLayout),
   setMarkdownPaneLayoutSetting: jest.fn(),
   getMarkdownSidebarFoldersSetting: () => mockSidebarFolders,
@@ -163,6 +166,8 @@ jest.mock("../userThemes", () => ({
 
 describe("MarkdownEditorWindow e2e launch routing", () => {
   beforeEach(() => {
+    jest.mocked(getLastMarkdownDocumentPath).mockReturnValue(null);
+    jest.mocked(getMarkdownStartupBehaviorSetting).mockReturnValue("newDocument");
     mockCheckForExternalChanges.mockClear();
     (globalThis as typeof globalThis & { __DEV__?: boolean }).__DEV__ = true;
     mockMarkdownE2EEditorSmoke.mockClear();
@@ -337,6 +342,19 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
     expect(view.queryByText("Untitled")).toBeNull();
     expect(view.queryByText("Start writing")).toBeNull();
     expect(mockMarkdownDocument).toHaveBeenLastCalledWith(expect.objectContaining({ autoFocusFirstBlock: true }));
+    await view.unmount();
+  });
+
+  it("opens an untitled pane on a new-document launch even when the startup setting restores the last document", async () => {
+    jest.mocked(getMarkdownStartupBehaviorSetting).mockReturnValue("lastDocument");
+    jest.mocked(getLastMarkdownDocumentPath).mockReturnValue("/tmp/recent.md");
+    mockSession.openSelectedFile.mockClear();
+    mockSession.openUntitledDocument.mockClear();
+
+    const view = await render(<MarkdownEditorWindow launchArguments={[newMarkdownDocumentLaunchArgument]} />);
+
+    expect(mockSession.openUntitledDocument).toHaveBeenCalledTimes(1);
+    expect(mockSession.openSelectedFile).not.toHaveBeenCalled();
     await view.unmount();
   });
 

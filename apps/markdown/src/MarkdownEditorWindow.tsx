@@ -341,7 +341,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
         hairlineColor={hairlineColor}
         onResize={resize}
         onSizeChange={setAreaSize}
-        renderPane={(paneId, frame) => (
+        renderPane={frame => (
           <MarkdownPane
             actions={paneActions}
             autosaveEnabled={autosave === "enabled"}
@@ -350,19 +350,16 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
             commandState={paneCommandState}
             commands={paneCommands}
             dangerColor={displayTheme.colors.danger}
-            focused={paneId === layout.focused}
+            focused={frame.id === layout.focused}
             formattingToolbarMode={formattingToolbarMode}
             frame={frame}
-            hairlineColor={hairlineColor}
-            isOnlyPane={!hasOtherPanes}
             markdownLayout={markdownLayout}
             markdownStyle={markdownStyle}
             measurementSignature={measurementSignature}
             nativeWindowAppearance={nativeWindowAppearance}
             onToggleSidebar={!sidebarOpen && frame.x <= areaLeft && frame.y === 0 ? workspace.toggleSidebar : undefined}
-            paneId={paneId}
-            startupArguments={paneId === "p0" && !initialPanes.restored ? startupArguments ?? [] : undefined}
-            tabs={layout.panes[paneId]}
+            startupArguments={frame.id === "p0" && !initialPanes.restored ? startupArguments ?? [] : undefined}
+            tabs={layout.panes[frame.id]}
             theme={documentTheme}
             titleBarHeight={titleBarHeight}
             windowBackgroundColor={displayTheme.colors.windowBackground}
@@ -419,15 +416,12 @@ type MarkdownPaneProps = {
   focused: boolean;
   formattingToolbarMode: MarkdownFormattingToolbarMode;
   frame: PaneFrame;
-  hairlineColor: string;
-  isOnlyPane: boolean;
   markdownLayout: MarkdownDocumentProps["markdownLayout"];
   markdownStyle: MarkdownDocumentProps["markdownStyle"];
   measurementSignature: string;
   nativeWindowAppearance: "dark" | "light";
   /** Set for the top-leading pane while the sidebar is hidden: it shows the toggle and clears the traffic lights. */
   onToggleSidebar?: () => void;
-  paneId: string;
   /** The launch arguments for the window's first pane when nothing was restored. */
   startupArguments?: string[];
   tabs: DocumentTabs;
@@ -452,14 +446,11 @@ function MarkdownPane({
   focused,
   formattingToolbarMode,
   frame,
-  hairlineColor,
-  isOnlyPane,
   markdownLayout,
   markdownStyle,
   measurementSignature,
   nativeWindowAppearance,
   onToggleSidebar,
-  paneId,
   startupArguments,
   tabs,
   theme,
@@ -468,6 +459,8 @@ function MarkdownPane({
   windowId,
   windowMenus,
 }: MarkdownPaneProps) {
+  const paneId = frame.id;
+  const isOnlyPane = !commandState.hasOtherPanes;
   const session = useMarkdownDocumentSession({
     onFileOpened: useCallback((path: string) => actions.openTab(paneId, path), [actions, paneId]),
     onFileSavedAs: useCallback((from: string | null, to: string) => from ? actions.renameTab(paneId, from, to) : actions.openTab(paneId, to), [actions, paneId]),
@@ -574,7 +567,7 @@ function MarkdownPane({
     <MarkdownPaneChrome
       cardColor={backgroundStyle.backgroundColor}
       frame={frame}
-      hairlineColor={hairlineColor}
+      hairlineColor={colors.border}
       tabBar={(
         <View onStartShouldSetResponderCapture={() => { actions.focus(paneId); return false; }} style={styles.root}>
           <DocumentTabBar
