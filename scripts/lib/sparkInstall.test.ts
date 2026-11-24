@@ -272,7 +272,7 @@ test("catalog version mismatches in workspace links force Bun to relink them", t
   assert.equal(installSparkWorkspace({ ...f.options, offline: true }, () => assert.fail("unexpected install")), "skipped");
 });
 
-test("a missing nested Spark lock dependency removes Spark and reinstalls it", t => {
+test("a Spark nested dependency mismatch forces a reinstall instead of skipping", t => {
   const f = fixture(t);
   const sdk = "project/node_modules/@legendapp/spark";
   f.write(`${sdk}/package.json`, { name: "@legendapp/spark", version: "0.0.5" });
@@ -286,7 +286,7 @@ test("a missing nested Spark lock dependency removes Spark and reinstalls it", t
 
   assert.equal(installSparkWorkspace(f.options, args => {
     assert.deepEqual(args, ["install", "--linker", "hoisted", "--prefer-offline"]);
-    assert.equal(fs.existsSync(path.join(f.project, sdk)), false);
+    assert.equal(fs.existsSync(path.join(f.repoRoot, sdk)), false);
     f.write(`${sdk}/package.json`, { name: "@legendapp/spark", version: "0.0.5" });
     f.write(`${sdk}/node_modules/ws/package.json`, { name: "ws", version: "8.21.0" });
   }), "installed");
@@ -502,8 +502,7 @@ export function prepareSparkWorkspace(manifest) {
   for (const file of ["spark-app.ts", "spark-warm.ts", "lib/localSpark.cjs", "lib/sparkInstall.ts"]) {
     f.write(`scripts/${file}`, fs.readFileSync(path.resolve("scripts", file), "utf8"));
   }
-  const sdkLink = "node_modules/@legendapp/spark";
-  const sdk = path.join(f.repoRoot, sdkLink);
+  const sdk = path.join(f.repoRoot, "node_modules/@legendapp/spark");
   const sdkStore = path.join(f.repoRoot, "spark-sdk");
   f.write("bin/bun", `#!/usr/bin/env node
 const fs = require("node:fs"), path = require("node:path");
@@ -519,18 +518,16 @@ process.exit(fs.existsSync(${JSON.stringify(path.join(f.repoRoot, "fail"))}) ? 2
     f.write(`apps/${id}/package.json`, { name: id });
   }
   const env = { ...process.env, PATH: `${path.join(f.repoRoot, "bin")}:${process.env.PATH}`, LEGEND_OFFLINE: "0", EXPO_OFFLINE: "0" };
-  const invoke = (script: string, args: string[], offlineEnv = false) => spawnSync(process.execPath, [path.join(f.repoRoot, `scripts/${script}.ts`), ...args], {
-    env: { ...env, LEGEND_OFFLINE: offlineEnv ? "1" : "0" }, encoding: "utf8", timeout: 30_000,
-  });
+  const invoke = (script: string, args: string[], offlineEnv = false) => {
+    // The store is where Bun would link the SDK back from, so it holds what the tests installed.
+    if (fs.existsSync(sdk)) fs.cpSync(sdk, sdkStore, { recursive: true });
+    return spawnSync(process.execPath, [path.join(f.repoRoot, `scripts/${script}.ts`), ...args], {
+      env: { ...env, LEGEND_OFFLINE: offlineEnv ? "1" : "0" }, encoding: "utf8", timeout: 30_000,
+    });
+  };
   const attempts = () => fs.existsSync(path.join(f.repoRoot, "attempts"))
     ? fs.readFileSync(path.join(f.repoRoot, "attempts"), "utf8").trim().split("\n").map(line => JSON.parse(line)) : [];
-  // Bun can only link the SDK back from the store it downloaded, so every SDK file a test
-  // writes goes to the store too.
-  const write = (file: string, content: string | object) => {
-    f.write(file, content);
-    if (file.startsWith(`${sdkLink}/`)) f.write(path.join("spark-sdk", file.slice(sdkLink.length + 1)), content);
-  };
-  return { ...f, write, invoke, attempts };
+  return { ...f, invoke, attempts };
 }
 
 function nativeFixture(f: ReturnType<typeof cliFixture>) {
