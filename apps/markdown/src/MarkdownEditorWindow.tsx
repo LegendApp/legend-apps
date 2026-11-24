@@ -43,9 +43,10 @@ import {
 } from "@legend-apps/workspace";
 import { closeWindow } from "@legendapp/spark/windows";
 import { getPaneCardColor, MarkdownPaneArea, MarkdownPaneChrome, PaneTabDropTarget, type TabDropZone } from "./MarkdownPaneArea";
-import { useValue } from "@legendapp/state/react";
+import type { Observable } from "@legendapp/state";
+import { useObservable, useValue } from "@legendapp/state/react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { InteractionManager, PlatformColor, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { InteractionManager, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import {
   MarkdownE2EEditorSmoke,
   type MarkdownE2EEditorSmokeVariant,
@@ -341,6 +342,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
   });
 
   const workspaceColors = displayTheme.colors;
+  const sidebarEdge$ = useObservable(0);
 
   if (e2eRun) {
     const editorSmokeVariant = editorSmokeVariantForScenario(e2eRun.scenario);
@@ -394,7 +396,6 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
             tabs={layout.panes[frame.id]}
             theme={documentTheme}
             titleBarHeight={titleBarHeight}
-            windowBackgroundColor={displayTheme.colors.windowBackground}
             windowId={windowId}
             windowMenus={windowMenus}
           />
@@ -408,14 +409,14 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
 
   return (
     <View style={styles.root}>
-      <ChromeSurface backgroundStyle={backgroundStyle} />
+      <WindowGlass backgroundStyle={backgroundStyle} dark={nativeWindowAppearance === "dark"} left$={sidebarEdge$} />
       <SidebarSplitView
         appearance={nativeWindowAppearance}
         content={content}
         dividerColor="#00000000"
         sidebar={(
           <View style={styles.root}>
-            <ChromeSurface backgroundStyle={backgroundStyle} />
+            <ChromeTint backgroundStyle={backgroundStyle} />
             <WorkspaceSidebar
               activePath={currentFile}
               colors={workspaceColors}
@@ -431,6 +432,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
             />
           </View>
         )}
+        onResize={({ sidebarWidth, sidebarX }) => sidebarEdge$.set(sidebarX + sidebarWidth)}
         onSidebarCollapsedChange={collapsed => workspace.setSidebarOpen(!collapsed)}
         sidebarCollapsed={!sidebarOpen}
         sidebarWidth={220}
@@ -440,14 +442,23 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
   );
 }
 
-/** The window's one chrome surface, behind the sidebar, the title bar and the gutters. Only the pane cards differ from it. */
-function ChromeSurface({ backgroundStyle }: { backgroundStyle: { backgroundColor: string } }) {
+/**
+ * The window's chrome is Liquid Glass tinted with the page color at 0.8, behind the sidebar, the title bar and the
+ * gutters; only the pane cards differ. AppKit already puts the sidebar in its own glass, which would frost this glass
+ * a second time, so this glass starts at the sidebar's edge and the sidebar takes only the tint.
+ */
+function WindowGlass({ backgroundStyle, dark, left$ }: { backgroundStyle: { backgroundColor: string }; dark: boolean; left$: Observable<number> }) {
   return (
-    <View pointerEvents="none" style={styles.chrome}>
-      <GlassView glassStyle="clear" style={styles.glass} />
-      <View style={[StyleSheet.absoluteFillObject, backgroundStyle, { opacity: 0.8 }]} />
+    <View pointerEvents="none" style={[styles.chrome, { left: useValue(left$) }]}>
+      <GlassView style={styles.glass} />
+      {/* AppKit's sidebar glass frosts more than plain glass in dark mode; a little more tint here matches it. */}
+      <ChromeTint backgroundStyle={backgroundStyle} opacity={dark ? 0.88 : 0.8} />
     </View>
   );
+}
+
+function ChromeTint({ backgroundStyle, opacity = 0.8 }: { backgroundStyle: { backgroundColor: string }; opacity?: number }) {
+  return <View pointerEvents="none" style={[StyleSheet.absoluteFillObject, backgroundStyle, { opacity }]} />;
 }
 
 type WindowMenuOptions = Pick<Parameters<typeof useMarkdownMenus>[0], "hasFolders" | "onAddFolder" | "onNewFile" | "onNewFolder" | "onOpenSettings" | "onSaveWorkspace">;
@@ -474,7 +485,6 @@ type MarkdownPaneProps = {
   tabs: DocumentTabs;
   theme: MarkdownDocumentProps["theme"];
   titleBarHeight: number;
-  windowBackgroundColor: string;
   windowId: string;
   windowMenus: WindowMenuOptions;
 };
@@ -500,7 +510,6 @@ function MarkdownPane({
   tabs,
   theme,
   titleBarHeight,
-  windowBackgroundColor,
   windowId,
   windowMenus,
 }: MarkdownPaneProps) {
@@ -643,7 +652,6 @@ function MarkdownPane({
               onFind={() => setFindVisible(true)}
               onInsertLink={insertLink}
               session={session}
-              windowBackgroundColor={windowBackgroundColor}
               windowId={windowId}
               windowMenus={windowMenus}
             />
@@ -679,7 +687,7 @@ function MarkdownPane({
   );
 }
 
-function FocusedPaneBindings({ closeActiveTab, commandState, commands, nativeWindowAppearance, onFind, onInsertLink, session, windowBackgroundColor, windowId, windowMenus }: {
+function FocusedPaneBindings({ closeActiveTab, commandState, commands, nativeWindowAppearance, onFind, onInsertLink, session, windowId, windowMenus }: {
   closeActiveTab: () => void;
   commandState: PaneCommandState;
   commands: PaneCommands;
@@ -687,7 +695,6 @@ function FocusedPaneBindings({ closeActiveTab, commandState, commands, nativeWin
   onFind: () => void;
   onInsertLink: () => void;
   session: MarkdownDocumentSession;
-  windowBackgroundColor: string;
   windowId: string;
   windowMenus: WindowMenuOptions;
 }) {
@@ -718,7 +725,6 @@ function FocusedPaneBindings({ closeActiveTab, commandState, commands, nativeWin
   });
   useMarkdownEditorWindowOptions({
     appearance: nativeWindowAppearance,
-    backgroundColor: windowBackgroundColor,
     onError: session.handleError,
     sessionState$: session.sessionState$,
     windowId,
@@ -942,12 +948,10 @@ const MarkdownDocumentSurface = memo(function MarkdownDocumentSurface({
 const styles = StyleSheet.create({
   chrome: {
     ...StyleSheet.absoluteFillObject,
-    // The content pane's native fill, so the sidebar's copy of the surface sits on the same base.
-    backgroundColor: PlatformColor("windowBackgroundColor"),
     overflow: "hidden",
   },
   glass: {
-    // Keep the rounded glass edges outside the window.
+    // Keep the rounded glass edges outside the window and the sidebar.
     position: "absolute",
     top: -48,
     bottom: -48,

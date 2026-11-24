@@ -199,21 +199,29 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
     });
   });
 
-  it("puts the sidebar and the pane cards on one surface of clear glass with a page-color overlay at 0.8, through a clear divider", async () => {
+  it("puts the pane cards on one Liquid Glass chrome that meets AppKit's sidebar glass through a clear divider", async () => {
     const view = await render(<MarkdownEditorWindow files={["/Alpha.md", "/Beta.md"]} />);
-    const [window, sidebar] = view.getAllByTestId("mock-glass").map(glass => glass.parent!);
-    for (const surface of [window, sidebar]) {
-      expect(surface.props.pointerEvents).toBe("none");
-      expect((surface.children[0] as TestInstance).props.glassStyle).toBe("clear");
-      expect((surface.children[1] as TestInstance).props.style).toEqual(expect.arrayContaining([{ opacity: 0.8 }]));
-    }
-    expect(StyleSheet.flatten(sidebar.props.style)).toEqual(StyleSheet.flatten(window.props.style));
-    expect(within(sidebar.parent!).getByText("Add Folder…")).toBeTruthy();
-    // The window's surface runs behind the whole split view, divider and content pane included.
-    const splitView = window.parent!.children[1] as TestInstance;
+    const glass = () => view.getByTestId("mock-glass");
+    expect(view.getAllByTestId("mock-glass")).toHaveLength(1);
+    const surface = glass().parent!;
+    expect(surface.props.pointerEvents).toBe("none");
+    expect(glass().props.glassStyle).toBeUndefined();
+    expect((surface.children[1] as TestInstance).props.style).toEqual(expect.arrayContaining([{ opacity: 0.8 }]));
+    // The split view sits over the glass, divider clear, with the pane cards in its content.
+    const splitView = surface.parent!.children[1] as TestInstance;
     expect(splitView.props.dividerColor).toBe("#00000000");
     expect(within(splitView).getAllByLabelText("Beta.md").some(node => node.props.accessibilityRole === "tab")).toBe(true);
     expect(within(splitView).getByTestId("markdown-pane-p0")).toBeTruthy();
+    // AppKit already draws the sidebar in glass: the sidebar takes only the tint, and this glass starts at its edge.
+    const sidebar = splitView.children[0] as TestInstance;
+    expect(within(sidebar).getByText("Add Folder…")).toBeTruthy();
+    expect(StyleSheet.flatten((sidebar.children[0] as TestInstance).props.style).opacity).toBe(0.8);
+    const left = () => StyleSheet.flatten(glass().parent!.props.style).left;
+    expect(left()).toBe(0);
+    await act(async () => splitView.props.onResize({ contentX: 221, sidebarWidth: 220, sidebarX: 0 }));
+    expect(left()).toBe(220);
+    await act(async () => splitView.props.onResize({ contentX: 0, sidebarWidth: 0, sidebarX: 0 }));
+    expect(left()).toBe(0);
     await view.unmount();
   });
 

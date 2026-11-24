@@ -1,7 +1,7 @@
 import { createSettingsWindowOptions } from "@legendapp/spark/ui/settings";
 import { createWindowsNavigator, type WindowsConfig } from "@legendapp/spark/windows";
 import { closeWindow, setWindowOptions, } from "@legendapp/spark/windows";
-import { getLegendDisplayTheme, getLegendDisplayThemeAppearance } from "@legend-apps/theme";
+import { getLegendDisplayThemeAppearance } from "@legend-apps/theme";
 import type { MarkdownSaveState } from "@legend-apps/markdown-document";
 import { editorWindowIdentifier, editorWindowModuleName, settingsWindowIdentifier, settingsWindowModuleName, } from "./appConstants";
 import { getMarkdownChromeTheme, getMarkdownDisplayThemeSetting } from "./markdownSettings";
@@ -11,16 +11,14 @@ import { loadMarkdownUserThemesSync } from "./userThemes";
 import { openOrShowWindow } from "@legend-apps/runtime-utils";
 import { openDocumentWindow, type WorkspaceWindowProps } from "@legend-apps/workspace";
 loadMarkdownUserThemesSync();
-function createMarkdownEditorWindowStyle({ appearance, backgroundColor, includeFrame, }: {
+function createMarkdownEditorWindowStyle({ appearance, includeFrame, }: {
     appearance?: "dark" | "light";
-    backgroundColor?: string;
     includeFrame: boolean;
 }) {
-    const displayThemeSetting = getMarkdownDisplayThemeSetting();
-    const displayTheme = getLegendDisplayTheme(displayThemeSetting);
     return {
-        appearance: appearance ?? getLegendDisplayThemeAppearance(displayThemeSetting),
-        backgroundColor: backgroundColor ?? displayTheme.colors.windowBackground,
+        appearance: appearance ?? getLegendDisplayThemeAppearance(getMarkdownDisplayThemeSetting()),
+        // Clear, so the editor's Liquid Glass chrome shows what is behind the window.
+        backgroundColor: "#00000000",
 
         macos: {
             toolbar: {
@@ -80,9 +78,8 @@ export function closeMarkdownEditorWindow() {
 export function showMarkdownEditorWindow() {
     return MarkdownWindowsNavigator.show(editorWindowModuleName);
 }
-export function setMarkdownEditorWindowOptions({ appearance, backgroundColor, filename, isDirty, isUntitledDocument, saveState, windowId, }: {
+export function setMarkdownEditorWindowOptions({ appearance, filename, isDirty, isUntitledDocument, saveState, windowId, }: {
     appearance: "dark" | "light";
-    backgroundColor: string;
     filename: string;
     isDirty: boolean;
     isUntitledDocument: boolean;
@@ -91,6 +88,6 @@ export function setMarkdownEditorWindowOptions({ appearance, backgroundColor, fi
 }) {
     return setWindowOptions(windowId, {
         title: markdownEditorWindowTitle({ filename, isDirty, isUntitledDocument, saveState }),
-        ...createMarkdownEditorWindowStyle({ appearance, backgroundColor, includeFrame: false })
+        ...createMarkdownEditorWindowStyle({ appearance, includeFrame: false })
     });
 }

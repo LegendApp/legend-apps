@@ -19,13 +19,11 @@ export function useMarkdownSettingsWindow({
 
 export function useMarkdownEditorWindowOptions({
   appearance,
-  backgroundColor,
   onError,
   sessionState$,
   windowId,
 }: {
   appearance: "dark" | "light";
-  backgroundColor: string;
   onError: (error: unknown) => void;
   sessionState$: MarkdownDocumentSessionState$;
   windowId: string;
@@ -38,12 +36,11 @@ export function useMarkdownEditorWindowOptions({
 
     setMarkdownEditorWindowOptions({
       appearance,
-      backgroundColor,
       filename: state.filename,
       isDirty: state.isDirty,
       isUntitledDocument: state.documentSource === "untitled",
       saveState: state.saveState,
       windowId,
     }).catch(onError);
-  }, [appearance, backgroundColor, onError, sessionState$, windowId]);
+  }, [appearance, onError, sessionState$, windowId]);
 }
