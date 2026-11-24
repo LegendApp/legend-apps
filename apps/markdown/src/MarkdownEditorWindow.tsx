@@ -43,9 +43,10 @@ import {
 } from "@legend-apps/workspace";
 import { closeWindow } from "@legendapp/spark/windows";
 import { getPaneCardColor, MarkdownPaneArea, MarkdownPaneChrome, PaneTabDropTarget, type TabDropZone } from "./MarkdownPaneArea";
-import { useValue } from "@legendapp/state/react";
+import type { Observable } from "@legendapp/state";
+import { useObservable, useValue } from "@legendapp/state/react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { InteractionManager, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { InteractionManager, PlatformColor, Pressable, StyleSheet, Text, TextInput, View, type StyleProp, type ViewStyle } from "react-native";
 import {
   MarkdownE2EEditorSmoke,
   type MarkdownE2EEditorSmokeVariant,
@@ -341,6 +342,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
   });
 
   const workspaceColors = displayTheme.colors;
+  const divider$ = useObservable({ x: 0, width: 0 });
 
   if (e2eRun) {
     const editorSmokeVariant = editorSmokeVariantForScenario(e2eRun.scenario);
@@ -366,11 +368,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
   const hairlineColor = displayTheme.colors.border;
   const content = (
     <View style={styles.root}>
-      {/* Glass shows in the title bar and the gutters around the cards. */}
-      <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
-        <GlassView glassStyle="clear" style={styles.glass} />
-        <View style={[StyleSheet.absoluteFillObject, backgroundStyle, { opacity: 0.8 }]} />
-      </View>
+      <ChromeSurface backgroundStyle={backgroundStyle} />
       <MarkdownPaneArea
         animate={animate}
         cardColor={cardColor}
@@ -417,27 +415,48 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
         appearance={nativeWindowAppearance}
         content={content}
         sidebar={(
-          <WorkspaceSidebar
-            activePath={currentFile}
-            colors={workspaceColors}
-            files={workspace.state.files}
-            folderMenu={{ newFileName: newMarkdownFileName, onRemoveFolder: workspace.removeFolder, windowId }}
-            folders={workspaceFolders}
-            isDocumentPath={isMarkdownPath}
-            onAddFolder={addFolder}
-            onError={reportError}
-            onOpenFile={openInFocusedPane}
-            onToggleSidebar={workspace.toggleSidebar}
-            titleBarHeight={titleBarHeight}
-          />
+          <View style={styles.root}>
+            <ChromeSurface backgroundStyle={backgroundStyle} />
+            <WorkspaceSidebar
+              activePath={currentFile}
+              colors={workspaceColors}
+              files={workspace.state.files}
+              folderMenu={{ newFileName: newMarkdownFileName, onRemoveFolder: workspace.removeFolder, windowId }}
+              folders={workspaceFolders}
+              isDocumentPath={isMarkdownPath}
+              onAddFolder={addFolder}
+              onError={reportError}
+              onOpenFile={openInFocusedPane}
+              onToggleSidebar={workspace.toggleSidebar}
+              titleBarHeight={titleBarHeight}
+            />
+          </View>
         )}
+        onResize={({ contentX, sidebarWidth, sidebarX }) => divider$.set({ x: sidebarX + sidebarWidth, width: sidebarWidth > 0 ? contentX - sidebarX - sidebarWidth : 0 })}
         onSidebarCollapsedChange={collapsed => workspace.setSidebarOpen(!collapsed)}
         sidebarCollapsed={!sidebarOpen}
         sidebarWidth={220}
         style={styles.root}
       />
+      <SidebarDividerCover backgroundStyle={backgroundStyle} divider$={divider$} />
     </View>
   );
+}
+
+/** The window's one chrome surface, behind the sidebar, the title bar and the gutters. Only the pane cards differ from it. */
+function ChromeSurface({ backgroundStyle, style }: { backgroundStyle: { backgroundColor: string }; style?: StyleProp<ViewStyle> }) {
+  return (
+    <View pointerEvents="none" style={[styles.chrome, style]}>
+      <GlassView glassStyle="clear" style={styles.glass} />
+      <View style={[StyleSheet.absoluteFillObject, backgroundStyle, { opacity: 0.8 }]} />
+    </View>
+  );
+}
+
+/** Spark draws a hairline in the sidebar divider, where neither pane can paint; this strip of the surface hides it. */
+function SidebarDividerCover({ backgroundStyle, divider$ }: { backgroundStyle: { backgroundColor: string }; divider$: Observable<{ x: number; width: number }> }) {
+  const { x, width } = useValue(divider$);
+  return width > 0 ? <ChromeSurface backgroundStyle={backgroundStyle} style={{ left: x, width }} /> : null;
 }
 
 type WindowMenuOptions = Pick<Parameters<typeof useMarkdownMenus>[0], "hasFolders" | "onAddFolder" | "onNewFile" | "onNewFolder" | "onOpenSettings" | "onSaveWorkspace">;
@@ -930,6 +949,12 @@ const MarkdownDocumentSurface = memo(function MarkdownDocumentSurface({
 });
 
 const styles = StyleSheet.create({
+  chrome: {
+    ...StyleSheet.absoluteFillObject,
+    // The content pane's native fill, so the sidebar's copy of the surface sits on the same base.
+    backgroundColor: PlatformColor("windowBackgroundColor"),
+    overflow: "hidden",
+  },
   glass: {
     // Keep the rounded glass edges outside the window.
     position: "absolute",
