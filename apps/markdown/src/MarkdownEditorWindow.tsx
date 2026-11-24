@@ -36,6 +36,7 @@ import {
   useDocumentWindow,
   useWorkspaceWindow,
   WorkspaceSidebar,
+  type DocumentTabBarProps,
   type DocumentTabs,
   type PaneFrame,
   type PaneLayout,
@@ -210,6 +211,13 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
   const hasOtherPanes = layout.root.kind === "split";
 
   const paneClosers = useRef(new Map<string, () => Promise<boolean>>());
+  /** Prepares each pane's shown document to close, in order, stopping at the first the user keeps. */
+  const preparePanes = useCallback(async (ids: string[]) => {
+    for (const id of ids) {
+      if (!await (paneClosers.current.get(id)?.() ?? true)) return false;
+    }
+    return true;
+  }, []);
   const tabDrag = useRef<{ paneId: string; path: string } | null>(null);
   const paneActions = useMemo<PaneActions>(() => ({
     canDropTab: (paneId, zone) => {
@@ -229,7 +237,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
       void (async () => {
         // The shown document leaves its pane, so save it first and the destination opens what the user sees.
         const leaves = layoutRef.current.panes[from]?.active === path && !(from === paneId && typeof drop === "number");
-        if (leaves && !await (paneClosers.current.get(from)?.() ?? true)) return;
+        if (leaves && !await preparePanes([from])) return;
         setLayout(current => typeof drop === "number" ? movePaneTab(current, from, path, paneId, drop)
           : drop === "center" ? movePaneTab(current, from, path, paneId, current.panes[paneId]?.paths.length ?? 0)
           : splitPaneWithTab(current, from, path, paneId, drop));
@@ -248,7 +256,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
       renameWorkspaceTab(from, to);
       setLayout(current => renamePaneTab(current, paneId, from, to), false);
     },
-  }), [openWorkspaceTab, renameWorkspaceTab, reportError, setLayout]);
+  }), [openWorkspaceTab, preparePanes, renameWorkspaceTab, reportError, setLayout]);
   const resize = useCallback((splitId: string, fraction: number, animated: boolean) => {
     setLayout(current => setSplitFraction(current, splitId, fraction), animated);
   }, [setLayout]);
@@ -285,19 +293,16 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
   }, []);
 
   const closePaneById = useCallback(async (paneId: string) => {
-    if (getPaneHeir(layoutRef.current, paneId) && await (paneClosers.current.get(paneId)?.() ?? true)) {
+    if (getPaneHeir(layoutRef.current, paneId) && await preparePanes([paneId])) {
       setLayout(current => closePane(current, paneId));
     }
-  }, [setLayout]);
+  }, [preparePanes, setLayout]);
   const paneCommands = useMemo<PaneCommands>(() => ({
     closeOtherPanes: () => {
       const { focused, root } = layoutRef.current;
-      void (async () => {
-        for (const id of getPaneIds(root)) {
-          if (id !== focused && !await (paneClosers.current.get(id)?.() ?? true)) return;
-        }
-        setLayout(current => closeOtherPanes(current, focused));
-      })().catch(reportError);
+      preparePanes(getPaneIds(root).filter(id => id !== focused)).then(ready => {
+        if (ready) setLayout(current => closeOtherPanes(current, focused));
+      }).catch(reportError);
     },
     closePane: () => { closePaneById(layoutRef.current.focused).catch(reportError); },
     closeWindow: () => { closeWindow(windowId).catch(reportError); },
@@ -305,7 +310,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
     focusPreviousPane: () => setLayout(current => focusAdjacentPane(current, -1), false),
     splitDown: () => { if (canSplitDown) setLayout(current => splitPane(current, "vertical")); },
     splitRight: () => { if (canSplitRight) setLayout(current => splitPane(current, "horizontal")); },
-  }), [canSplitDown, canSplitRight, closePaneById, reportError, setLayout, windowId]);
+  }), [canSplitDown, canSplitRight, closePaneById, preparePanes, reportError, setLayout, windowId]);
   const paneCommandState = useMemo(() => ({ canSplitDown, canSplitRight, hasOtherPanes }), [canSplitDown, canSplitRight, hasOtherPanes]);
 
   const focusedTabs = layout.panes[layout.focused];
@@ -332,13 +337,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
   useMarkdownWindowCloseRequest({
     windowId: e2eRun ? undefined : windowId,
     handleError: reportError,
-    prepareWindowForClose: async () => {
-      for (const id of getPaneIds(layoutRef.current.root)) {
-        const prepareForClose = paneClosers.current.get(id);
-        if (prepareForClose && !await prepareForClose()) return false;
-      }
-      return true;
-    },
+    prepareWindowForClose: () => preparePanes(getPaneIds(layoutRef.current.root)),
   });
 
   const workspaceColors = displayTheme.colors;
@@ -447,7 +446,7 @@ type MarkdownPaneProps = {
   actions: PaneActions;
   autosaveEnabled: boolean;
   backgroundStyle: { backgroundColor: string };
-  colors: MarkdownEditorColors;
+  colors: DocumentTabBarProps["colors"];
   commandState: PaneCommandState;
   commands: PaneCommands;
   dangerColor: string;
@@ -469,8 +468,6 @@ type MarkdownPaneProps = {
   windowId: string;
   windowMenus: WindowMenuOptions;
 };
-
-type MarkdownEditorColors = Parameters<typeof DocumentTabBar>[0]["colors"];
 
 /** One document pane: its own tabs, session and editor. The focused pane drives the menus, hotkeys and window title. */
 function MarkdownPane({
