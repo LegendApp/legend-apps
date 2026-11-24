@@ -49,7 +49,7 @@ module.exports = {
     isScreenReaderEnabled: jest.fn(async () => false),
   },
   Animated: {
-    parallel: (animations) => ({ start: () => animations.forEach((animation) => animation.start()), stop: () => undefined }),
+    parallel: (animations) => ({ start: (done) => { animations.forEach((animation) => animation.start()); done?.({ finished: true }); }, stop: () => undefined }),
     timing: (value, { toValue }) => ({ start: () => value.setValue(toValue), stop: () => undefined }),
     Value: class {
       constructor(value) { this.value = value; }
@@ -60,6 +60,9 @@ module.exports = {
   },
   Easing: {
     bezier: () => (t) => t,
+  },
+  InteractionManager: {
+    runAfterInteractions: (task) => { task(); return { cancel: () => undefined }; },
   },
   findNodeHandle: jest.fn(() => 1),
   LayoutAnimation: {

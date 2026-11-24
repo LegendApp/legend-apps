@@ -39,10 +39,10 @@ import {
   type PaneLayout,
 } from "@legend-apps/workspace";
 import { closeWindow } from "@legendapp/spark/windows";
-import { MarkdownPaneArea, MarkdownPaneChrome } from "./MarkdownPaneArea";
+import { getPaneCardColor, MarkdownPaneArea, MarkdownPaneChrome } from "./MarkdownPaneArea";
 import { useValue } from "@legendapp/state/react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { InteractionManager, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import {
   MarkdownE2EEditorSmoke,
   type MarkdownE2EEditorSmokeVariant,
@@ -232,6 +232,9 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
   const layoutTheme = getMarkdownLayoutTheme(layoutThemeSetting);
   const nativeWindowAppearance = getLegendDisplayThemeAppearance(displayThemeSetting);
   const backgroundStyle = useMemo(() => ({ backgroundColor: displayTheme.colors.background }), [displayTheme.colors.background]);
+  const cardColor = getPaneCardColor(displayTheme.colors.background, nativeWindowAppearance);
+  const cardStyle = useMemo(() => ({ backgroundColor: cardColor }), [cardColor]);
+  const documentTheme = useMemo(() => ({ ...displayTheme.markdownDocument, backgroundColor: cardColor }), [cardColor, displayTheme.markdownDocument]);
   const formattingToolbarMode = useMarkdownFormattingToolbarModeSetting();
   const autosave = useMarkdownAutosaveSetting();
   const appearanceSettings = useMarkdownAppearanceSettings();
@@ -333,7 +336,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
       </View>
       <MarkdownPaneArea
         animate={animate}
-        cardColor={displayTheme.colors.background}
+        cardColor={cardColor}
         frames={frames}
         hairlineColor={hairlineColor}
         onResize={resize}
@@ -342,7 +345,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
           <MarkdownPane
             actions={paneActions}
             autosaveEnabled={autosave === "enabled"}
-            backgroundStyle={backgroundStyle}
+            backgroundStyle={cardStyle}
             colors={workspaceColors}
             commandState={paneCommandState}
             commands={paneCommands}
@@ -360,7 +363,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
             paneId={paneId}
             startupArguments={paneId === "p0" && !initialPanes.restored ? startupArguments ?? [] : undefined}
             tabs={layout.panes[paneId]}
-            theme={displayTheme.markdownDocument}
+            theme={documentTheme}
             titleBarHeight={titleBarHeight}
             windowBackgroundColor={displayTheme.colors.windowBackground}
             windowId={windowId}
@@ -502,10 +505,14 @@ function MarkdownPane({
       openSelectedFile(active);
       return;
     }
-    prepareForClose("open").then(ready => {
-      if (ready) openSelectedFile(active);
-      else actions.openTab(paneId, shown);
-    }).catch(handleError);
+    // Loading a document holds the JS thread, so let a pane glide finish first (Animated timings are interactions).
+    const task = InteractionManager.runAfterInteractions(() => {
+      prepareForClose("open").then(ready => {
+        if (ready) openSelectedFile(active);
+        else actions.openTab(paneId, shown);
+      }).catch(handleError);
+    });
+    return () => task.cancel();
   // Only a change of active tab switches documents.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
@@ -579,6 +586,7 @@ function MarkdownPane({
             onToggleSidebar={onToggleSidebar}
             sidebarOpen={!onToggleSidebar}
             paths={tabs.paths}
+            separated={false}
             titleBarHeight={titleBarHeight}
           />
         </View>

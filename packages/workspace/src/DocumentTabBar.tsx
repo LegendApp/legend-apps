@@ -23,10 +23,12 @@ export type DocumentTabBarProps = {
   onToggleSidebar?: () => void;
   sidebarOpen: boolean;
   paths: readonly string[];
+  /** Draws a hairline under the bar; leave it off when the bar sits on glass above a card. */
+  separated?: boolean;
   titleBarHeight: number;
 };
 
-export function DocumentTabBar({ activePath, colors, focused = true, onClose, onSelect, onToggleSidebar, sidebarOpen, paths, titleBarHeight }: DocumentTabBarProps) {
+export function DocumentTabBar({ activePath, colors, focused = true, onClose, onSelect, onToggleSidebar, sidebarOpen, paths, separated = true, titleBarHeight }: DocumentTabBarProps) {
   const scroll = useRef<ScrollView>(null);
   const frames = useRef(new Map<string, { width: number; x: number }>());
   const [scrollWidth, setScrollWidth] = useState(0);
@@ -51,7 +53,7 @@ export function DocumentTabBar({ activePath, colors, focused = true, onClose, on
 
   return (
     // The title bar is transparent, so leave room for the traffic lights while the sidebar is hidden.
-    <View onLayout={event => setBarWidth(event.nativeEvent.layout.width)} style={[styles.root, { borderColor: colors.border, height: titleBarHeight, paddingLeft: leadingInset }]}>
+    <View onLayout={event => setBarWidth(event.nativeEvent.layout.width)} style={[styles.root, { borderColor: colors.border, height: titleBarHeight, paddingLeft: leadingInset }, !separated && styles.unseparated]}>
       {onToggleSidebar ? <SidebarToggle colors={colors} label={sidebarOpen ? "Hide Sidebar" : "Show Sidebar"} onPress={onToggleSidebar} /> : null}
       <ScrollView
         contentContainerStyle={styles.tabs}
@@ -159,6 +161,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     gap,
+  },
+  unseparated: {
+    borderBottomWidth: 0,
   },
   scroll: {
     flexGrow: 0,

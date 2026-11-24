@@ -36,6 +36,20 @@ export type MarkdownPaneAreaProps = {
   tabBarHeight: number;
 };
 
+/**
+ * Lifts a pane card off the window's page color, which also tints the glass chrome: near white in light
+ * themes, slightly lighter in dark ones, so the cards read as solid sheets on the glass.
+ */
+export function getPaneCardColor(background: string, appearance: "dark" | "light") {
+  const hex = /^#([0-9a-f]{6})$/i.exec(background)?.[1];
+  if (!hex) return background;
+  const amount = appearance === "light" ? 0.75 : 0.05;
+  return `#${[0, 2, 4].map(index => {
+    const channel = parseInt(hex.slice(index, index + 2), 16);
+    return Math.round(channel + (255 - channel) * amount).toString(16).padStart(2, "0");
+  }).join("")}`;
+}
+
 type LeavingPane = { from: PaneFrame; id: string; to: PaneRect };
 
 /**
@@ -44,7 +58,9 @@ type LeavingPane = { from: PaneFrame; id: string; to: PaneRect };
  */
 export function MarkdownPaneArea({ animate, cardColor, frames, hairlineColor, onResize, onSizeChange, renderPane, root, splits, tabBarHeight }: MarkdownPaneAreaProps) {
   const previous = useRef<{ frames: PaneFrame[]; root: PaneNode } | null>(null);
-  const [leaving, setLeaving] = useState<LeavingPane[]>([]);
+  // Closing panes render in the same commit that removes them, so they shrink from where they were.
+  const leaving = useRef<LeavingPane[]>([]);
+  const [, expire] = useState(0);
   const before = previous.current;
   // Only a layout change glides; a window resize or a divider drag moves the cards directly.
   const glide = animate && !!before && before.root !== root;
@@ -54,31 +70,34 @@ export function MarkdownPaneArea({ animate, cardColor, frames, hairlineColor, on
       const placement = getPanePlacement(root, frame.id);
       if (placement && !before.frames.some(old => old.id === frame.id)) enterFrom.set(frame.id, collapsePaneRect(frame, placement));
     }
+    for (const old of before.frames) {
+      const placement = getPanePlacement(before.root, old.id);
+      if (placement && !frames.some(frame => frame.id === old.id) && !leaving.current.some(pane => pane.id === old.id)) {
+        leaving.current = [...leaving.current, { from: old, id: old.id, to: collapsePaneRect(old, placement) }];
+      }
+    }
   }
-
+  previous.current = { frames, root };
+  const leavingCount = leaving.current.length;
   useEffect(() => {
-    const last = previous.current;
-    previous.current = { frames, root };
-    if (!last || !animate || last.root === root) return;
-    const gone = last.frames.filter(old => !frames.some(frame => frame.id === old.id)).flatMap(old => {
-      const placement = getPanePlacement(last.root, old.id);
-      return placement ? [{ from: old, id: old.id, to: collapsePaneRect(old, placement) }] : [];
-    });
-    if (gone.length === 0) return;
-    setLeaving(current => [...current, ...gone]);
-    setTimeout(() => setLeaving(current => current.filter(pane => !gone.includes(pane))), paneAnimationDuration);
-  }, [animate, frames, root]);
+    if (leavingCount === 0) return;
+    const timeout = setTimeout(() => {
+      leaving.current = [];
+      expire(count => count + 1);
+    }, paneAnimationDuration);
+    return () => clearTimeout(timeout);
+  }, [leavingCount]);
 
   return (
     <View onLayout={(event: LayoutChangeEvent) => onSizeChange(event.nativeEvent.layout)} style={styles.area} testID="markdown-pane-area">
-      {leaving.map(pane => (
+      {leaving.current.map(pane => (
         <AnimatedRect animate enterFrom={pane.from} key={`leaving-${pane.id}`} rect={pane.to}>
-          <View style={[styles.card, { backgroundColor: cardColor, borderColor: hairlineColor, marginTop: tabBarHeight }]} />
+          {() => <View style={[styles.card, { backgroundColor: cardColor, borderColor: hairlineColor, marginTop: tabBarHeight }]} />}
         </AnimatedRect>
       ))}
       {frames.map(frame => (
         <AnimatedRect animate={glide} enterFrom={enterFrom.get(frame.id)} key={frame.id} rect={frame}>
-          {renderPane(frame.id, frame)}
+          {content => renderPane(frame.id, { ...frame, ...content })}
         </AnimatedRect>
       ))}
       {splits.map(split => (
@@ -115,11 +134,25 @@ export function MarkdownPaneChrome({ cardColor, children, frame, hairlineColor, 
   );
 }
 
-function AnimatedRect({ animate, children, enterFrom, rect }: { animate: boolean; children: ReactNode; enterFrom?: PaneRect; rect: PaneRect }) {
+function sameRect(a: PaneRect, b: PaneRect) {
+  return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
+}
+
+/**
+ * Glides a pane between frames. During a glide its content keeps the size it was laid out at and re-lays
+ * out once when the glide ends: an editor reflowing at a new width holds the JS thread, which drives the glide.
+ */
+function AnimatedRect({ animate, children, enterFrom, rect }: { animate: boolean; children: (content: PaneRect) => ReactNode; enterFrom?: PaneRect; rect: PaneRect }) {
   const [values] = useState(() => {
     const start = enterFrom ?? rect;
     return { height: new Animated.Value(start.height), width: new Animated.Value(start.width), x: new Animated.Value(start.x), y: new Animated.Value(start.y) };
   });
+  const laidOut = useRef(rect);
+  const glidingTo = useRef<PaneRect | null>(null);
+  const [, settle] = useState(0);
+  if (animate && !sameRect(laidOut.current, rect)) glidingTo.current = rect;
+  const gliding = glidingTo.current !== null && sameRect(glidingTo.current, rect);
+  if (!gliding) laidOut.current = rect;
   const { height, width, x, y } = rect;
   // A glide already running keeps going when a later render stops asking for one.
   const animateRef = useRef(animate);
@@ -138,12 +171,17 @@ function AnimatedRect({ animate, children, enterFrom, rect }: { animate: boolean
       // Frames are layout props, which the native driver cannot animate.
       useNativeDriver: false,
     })));
-    animation.start();
+    animation.start(({ finished }) => {
+      // A glide stopped for a newer one leaves the content to that one.
+      if (!finished || !glidingTo.current) return;
+      glidingTo.current = null;
+      settle(count => count + 1);
+    });
     return () => animation.stop();
   }, [height, values, width, x, y]);
   return (
     <Animated.View style={[styles.rect, { height: values.height, left: values.x, top: values.y, width: values.width }]}>
-      {children}
+      {children(laidOut.current)}
     </Animated.View>
   );
 }
