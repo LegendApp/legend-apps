@@ -46,7 +46,7 @@ import { getPaneCardColor, MarkdownPaneArea, MarkdownPaneChrome, PaneTabDropTarg
 import type { Observable } from "@legendapp/state";
 import { useObservable, useValue } from "@legendapp/state/react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { InteractionManager, PlatformColor, Pressable, StyleSheet, Text, TextInput, View, type StyleProp, type ViewStyle } from "react-native";
+import { InteractionManager, PlatformColor, Pressable, StyleSheet, Text, TextInput, View, type ViewStyle } from "react-native";
 import {
   MarkdownE2EEditorSmoke,
   type MarkdownE2EEditorSmokeVariant,
@@ -444,7 +444,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
 }
 
 /** The window's one chrome surface, behind the sidebar, the title bar and the gutters. Only the pane cards differ from it. */
-function ChromeSurface({ backgroundStyle, style }: { backgroundStyle: { backgroundColor: string }; style?: StyleProp<ViewStyle> }) {
+function ChromeSurface({ backgroundStyle, style }: { backgroundStyle: { backgroundColor: string }; style?: ViewStyle }) {
   return (
     <View pointerEvents="none" style={[styles.chrome, style]}>
       <GlassView glassStyle="clear" style={styles.glass} />
