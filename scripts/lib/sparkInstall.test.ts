@@ -470,7 +470,7 @@ export function prepareSparkWorkspace(manifest) {
   return path.join(rootDir, manifest.id);
 }
 `);
-  for (const file of ["spark-app.ts", "spark-warm.ts", "lib/sparkInstall.ts"]) {
+  for (const file of ["spark-app.ts", "spark-warm.ts", "lib/localSpark.cjs", "lib/sparkInstall.ts"]) {
     f.write(`scripts/${file}`, fs.readFileSync(path.resolve("scripts", file), "utf8"));
   }
   f.write("bin/bun", `#!/usr/bin/env node
