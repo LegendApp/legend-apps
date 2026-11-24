@@ -193,13 +193,12 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
 
   const [areaSize, setAreaSize] = useState({ height: 0, width: 0 });
   const sidebarOpen = workspace.state.sidebarOpen;
-  const areaLeft = sidebarOpen ? 0 : paneGap;
   const { panes: frames, splits } = useMemo(() => layoutPanes(layout.root, {
     height: Math.max(0, areaSize.height - paneGap),
-    width: Math.max(0, areaSize.width - areaLeft - paneGap),
-    x: areaLeft,
+    width: Math.max(0, areaSize.width - 2 * paneGap),
+    x: paneGap,
     y: 0,
-  }), [areaLeft, areaSize, layout.root]);
+  }), [areaSize, layout.root]);
   const focusedFrame = frames.find(frame => frame.id === layout.focused);
   const canSplitRight = canSplitPane(focusedFrame, "horizontal");
   const canSplitDown = canSplitPane(focusedFrame, "vertical");
@@ -369,7 +368,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
             markdownStyle={markdownStyle}
             measurementSignature={measurementSignature}
             nativeWindowAppearance={nativeWindowAppearance}
-            onToggleSidebar={!sidebarOpen && frame.x <= areaLeft && frame.y === 0 ? workspace.toggleSidebar : undefined}
+            onToggleSidebar={!sidebarOpen && frame.x === paneGap && frame.y === 0 ? workspace.toggleSidebar : undefined}
             startupArguments={frame.id === "p0" && !initialPanes.restored ? startupArguments ?? [] : undefined}
             tabs={layout.panes[frame.id]}
             theme={documentTheme}

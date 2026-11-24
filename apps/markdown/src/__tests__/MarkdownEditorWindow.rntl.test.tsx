@@ -458,6 +458,10 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
       // The sidebar hides for single-file windows, so the cards keep a 6 pt gutter on every side but the top.
       expect(paneStyle(view, "p0")).toEqual({ left: 6, top: 0, width: 594 });
       expect(paneStyle(view, "p1")).toEqual({ left: 606, top: 0, width: 594 });
+      await fireEvent.press(view.getByLabelText("Show Sidebar"));
+      expect(view.getByLabelText("Hide Sidebar")).toBeTruthy();
+      expect(paneStyle(view, "p0").left).toBe(6);
+
       const tabsOf = (paneId: string) => within(paneRect(view, paneId)).queryAllByLabelText(/\.md$/).filter(node => node.props.accessibilityRole === "tab").map(node => node.props.accessibilityLabel);
       expect(tabsOf("p1")).toEqual(["a.md"]);
 
