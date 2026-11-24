@@ -146,10 +146,10 @@ index 2d83643..79d3685 100644
  
  - (BOOL)canPreventGestureRecognizer:(__unused UIGestureRecognizer *)preventedGestureRecognizer
 diff --git a/ReactApple/Libraries/RCTUIKit/RCTUIView.m b/ReactApple/Libraries/RCTUIKit/RCTUIView.m
-index 1952885..ef8eaec 100644
+index 1952885..6978272 100644
 --- a/ReactApple/Libraries/RCTUIKit/RCTUIView.m
 +++ b/ReactApple/Libraries/RCTUIKit/RCTUIView.m
-@@ -12,6 +12,22 @@
+@@ -12,6 +12,27 @@
  #import <QuartzCore/QuartzCore.h>
  #import "RCTUIView.h"
  
@@ -159,11 +159,16 @@ index 1952885..ef8eaec 100644
 +
 +// AppKit caches the title-bar drag region and refreshes it only for views it has already found
 +// there. React mounts and lays out whole subtrees, so a control can land in the title bar unseen.
++static BOOL RCTWindowTitlebarContainsY(NSWindow *window, CGFloat y)
++{
++  return window.titlebarAppearsTransparent && (window.styleMask & NSWindowStyleMaskFullSizeContentView) &&
++         y > NSMaxY(window.contentLayoutRect);
++}
++
 +static void RCTUIViewResetTitlebarDragRegion(NSView *view)
 +{
 +  NSWindow *window = view.window;
-+  if (window.titlebarAppearsTransparent && (window.styleMask & NSWindowStyleMaskFullSizeContentView) &&
-+      NSMaxY([view convertRect:view.bounds toView:nil]) > NSMaxY(window.contentLayoutRect) &&
++  if (RCTWindowTitlebarContainsY(window, NSMaxY([view convertRect:view.bounds toView:nil])) &&
 +      [window respondsToSelector:@selector(_setNeedsToResetDragMargins:)]) {
 +    [window _setNeedsToResetDragMargins:YES];
 +  }
@@ -172,7 +177,7 @@ index 1952885..ef8eaec 100644
  // UIView
  
  @implementation RCTUIView
-@@ -98,15 +114,48 @@ - (BOOL)isFirstResponder {
+@@ -98,15 +119,43 @@ - (BOOL)isFirstResponder {
  
  - (void)viewDidMoveToWindow
  {
@@ -197,11 +202,8 @@ index 1952885..ef8eaec 100644
  }
  
  - (void)setMouseDownCanMoveWindow:(BOOL)mouseDownCanMoveWindow{
--	_mouseDownCanMoveWindow = mouseDownCanMoveWindow;
-+	if (_mouseDownCanMoveWindow != mouseDownCanMoveWindow) {
-+		_mouseDownCanMoveWindow = mouseDownCanMoveWindow;
-+		RCTUIViewResetTitlebarDragRegion(self);
-+	}
+ 	_mouseDownCanMoveWindow = mouseDownCanMoveWindow;
++	RCTUIViewResetTitlebarDragRegion(self);
 +}
 +
 +- (NSRect)_opaqueRectForWindowMoveWhenInTitlebar
@@ -211,10 +213,7 @@ index 1952885..ef8eaec 100644
 +
 +- (void)mouseDown:(NSEvent *)event
 +{
-+  NSWindow *window = self.window;
-+  if (!self.mouseDownCanMoveWindow && window.titlebarAppearsTransparent &&
-+      (window.styleMask & NSWindowStyleMaskFullSizeContentView) &&
-+      event.locationInWindow.y > NSMaxY(window.contentLayoutRect)) {
++  if (!self.mouseDownCanMoveWindow && RCTWindowTitlebarContainsY(self.window, event.locationInWindow.y)) {
 +    // AppKit can start a window drag when this mouse-down reaches the window.
 +    return;
 +  }
