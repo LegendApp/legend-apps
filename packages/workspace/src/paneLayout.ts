@@ -19,7 +19,8 @@ export type PaneRect = { height: number; width: number; x: number; y: number };
 
 export type PaneFrame = PaneRect & { id: string };
 
-export type SplitFrame = PaneRect & { axis: PaneAxis; id: string };
+/** A split's whole rect, plus the strip between its sides that resizes it. */
+export type SplitFrame = PaneRect & { axis: PaneAxis; divider: PaneRect; id: string };
 
 export const paneGap = 6;
 export const paneMinWidth = 220;
@@ -173,7 +174,11 @@ export function layoutPanes(node: PaneNode, rect: PaneRect, frames: { panes: Pan
   const second = horizontal
     ? { ...rect, width: size - firstSize, x: rect.x + firstSize + gap }
     : { ...rect, height: size - firstSize, y: rect.y + firstSize };
-  frames.splits.push({ axis: node.axis, id: node.id, ...rect });
+  // Stacked panes share an edge, so their handle straddles it.
+  const divider = horizontal
+    ? { height: rect.height, width: paneGap, x: rect.x + firstSize, y: rect.y }
+    : { height: paneGap, width: rect.width, x: rect.x, y: rect.y + firstSize - paneGap / 2 };
+  frames.splits.push({ axis: node.axis, divider, id: node.id, ...rect });
   layoutPanes(node.first, first, frames);
   layoutPanes(node.second, second, frames);
   return frames;
@@ -244,4 +249,20 @@ export function parsePaneLayout(value: unknown): PaneLayout | undefined {
   if (!ids.includes(saved.focused)) return undefined;
   const highestId = Math.max(...[...JSON.stringify(root).matchAll(/"id":"[ps](\d+)"/g)].map(match => Number(match[1])), 0);
   return { focused: saved.focused, nextId: Math.max(saved.nextId, highestId + 1), panes, root };
+}
+
+/** Which side of which axis a pane sits on, so it can grow from and shrink into its outer edge. */
+export function getPanePlacement(node: PaneNode, paneId: string): { axis: PaneAxis; side: "first" | "second" } | undefined {
+  if (node.kind === "pane") return undefined;
+  if (node.first.kind === "pane" && node.first.id === paneId) return { axis: node.axis, side: "first" };
+  if (node.second.kind === "pane" && node.second.id === paneId) return { axis: node.axis, side: "second" };
+  return getPanePlacement(node.first, paneId) ?? getPanePlacement(node.second, paneId);
+}
+
+/** The zero-size rect at a pane's outer edge: trailing or bottom for a second side, leading or top for a first. */
+export function collapsePaneRect(rect: PaneRect, placement: { axis: PaneAxis; side: "first" | "second" }): PaneRect {
+  const trailing = placement.side === "second";
+  return placement.axis === "horizontal"
+    ? { ...rect, width: 0, x: trailing ? rect.x + rect.width : rect.x }
+    : { ...rect, height: 0, y: trailing ? rect.y + rect.height : rect.y };
 }

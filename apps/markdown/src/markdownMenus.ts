@@ -52,6 +52,9 @@ export const markdownMenuConfig: MenuRootItem[] = [
         disabled: true,
         shortcut: "Cmd+Shift+s",
       },
+      // Close Tab takes the system Close item's ⌘W; Close Window moves to ⇧⌘W.
+      { type: "action", id: "closeTab", target: { role: "close" }, label: "Close Tab", shortcut: "Cmd+w" },
+      { type: "action", id: "closeWindow", label: "Close Window", shortcut: "Cmd+Shift+w", disabled: true, placement: { after: { role: "close" } } },
       { ...workspaceMenuItems.saveWorkspace, placement: { after: { role: "saveAs" } } },
       { type: "action",
         id: "revealInFinder",
@@ -124,6 +127,13 @@ export const markdownMenuConfig: MenuRootItem[] = [
     target: { menu: "view" },
     placement: { after: { id: "format" } },
     items: [
+      { type: "separator" },
+      { id: "splitRight", type: "action", label: "Split Right", shortcut: "Cmd+d", disabled: true },
+      { id: "splitDown", type: "action", label: "Split Down", shortcut: "Cmd+Shift+d", disabled: true },
+      { id: "closePane", type: "action", label: "Close Pane", shortcut: "Cmd+Ctrl+w", disabled: true },
+      { id: "closeOtherPanes", type: "action", label: "Close Other Panes", disabled: true },
+      { id: "focusNextPane", type: "action", label: "Focus Next Pane", shortcut: "Cmd+Alt+Right", disabled: true },
+      { id: "focusPreviousPane", type: "action", label: "Focus Previous Pane", shortcut: "Cmd+Alt+Left", disabled: true },
       { type: "separator" },
       {
         id: "increaseFontSize",

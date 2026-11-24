@@ -49,8 +49,17 @@ module.exports = {
     isScreenReaderEnabled: jest.fn(async () => false),
   },
   Animated: {
+    parallel: (animations) => ({ start: () => animations.forEach((animation) => animation.start()), stop: () => undefined }),
+    timing: (value, { toValue }) => ({ start: () => value.setValue(toValue), stop: () => undefined }),
+    Value: class {
+      constructor(value) { this.value = value; }
+      setValue(value) { this.value = value; }
+    },
     ValueXY,
     View: createComponent("Animated.View"),
+  },
+  Easing: {
+    bezier: () => (t) => t,
   },
   findNodeHandle: jest.fn(() => 1),
   LayoutAnimation: {
@@ -69,7 +78,9 @@ module.exports = {
   Pressable: createComponent("Pressable"),
   ScrollView: createComponent("ScrollView"),
   StyleSheet: {
+    absoluteFillObject: { bottom: 0, left: 0, position: "absolute", right: 0, top: 0 },
     create: (styles) => styles,
+    hairlineWidth: 0.5,
     flatten,
   },
   Text: createComponent("Text"),

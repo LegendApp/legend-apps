@@ -20,7 +20,7 @@ type DocumentEventsOptions = {
   windowId: string;
 };
 
-function getStartupMarkdownPath(launchArguments: string[] | undefined) {
+export function getStartupMarkdownPath(launchArguments: string[] | undefined) {
   if (shouldLaunchNewMarkdownDocument(launchArguments)) {
     return null;
   }

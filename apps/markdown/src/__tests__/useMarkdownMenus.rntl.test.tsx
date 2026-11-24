@@ -5,7 +5,7 @@ import React from "react";
 import { refreshMarkdownEditorMenuState } from "../markdownEditorActions";
 import { markdownMenuState$ } from "../markdownMenus";
 import type { MarkdownDocumentSessionState } from "../useMarkdownDocumentSession";
-import { useMarkdownMenus } from "../useMarkdownMenus";
+import { markdownPaneMenuItems, useMarkdownMenus } from "../useMarkdownMenus";
 
 const mockFocusListeners = new Map<string, (event: { focused: boolean }) => void>();
 jest.mock("@legendapp/spark/windows", () => ({
@@ -19,6 +19,7 @@ const noop = () => {};
 const transition = async () => {};
 const save = async () => true;
 const commands = { current: null };
+const paneCommands = Object.fromEntries(markdownPaneMenuItems.map(id => [id, jest.fn()])) as unknown as Parameters<typeof useMarkdownMenus>[0]["paneCommands"];
 function state(filename: string) {
   return observable<MarkdownDocumentSessionState>({
     conflict: null,
@@ -31,7 +32,7 @@ function state(filename: string) {
   });
 }
 
-function MenuOwner({ hasFolders = false, windowId, sessionState$ }: { hasFolders?: boolean; windowId: string; sessionState$: ReturnType<typeof state> }) {
+function MenuOwner({ hasFolders = false, split = false, windowId, sessionState$ }: { hasFolders?: boolean; split?: boolean; windowId: string; sessionState$: ReturnType<typeof state> }) {
   useMarkdownMenus({
     hasFolders,
     onAddFolder: noop,
@@ -47,6 +48,8 @@ function MenuOwner({ hasFolders = false, windowId, sessionState$ }: { hasFolders
     onSaveDocument: save,
     onSaveDocumentAs: save,
     onSaveWorkspace: transition,
+    paneCommands,
+    paneCommandState: { canSplitDown: false, canSplitRight: true, hasOtherPanes: split },
     sessionState$,
     windowId,
   });
@@ -71,4 +74,18 @@ it("uses the focused editor's menu state and restores the remaining editor after
   expect(markdownMenuState$.save.disabled.peek()).toBe(false);
   await view.unmount();
   untrackFirst();
+});
+
+it("enables the pane commands from the focused window's layout", async () => {
+  const untrack = trackDocumentWindow("panes", refreshMarkdownEditorMenuState);
+  const view = await render(<MenuOwner windowId="panes" sessionState$={state("/a.md")} />);
+  expect(markdownMenuState$.splitRight.disabled.peek()).toBe(false);
+  expect(markdownMenuState$.splitDown.disabled.peek()).toBe(true);
+  expect(markdownMenuState$.closePane.disabled.peek()).toBe(true);
+  await view.rerender(<MenuOwner split windowId="panes" sessionState$={state("/a.md")} />);
+  expect(markdownMenuState$.closePane.disabled.peek()).toBe(false);
+  expect(markdownMenuState$.focusNextPane.disabled.peek()).toBe(false);
+  await view.unmount();
+  untrack();
+  expect(markdownMenuState$.splitRight.disabled.peek()).toBe(true);
 });

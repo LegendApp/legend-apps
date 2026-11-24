@@ -10,16 +10,36 @@ import {
 } from "@legend-apps/markdown-document";
 import { getLegendDisplayTheme, getLegendDisplayThemeAppearance, getMarkdownLayoutTheme } from "@legend-apps/theme";
 import {
+  canSplitPane,
   chooseFolders,
   closeDocumentTab,
+  closeOtherPanes,
+  closePane,
+  closePaneTab,
+  createPaneLayout,
   createWorkspaceFile,
   createWorkspaceFolder,
   DocumentTabBar,
+  focusAdjacentPane,
+  focusPane,
   getNewEntryDirectory,
+  getPaneHeir,
+  getPaneIds,
+  layoutPanes,
+  openPaneTab,
+  paneGap,
+  renamePaneTab,
+  setSplitFraction,
+  splitPane,
   useDocumentWindow,
   useWorkspaceWindow,
   WorkspaceSidebar,
+  type DocumentTabs,
+  type PaneFrame,
+  type PaneLayout,
 } from "@legend-apps/workspace";
+import { closeWindow } from "@legendapp/spark/windows";
+import { MarkdownPaneArea, MarkdownPaneChrome } from "./MarkdownPaneArea";
 import { useValue } from "@legendapp/state/react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
@@ -36,8 +56,8 @@ import {
 import { MarkdownFloatingSurface } from "./MarkdownFloatingSurface";
 import { MarkdownFormattingToolbar } from "./MarkdownFormattingToolbar";
 import {
+  getStartupMarkdownPath,
   useMarkdownAppExit,
-  useMarkdownStartupDocument,
   useMarkdownWindowCloseRequest,
   useRecentMarkdownDocumentOpener,
 } from "./useMarkdownDocumentEvents";
@@ -49,12 +69,14 @@ import {
   useMarkdownSettingsWindow,
 } from "./useMarkdownWindows";
 import { editorWindowIdentifier } from "./appConstants";
-import { getLaunchMarkdownFile, isMarkdownPath } from "./markdownFiles";
+import { getLaunchMarkdownFile, isMarkdownPath, shouldLaunchNewMarkdownDocument } from "./markdownFiles";
 import type { MarkdownEditorWindowProps } from "./markdownWindows";
 import {
   applyMarkdownThemeSetting,
+  getMarkdownPaneLayoutSetting,
   getMarkdownSidebarFoldersSetting,
   getMarkdownSidebarOpenSetting,
+  setMarkdownPaneLayoutSetting,
   setMarkdownSidebarFoldersSetting,
   setMarkdownSidebarOpenSetting,
   useMarkdownAppearanceSettings,
@@ -105,10 +127,34 @@ function editorSmokeVariantForScenario(scenario: MarkdownE2ELaunchScenario): Mar
   return null;
 }
 
+type PaneCommands = {
+  closeOtherPanes: () => void;
+  closePane: () => void;
+  closeWindow: () => void;
+  focusNextPane: () => void;
+  focusPreviousPane: () => void;
+  splitDown: () => void;
+  splitRight: () => void;
+};
+
+type PaneActions = {
+  closeTab: (paneId: string, path: string) => void;
+  focus: (paneId: string) => void;
+  openTab: (paneId: string, path: string) => void;
+  register: (paneId: string, prepareForClose: () => Promise<boolean>) => () => void;
+  renameTab: (paneId: string, from: string, to: string) => void;
+};
+
+type LayoutState = { animate: boolean; layout: PaneLayout };
+
+function hasSavedPanes(layout: PaneLayout | undefined): layout is PaneLayout {
+  return !!layout && (layout.root.kind === "split" || layout.panes[layout.focused].paths.length > 0);
+}
+
 export function MarkdownEditorWindow({ files, folders, launchArguments, windowId = editorWindowIdentifier, workspacePath }: MarkdownEditorWindowProps) {
   loadMarkdownUserThemesSync();
   const [startupArguments] = useState(() => files ?? launchArguments);
-  // Only the main window is restored on launch, so it alone keeps its sidebar folders.
+  // Only the main window is restored on launch, so it alone keeps its sidebar folders and panes.
   const keepsFolders = windowId === editorWindowIdentifier;
   const workspace = useWorkspaceWindow({
     files: files ?? [getLaunchMarkdownFile(launchArguments)].filter((path): path is string => path !== null),
@@ -118,24 +164,68 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
     onSidebarOpenChange: setMarkdownSidebarOpenSetting,
     sidebarOpenSetting: getMarkdownSidebarOpenSetting(),
   });
-  const { addFolders, openTab, renameTab } = workspace;
+  const { addFolders, openTab: openWorkspaceTab, renameTab: renameWorkspaceTab } = workspace;
   const workspaceFolders = workspace.state.folders;
   useEffect(() => {
     if (keepsFolders) setMarkdownSidebarFoldersSetting(workspaceFolders);
   }, [keepsFolders, workspaceFolders]);
-  // Tabs follow the session: opening a file adds its tab and Save As renames it.
-  const session = useMarkdownDocumentSession({
-    onFileOpened: openTab,
-    onFileSavedAs: useCallback((from: string | null, to: string) => from ? renameTab(from, to) : openTab(to), [openTab, renameTab]),
-  });
   useDocumentWindow(windowId, workspace.toggleSidebar, refreshMarkdownEditorMenuState);
-  const [findVisible, setFindVisible] = useState(false);
-  const [findQuery, setFindQuery] = useState("");
-  const [findStatus, setFindStatus] = useState("");
-  const showFind = useCallback(() => setFindVisible(true), []);
-  const [isLinkPopoverOpen, setIsLinkPopoverOpen] = useState(false);
-  const hasObservedLayoutInputsRef = useRef(false);
-  const e2eRun = getMarkdownE2ERunFromLaunchArguments(launchArguments);
+
+  const [initialPanes] = useState(() => {
+    const opensFiles = !!files || !!workspacePath || !!getLaunchMarkdownFile(launchArguments) || shouldLaunchNewMarkdownDocument(launchArguments);
+    const saved = keepsFolders && !opensFiles ? getMarkdownPaneLayoutSetting() : undefined;
+    return hasSavedPanes(saved) ? { layout: saved, restored: true } : { layout: createPaneLayout(workspace.state.tabs), restored: false };
+  });
+  const [{ animate, layout }, setLayoutState] = useState<LayoutState>({ animate: false, layout: initialPanes.layout });
+  // Actions read the ref so consecutive calls see each other's changes before rendering.
+  const layoutRef = useRef(layout);
+  const setLayout = useCallback((change: (layout: PaneLayout) => PaneLayout, animated = true) => {
+    const next = change(layoutRef.current);
+    if (next === layoutRef.current) return;
+    layoutRef.current = next;
+    setLayoutState({ animate: animated, layout: next });
+  }, []);
+  useEffect(() => {
+    if (!keepsFolders) return;
+    const timeout = setTimeout(() => setMarkdownPaneLayoutSetting(layout), 250);
+    return () => clearTimeout(timeout);
+  }, [keepsFolders, layout]);
+
+  const [areaSize, setAreaSize] = useState({ height: 0, width: 0 });
+  const sidebarOpen = workspace.state.sidebarOpen;
+  const areaLeft = sidebarOpen ? 0 : paneGap;
+  const { panes: frames, splits } = useMemo(() => layoutPanes(layout.root, {
+    height: Math.max(0, areaSize.height - paneGap),
+    width: Math.max(0, areaSize.width - areaLeft - paneGap),
+    x: areaLeft,
+    y: 0,
+  }), [areaLeft, areaSize, layout.root]);
+  const focusedFrame = frames.find(frame => frame.id === layout.focused);
+  const canSplitRight = canSplitPane(focusedFrame, "horizontal");
+  const canSplitDown = canSplitPane(focusedFrame, "vertical");
+  const hasOtherPanes = layout.root.kind === "split";
+
+  const paneClosers = useRef(new Map<string, () => Promise<boolean>>());
+  const paneActions = useMemo<PaneActions>(() => ({
+    closeTab: (paneId, path) => setLayout(current => closePaneTab(current, paneId, path)),
+    focus: paneId => setLayout(current => focusPane(current, paneId), false),
+    openTab: (paneId, path) => {
+      openWorkspaceTab(path);
+      setLayout(current => openPaneTab(current, paneId, path), false);
+    },
+    register: (paneId, prepareForClose) => {
+      paneClosers.current.set(paneId, prepareForClose);
+      return () => { if (paneClosers.current.get(paneId) === prepareForClose) paneClosers.current.delete(paneId); };
+    },
+    renameTab: (paneId, from, to) => {
+      renameWorkspaceTab(from, to);
+      setLayout(current => renamePaneTab(current, paneId, from, to), false);
+    },
+  }), [openWorkspaceTab, renameWorkspaceTab, setLayout]);
+  const resize = useCallback((splitId: string, fraction: number, animated: boolean) => {
+    setLayout(current => setSplitFraction(current, splitId, fraction), animated);
+  }, [setLayout]);
+
   const displayThemeSetting = useMarkdownDisplayThemeSetting();
   const layoutThemeSetting = useMarkdownLayoutThemeSetting();
   const displayTheme = getLegendDisplayTheme(displayThemeSetting);
@@ -150,145 +240,66 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
     () => getMarkdownStyleForAppearance(displayTheme, layoutTheme, appearanceSettings),
     [appearanceSettings, displayTheme, layoutTheme],
   );
-  const markdownLayout = useMemo(() => {
-    const layout = getMarkdownLayoutForAppearance(layoutTheme, appearanceSettings);
-    return {
-      ...layout,
-      content: {
-        ...layout.content,
-        verticalPadding: Math.max(titleBarHeight + 12, layout.content?.verticalPadding ?? 48),
-      },
-    };
-  }, [appearanceSettings, layoutTheme, titleBarHeight]);
+  const markdownLayout = useMemo(() => getMarkdownLayoutForAppearance(layoutTheme, appearanceSettings), [appearanceSettings, layoutTheme]);
   const measurementSignature = useMemo(
     () => getMarkdownMeasurementSignature(markdownLayout, markdownStyle),
     [markdownLayout, markdownStyle],
   );
+  const reportError = useCallback((error: unknown) => console.error(error), []);
   const openSettingsWindow = useMarkdownSettingsWindow({
     backgroundColor: displayTheme.colors.windowBackground,
-    onError: session.handleError,
+    onError: reportError,
   });
-  const { documentCommandsRef } = session;
-  const find = useCallback(async (backwards = false) => {
-    try {
-      const found = await documentCommandsRef.current?.find(findQuery, backwards);
-      setFindStatus(found ? "Match selected" : "No matches");
-    } catch (error) { session.handleError(error); }
-  }, [documentCommandsRef, findQuery, session.handleError]);
-  const insertLink = useCallback(() => {
-    setIsLinkPopoverOpen(true);
-  }, []);
-  const applyLink = useCallback((url: string) => {
-    documentCommandsRef.current?.insertLink({ url });
-    setIsLinkPopoverOpen(false);
-  }, [documentCommandsRef]);
-
-  const renderSelectionToolbar = useCallback(
-    (anchor: MarkdownSelectionAnchor) => (
-      <MarkdownFloatingSurface anchor={anchor} coordinateSpace="content">
-        <MarkdownFormattingToolbar commandsRef={documentCommandsRef} floating onInsertLink={insertLink} />
-      </MarkdownFloatingSurface>
-    ),
-    [documentCommandsRef, insertLink],
-  );
-
-  useEffect(() => {
-    if (hasObservedLayoutInputsRef.current) {
-      session.documentCommandsRef.current?.invalidateLayoutMeasurements();
-    } else {
-      hasObservedLayoutInputsRef.current = true;
-    }
-  }, [measurementSignature, session.documentCommandsRef]);
 
   useEffect(() => {
     applyMarkdownThemeSetting();
   }, []);
 
-  useMarkdownStartupDocument({
-    launchArguments: startupArguments,
-    openSelectedFile: session.openSelectedFile,
-    openUntitledDocument: session.openUntitledDocument,
-  });
-
-  useRecentMarkdownDocumentOpener({
-    flushCurrentDocumentBeforeTransition: session.flushCurrentDocumentBeforeTransition,
-    openSelectedFile: session.openSelectedFile,
-    windowId,
-  });
-
-  useMarkdownAppExit({
-    autosaveEnabled: autosave === "enabled",
-    handleError: session.handleError,
-    prepareCurrentDocumentForClose: session.prepareCurrentDocumentForClose,
-  });
-
-  useMarkdownWindowCloseRequest({
-    autosaveEnabled: autosave === "enabled",
-    handleError: session.handleError,
-    prepareCurrentDocumentForClose: session.prepareCurrentDocumentForClose,
-    windowId,
-  });
-
-  useMarkdownKeyboardShortcuts({
-    documentCommandsRef: session.documentCommandsRef,
-    sessionState$: session.sessionState$,
-    windowId,
-  });
-
-  const currentFile = useValue(() => session.sessionState$.documentSource.get() === "file" ? session.sessionState$.filename.get() : null);
-  const { prepareCurrentDocumentForClose, openSelectedFile, openUntitledDocument, handleError } = session;
-  const switchToFile = useCallback(async (path: string) => {
-    if (path !== currentFile && await prepareCurrentDocumentForClose({ autosaveEnabled: autosave === "enabled", reason: "open" })) {
-      openSelectedFile(path);
+  const closePaneById = useCallback(async (paneId: string) => {
+    if (getPaneHeir(layoutRef.current, paneId) && await (paneClosers.current.get(paneId)?.() ?? true)) {
+      setLayout(current => closePane(current, paneId));
     }
-  }, [autosave, currentFile, openSelectedFile, prepareCurrentDocumentForClose]);
-  const addFolder = useCallback(() => { chooseFolders().then(addFolders).catch(handleError); }, [addFolders, handleError]);
+  }, [setLayout]);
+  const paneCommands = useMemo<PaneCommands>(() => ({
+    closeOtherPanes: () => {
+      const { focused, root } = layoutRef.current;
+      void (async () => {
+        for (const id of getPaneIds(root)) {
+          if (id !== focused && !await (paneClosers.current.get(id)?.() ?? true)) return;
+        }
+        setLayout(current => closeOtherPanes(current, focused));
+      })().catch(reportError);
+    },
+    closePane: () => { closePaneById(layoutRef.current.focused).catch(reportError); },
+    closeWindow: () => { closeWindow(windowId).catch(reportError); },
+    focusNextPane: () => setLayout(current => focusAdjacentPane(current, 1), false),
+    focusPreviousPane: () => setLayout(current => focusAdjacentPane(current, -1), false),
+    splitDown: () => { if (canSplitDown) setLayout(current => splitPane(current, "vertical")); },
+    splitRight: () => { if (canSplitRight) setLayout(current => splitPane(current, "horizontal")); },
+  }), [canSplitDown, canSplitRight, closePaneById, reportError, setLayout, windowId]);
+  const paneCommandState = useMemo(() => ({ canSplitDown, canSplitRight, hasOtherPanes }), [canSplitDown, canSplitRight, hasOtherPanes]);
+
+  const focusedTabs = layout.panes[layout.focused];
+  const currentFile = focusedTabs?.active ?? null;
+  const openInFocusedPane = useCallback((path: string) => paneActions.openTab(layoutRef.current.focused, path), [paneActions]);
+  const addFolder = useCallback(() => { chooseFolders().then(addFolders).catch(reportError); }, [addFolders, reportError]);
   const newEntryDirectory = getNewEntryDirectory(workspaceFolders, currentFile);
   const newFile = useCallback(() => {
-    if (newEntryDirectory) createWorkspaceFile(newEntryDirectory, newMarkdownFileName).then(switchToFile).catch(handleError);
-  }, [handleError, newEntryDirectory, switchToFile]);
+    if (newEntryDirectory) createWorkspaceFile(newEntryDirectory, newMarkdownFileName).then(openInFocusedPane).catch(reportError);
+  }, [newEntryDirectory, openInFocusedPane, reportError]);
   const newFolder = useCallback(() => {
-    if (newEntryDirectory) createWorkspaceFolder(newEntryDirectory).catch(handleError);
-  }, [handleError, newEntryDirectory]);
-
-  useMarkdownMenus({
+    if (newEntryDirectory) createWorkspaceFolder(newEntryDirectory).catch(reportError);
+  }, [newEntryDirectory, reportError]);
+  const windowMenus = useMemo<WindowMenuOptions>(() => ({
     hasFolders: workspaceFolders.length > 0,
     onAddFolder: addFolder,
     onNewFile: newFile,
     onNewFolder: newFolder,
-    documentCommandsRef: session.documentCommandsRef,
-    onError: session.handleError,
-    onInsertLink: insertLink,
-    onFind: showFind,
-    onNewDocument: session.newMarkdownDocument,
-    onOpenDocument: session.openMarkdownDialog,
     onOpenSettings: openSettingsWindow,
-    onSaveDocument: session.saveCurrentDocument,
-    onSaveDocumentAs: session.saveCurrentDocumentAs,
     onSaveWorkspace: workspace.saveWorkspace,
-    sessionState$: session.sessionState$,
-    windowId,
-  });
+  }), [addFolder, newFile, newFolder, openSettingsWindow, workspace.saveWorkspace, workspaceFolders.length]);
 
-  useMarkdownEditorWindowOptions({
-    appearance: nativeWindowAppearance,
-    backgroundColor: displayTheme.colors.windowBackground,
-    onError: session.handleError,
-    sessionState$: session.sessionState$,
-    windowId,
-  });
-
-  const closeFileTab = useCallback(async (path: string) => {
-    if (path !== currentFile) {
-      workspace.closeTab(path);
-      return;
-    }
-    if (!await prepareCurrentDocumentForClose({ autosaveEnabled: autosave === "enabled", reason: "close" })) return;
-    const next = closeDocumentTab({ active: path, paths: workspace.state.tabs.paths }, path).active;
-    workspace.closeTab(path);
-    if (next) openSelectedFile(next);
-    else openUntitledDocument();
-  }, [autosave, currentFile, openSelectedFile, openUntitledDocument, prepareCurrentDocumentForClose, workspace]);
+  const e2eRun = getMarkdownE2ERunFromLaunchArguments(launchArguments);
   const workspaceColors = displayTheme.colors;
 
   if (e2eRun) {
@@ -312,55 +323,59 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
     }
   }
 
+  const hairlineColor = displayTheme.colors.border;
   const content = (
     <View style={styles.root}>
-      {findVisible && <View style={{ marginTop: titleBarHeight }} className="flex-row items-center gap-3 border-b border-border bg-background px-4 py-2">
-        <TextInput accessibilityLabel="Find in document" autoFocus className="flex-1 text-foreground"
-          value={findQuery} onChangeText={setFindQuery} onSubmitEditing={() => { void find(); }} placeholder="Find…" />
-        <Pressable accessibilityRole="button" accessibilityLabel="Previous match" onPress={() => { void find(true); }}><Text className="text-foreground">Previous</Text></Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel="Next match" onPress={() => { void find(); }}><Text className="text-foreground">Next</Text></Pressable>
-        <Text className="text-muted">{findStatus}</Text>
-        <Pressable accessibilityRole="button" accessibilityLabel="Close Find" onPress={() => setFindVisible(false)}><Text className="text-foreground">Done</Text></Pressable>
-      </View>}
-      <MarkdownEditorSessionContent
-        autosaveEnabled={autosave === "enabled"}
-        backgroundStyle={backgroundStyle}
-        dangerColor={displayTheme.colors.danger}
-        foregroundColor={displayTheme.colors.foreground}
-        formattingToolbarMode={formattingToolbarMode}
-        topChromeInset={findVisible ? 0 : titleBarHeight}
-        isLinkPopoverOpen={isLinkPopoverOpen}
-        markdownLayout={markdownLayout}
-        markdownStyle={markdownStyle}
-        onApplyLink={applyLink}
-        onCancelLink={() => setIsLinkPopoverOpen(false)}
-        onInsertLink={insertLink}
-        renderSelectionToolbar={renderSelectionToolbar}
-        session={session}
-        theme={displayTheme.markdownDocument}
-      />
-      <View pointerEvents="box-none" style={[styles.titlebar, { height: titleBarHeight }]}>
-        <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
-          <GlassView glassStyle="clear" style={styles.glass} />
-          <View style={[StyleSheet.absoluteFillObject, backgroundStyle, { opacity: 0.8 }]} />
-        </View>
-        <DocumentTabBar
-          activePath={currentFile}
-          colors={workspaceColors}
-          onClose={path => { closeFileTab(path).catch(handleError); }}
-          onSelect={path => { switchToFile(path).catch(handleError); }}
-          onToggleSidebar={workspace.state.sidebarOpen ? undefined : workspace.toggleSidebar}
-          sidebarOpen={workspace.state.sidebarOpen}
-          paths={workspace.state.tabs.paths}
-          titleBarHeight={titleBarHeight}
-        />
+      {/* Glass shows in the title bar and the gutters around the cards. */}
+      <View pointerEvents="none" style={StyleSheet.absoluteFillObject}>
+        <GlassView glassStyle="clear" style={styles.glass} />
+        <View style={[StyleSheet.absoluteFillObject, backgroundStyle, { opacity: 0.8 }]} />
       </View>
+      <MarkdownPaneArea
+        animate={animate}
+        cardColor={displayTheme.colors.background}
+        frames={frames}
+        hairlineColor={hairlineColor}
+        onResize={resize}
+        onSizeChange={setAreaSize}
+        renderPane={(paneId, frame) => (
+          <MarkdownPane
+            actions={paneActions}
+            autosaveEnabled={autosave === "enabled"}
+            backgroundStyle={backgroundStyle}
+            colors={workspaceColors}
+            commandState={paneCommandState}
+            commands={paneCommands}
+            dangerColor={displayTheme.colors.danger}
+            focused={paneId === layout.focused}
+            formattingToolbarMode={formattingToolbarMode}
+            frame={frame}
+            hairlineColor={hairlineColor}
+            isOnlyPane={!hasOtherPanes}
+            markdownLayout={markdownLayout}
+            markdownStyle={markdownStyle}
+            measurementSignature={measurementSignature}
+            nativeWindowAppearance={nativeWindowAppearance}
+            onToggleSidebar={!sidebarOpen && frame.x <= areaLeft && frame.y === 0 ? workspace.toggleSidebar : undefined}
+            paneId={paneId}
+            startupArguments={paneId === "p0" && !initialPanes.restored ? startupArguments ?? [] : undefined}
+            tabs={layout.panes[paneId]}
+            theme={displayTheme.markdownDocument}
+            titleBarHeight={titleBarHeight}
+            windowBackgroundColor={displayTheme.colors.windowBackground}
+            windowId={windowId}
+            windowMenus={windowMenus}
+          />
+        )}
+        root={layout.root}
+        splits={splits}
+        tabBarHeight={titleBarHeight}
+      />
     </View>
   );
 
   return (
     <View style={[styles.root, backgroundStyle]}>
-      <MarkdownFileWatcher session={session} />
       <SidebarSplitView
         appearance={nativeWindowAppearance}
         content={content}
@@ -373,19 +388,294 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
             folders={workspaceFolders}
             isDocumentPath={isMarkdownPath}
             onAddFolder={addFolder}
-            onError={handleError}
-            onOpenFile={path => { switchToFile(path).catch(handleError); }}
+            onError={reportError}
+            onOpenFile={openInFocusedPane}
             onToggleSidebar={workspace.toggleSidebar}
             titleBarHeight={titleBarHeight}
           />
         )}
         onSidebarCollapsedChange={collapsed => workspace.setSidebarOpen(!collapsed)}
-        sidebarCollapsed={!workspace.state.sidebarOpen}
+        sidebarCollapsed={!sidebarOpen}
         sidebarWidth={220}
         style={styles.root}
       />
     </View>
   );
+}
+
+type WindowMenuOptions = Pick<Parameters<typeof useMarkdownMenus>[0], "hasFolders" | "onAddFolder" | "onNewFile" | "onNewFolder" | "onOpenSettings" | "onSaveWorkspace">;
+
+type MarkdownPaneProps = {
+  actions: PaneActions;
+  autosaveEnabled: boolean;
+  backgroundStyle: { backgroundColor: string };
+  colors: MarkdownEditorColors;
+  commandState: { canSplitDown: boolean; canSplitRight: boolean; hasOtherPanes: boolean };
+  commands: PaneCommands;
+  dangerColor: string;
+  focused: boolean;
+  formattingToolbarMode: MarkdownFormattingToolbarMode;
+  frame: PaneFrame;
+  hairlineColor: string;
+  isOnlyPane: boolean;
+  markdownLayout: MarkdownDocumentProps["markdownLayout"];
+  markdownStyle: MarkdownDocumentProps["markdownStyle"];
+  measurementSignature: string;
+  nativeWindowAppearance: "dark" | "light";
+  /** Set for the top-leading pane while the sidebar is hidden: it shows the toggle and clears the traffic lights. */
+  onToggleSidebar?: () => void;
+  paneId: string;
+  /** The launch arguments for the window's first pane when nothing was restored. */
+  startupArguments?: string[];
+  tabs: DocumentTabs;
+  theme: MarkdownDocumentProps["theme"];
+  titleBarHeight: number;
+  windowBackgroundColor: string;
+  windowId: string;
+  windowMenus: WindowMenuOptions;
+};
+
+type MarkdownEditorColors = Parameters<typeof DocumentTabBar>[0]["colors"];
+
+/** One document pane: its own tabs, session and editor. The focused pane drives the menus, hotkeys and window title. */
+function MarkdownPane({
+  actions,
+  autosaveEnabled,
+  backgroundStyle,
+  colors,
+  commandState,
+  commands,
+  dangerColor,
+  focused,
+  formattingToolbarMode,
+  frame,
+  hairlineColor,
+  isOnlyPane,
+  markdownLayout,
+  markdownStyle,
+  measurementSignature,
+  nativeWindowAppearance,
+  onToggleSidebar,
+  paneId,
+  startupArguments,
+  tabs,
+  theme,
+  titleBarHeight,
+  windowBackgroundColor,
+  windowId,
+  windowMenus,
+}: MarkdownPaneProps) {
+  const session = useMarkdownDocumentSession({
+    onFileOpened: useCallback((path: string) => actions.openTab(paneId, path), [actions, paneId]),
+    onFileSavedAs: useCallback((from: string | null, to: string) => from ? actions.renameTab(paneId, from, to) : actions.openTab(paneId, to), [actions, paneId]),
+  });
+  const { documentCommandsRef, handleError, openSelectedFile, openUntitledDocument, prepareCurrentDocumentForClose } = session;
+  const [findVisible, setFindVisible] = useState(false);
+  const [findQuery, setFindQuery] = useState("");
+  const [findStatus, setFindStatus] = useState("");
+  const [isLinkPopoverOpen, setIsLinkPopoverOpen] = useState(false);
+  const hasObservedLayoutInputsRef = useRef(false);
+  const currentFile = () => session.sessionState$.documentSource.peek() === "file" ? session.sessionState$.filename.peek() : null;
+
+  const prepareForClose = useCallback((reason: "close" | "open") => prepareCurrentDocumentForClose({ autosaveEnabled, reason }), [autosaveEnabled, prepareCurrentDocumentForClose]);
+  useEffect(() => actions.register(paneId, () => prepareForClose("close")), [actions, paneId, prepareForClose]);
+
+  // The pane shows its active tab: tab clicks, the sidebar, a split and a merged-in pane all set it.
+  const active = tabs.active;
+  const startupRef = useRef(startupArguments);
+  useEffect(() => {
+    const startup = startupRef.current;
+    startupRef.current = undefined;
+    if (!active) {
+      if (startup) {
+        const path = getStartupMarkdownPath(startup);
+        if (path) openSelectedFile(path);
+        else openUntitledDocument();
+      } else if (!session.sessionState$.filename.peek()) {
+        openUntitledDocument();
+      }
+      return;
+    }
+    const shown = currentFile();
+    if (active === shown) return;
+    if (!shown) {
+      openSelectedFile(active);
+      return;
+    }
+    prepareForClose("open").then(ready => {
+      if (ready) openSelectedFile(active);
+      else actions.openTab(paneId, shown);
+    }).catch(handleError);
+  // Only a change of active tab switches documents.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
+
+  const closeTab = useCallback(async (path: string) => {
+    if (path !== currentFile()) {
+      actions.closeTab(paneId, path);
+      return;
+    }
+    if (!await prepareForClose("close")) return;
+    // Show the next tab first, so the pane does not prepare the closed document a second time.
+    const next = closeDocumentTab(tabs, path).active;
+    if (next) openSelectedFile(next);
+    // A split pane left without tabs closes; the last pane falls back to an untitled document.
+    else if (isOnlyPane) openUntitledDocument();
+    actions.closeTab(paneId, path);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [actions, isOnlyPane, openSelectedFile, openUntitledDocument, paneId, prepareForClose, tabs]);
+
+  /** ⌘W: closes the active tab, then an empty split pane, then the window. */
+  const closeActiveTab = useCallback(() => {
+    if (tabs.active) closeTab(tabs.active).catch(handleError);
+    else if (!isOnlyPane) commands.closePane();
+    else commands.closeWindow();
+  }, [closeTab, commands, handleError, isOnlyPane, tabs.active]);
+
+  const find = useCallback(async (backwards = false) => {
+    try {
+      const found = await documentCommandsRef.current?.find(findQuery, backwards);
+      setFindStatus(found ? "Match selected" : "No matches");
+    } catch (error) { handleError(error); }
+  }, [documentCommandsRef, findQuery, handleError]);
+  const insertLink = useCallback(() => setIsLinkPopoverOpen(true), []);
+  const applyLink = useCallback((url: string) => {
+    documentCommandsRef.current?.insertLink({ url });
+    setIsLinkPopoverOpen(false);
+  }, [documentCommandsRef]);
+  const renderSelectionToolbar = useCallback(
+    (anchor: MarkdownSelectionAnchor) => (
+      <MarkdownFloatingSurface anchor={anchor} coordinateSpace="content">
+        <MarkdownFormattingToolbar commandsRef={documentCommandsRef} floating onInsertLink={insertLink} />
+      </MarkdownFloatingSurface>
+    ),
+    [documentCommandsRef, insertLink],
+  );
+
+  useEffect(() => {
+    if (hasObservedLayoutInputsRef.current) {
+      documentCommandsRef.current?.invalidateLayoutMeasurements();
+    } else {
+      hasObservedLayoutInputsRef.current = true;
+    }
+  }, [measurementSignature, documentCommandsRef]);
+
+  useMarkdownAppExit({ autosaveEnabled, handleError, prepareCurrentDocumentForClose });
+  useMarkdownWindowCloseRequest({ autosaveEnabled, handleError, prepareCurrentDocumentForClose, windowId });
+
+  return (
+    <MarkdownPaneChrome
+      cardColor={backgroundStyle.backgroundColor}
+      frame={frame}
+      hairlineColor={hairlineColor}
+      tabBar={(
+        <View onStartShouldSetResponderCapture={() => { actions.focus(paneId); return false; }} style={styles.root}>
+          <DocumentTabBar
+            activePath={tabs.active}
+            colors={colors}
+            focused={focused}
+            onClose={path => { actions.focus(paneId); closeTab(path).catch(handleError); }}
+            onSelect={path => { actions.focus(paneId); actions.openTab(paneId, path); }}
+            onToggleSidebar={onToggleSidebar}
+            sidebarOpen={!onToggleSidebar}
+            paths={tabs.paths}
+            titleBarHeight={titleBarHeight}
+          />
+        </View>
+      )}
+      tabBarHeight={titleBarHeight}
+    >
+      {/* Clicking anywhere in a pane focuses it without taking the click from the editor. */}
+      <View onStartShouldSetResponderCapture={() => { actions.focus(paneId); return false; }} style={styles.root} testID={`markdown-pane-${paneId}`}>
+        {focused ? (
+          <FocusedPaneBindings
+            closeActiveTab={closeActiveTab}
+            commandState={commandState}
+            commands={commands}
+            nativeWindowAppearance={nativeWindowAppearance}
+            onFind={() => setFindVisible(true)}
+            onInsertLink={insertLink}
+            session={session}
+            windowBackgroundColor={windowBackgroundColor}
+            windowId={windowId}
+            windowMenus={windowMenus}
+          />
+        ) : null}
+        <MarkdownFileWatcher session={session} />
+        {findVisible && <View className="flex-row items-center gap-3 border-b border-border bg-background px-4 py-2">
+          <TextInput accessibilityLabel="Find in document" autoFocus className="flex-1 text-foreground"
+            value={findQuery} onChangeText={setFindQuery} onSubmitEditing={() => { void find(); }} placeholder="Find…" />
+          <Pressable accessibilityRole="button" accessibilityLabel="Previous match" onPress={() => { void find(true); }}><Text className="text-foreground">Previous</Text></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Next match" onPress={() => { void find(); }}><Text className="text-foreground">Next</Text></Pressable>
+          <Text className="text-muted">{findStatus}</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="Close Find" onPress={() => setFindVisible(false)}><Text className="text-foreground">Done</Text></Pressable>
+        </View>}
+        <MarkdownEditorSessionContent
+          autosaveEnabled={autosaveEnabled}
+          backgroundStyle={backgroundStyle}
+          dangerColor={dangerColor}
+          foregroundColor={colors.foreground}
+          formattingToolbarMode={formattingToolbarMode}
+          isLinkPopoverOpen={isLinkPopoverOpen}
+          markdownLayout={markdownLayout}
+          markdownStyle={markdownStyle}
+          onApplyLink={applyLink}
+          onCancelLink={() => setIsLinkPopoverOpen(false)}
+          onInsertLink={insertLink}
+          renderSelectionToolbar={renderSelectionToolbar}
+          session={session}
+          theme={theme}
+        />
+      </View>
+    </MarkdownPaneChrome>
+  );
+}
+
+function FocusedPaneBindings({ closeActiveTab, commandState, commands, nativeWindowAppearance, onFind, onInsertLink, session, windowBackgroundColor, windowId, windowMenus }: {
+  closeActiveTab: () => void;
+  commandState: MarkdownPaneProps["commandState"];
+  commands: PaneCommands;
+  nativeWindowAppearance: "dark" | "light";
+  onFind: () => void;
+  onInsertLink: () => void;
+  session: MarkdownDocumentSession;
+  windowBackgroundColor: string;
+  windowId: string;
+  windowMenus: WindowMenuOptions;
+}) {
+  useRecentMarkdownDocumentOpener({
+    flushCurrentDocumentBeforeTransition: session.flushCurrentDocumentBeforeTransition,
+    openSelectedFile: session.openSelectedFile,
+    windowId,
+  });
+  useMarkdownKeyboardShortcuts({
+    documentCommandsRef: session.documentCommandsRef,
+    sessionState$: session.sessionState$,
+    windowId,
+  });
+  useMarkdownMenus({
+    ...windowMenus,
+    documentCommandsRef: session.documentCommandsRef,
+    onError: session.handleError,
+    onFind,
+    onInsertLink,
+    onNewDocument: session.newMarkdownDocument,
+    onOpenDocument: session.openMarkdownDialog,
+    onSaveDocument: session.saveCurrentDocument,
+    onSaveDocumentAs: session.saveCurrentDocumentAs,
+    paneCommands: useMemo(() => ({ ...commands, closeTab: closeActiveTab }), [closeActiveTab, commands]),
+    paneCommandState: commandState,
+    sessionState$: session.sessionState$,
+    windowId,
+  });
+  useMarkdownEditorWindowOptions({
+    appearance: nativeWindowAppearance,
+    backgroundColor: windowBackgroundColor,
+    onError: session.handleError,
+    sessionState$: session.sessionState$,
+    windowId,
+  });
+  return null;
 }
 
 export default MarkdownEditorWindow;
@@ -422,8 +712,6 @@ type MarkdownEditorSessionContentProps = {
   dangerColor: string;
   foregroundColor: string;
   formattingToolbarMode: MarkdownFormattingToolbarMode;
-  /** Insets banners and the top toolbar below the title bar; 0 while the find bar shows. */
-  topChromeInset: number;
   isLinkPopoverOpen: boolean;
   markdownLayout: MarkdownDocumentProps["markdownLayout"];
   markdownStyle: MarkdownDocumentProps["markdownStyle"];
@@ -450,20 +738,17 @@ function MarkdownEditorSessionContent({
   renderSelectionToolbar,
   session,
   theme,
-  topChromeInset,
 }: MarkdownEditorSessionContentProps) {
   const filename = useValue(session.sessionState$.filename);
   const documentSource = useValue(session.sessionState$.documentSource);
   const isUntitledDocument = documentSource === "untitled";
-  const hasTopChrome = useValue(() => !!session.sessionState$.conflict.get() || !!session.sessionState$.lastError.get())
-    || formattingToolbarMode === "top";
 
   if (!filename) {
     return null;
   }
 
   return (
-    <View style={[styles.root, backgroundStyle, hasTopChrome && { paddingTop: topChromeInset }]}>
+    <View style={[styles.root, backgroundStyle]}>
       <MarkdownConflictBanner color={foregroundColor} session={session} />
       <MarkdownSessionError color={dangerColor} session={session} />
       {formattingToolbarMode === "top" ? (
@@ -607,16 +892,8 @@ const MarkdownDocumentSurface = memo(function MarkdownDocumentSurface({
 });
 
 const styles = StyleSheet.create({
-  titlebar: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    justifyContent: "center",
-    overflow: "hidden",
-  },
   glass: {
-    // Keep the rounded glass edges outside the clipped titlebar band.
+    // Keep the rounded glass edges outside the window.
     position: "absolute",
     top: -48,
     bottom: -48,

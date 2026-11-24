@@ -6,9 +6,11 @@ import {
 import type { MenuAction } from "@legendapp/spark/menus";
 import { useValue } from "@legendapp/state/react";
 import { withMenuState } from "@legend-apps/runtime-utils";
-import { createWorkspaceMenuHandlers } from "@legend-apps/workspace";
+import { createWorkspaceMenuHandlers, isDocumentWindowFocused } from "@legend-apps/workspace";
+import { closeWindow } from "@legendapp/spark/windows";
+import { markdownPaneMenuItems } from "./useMarkdownMenus";
 import { useEffect } from "react";
-import { editorWindowIdentifier, markdownFileTypes, markdownMenuOwnerId } from "./appConstants";
+import { editorWindowIdentifier, markdownFileTypes, markdownMenuOwnerId, settingsWindowIdentifier } from "./appConstants";
 import {
   dispatchMarkdownEditorMenuAction,
   getMarkdownEditorRecentDocumentHandler,
@@ -107,6 +109,13 @@ function createMarkdownMenuHandlers(controller: DocumentAppController): MenuHand
     increaseFontSize: dispatchMarkdownEditorMenuAction,
     decreaseFontSize: dispatchMarkdownEditorMenuAction,
     resetFontSize: dispatchMarkdownEditorMenuAction,
+    // ⌘W closes an editor's tab; any other key window, such as Settings, still just closes.
+    closeTab: (action: MenuAction) => {
+      if (!isDocumentWindowFocused() || !dispatchMarkdownEditorMenuAction(action)) {
+        closeWindow(settingsWindowIdentifier).catch(reportMarkdownAppControllerError);
+      }
+    },
+    ...Object.fromEntries(markdownPaneMenuItems.filter(id => id !== "closeTab").map(id => [id, dispatchMarkdownEditorMenuAction])),
   };
 }
 

@@ -1,6 +1,7 @@
 import { applyLegendDisplayThemeToUniwind, defaultLegendChromeTheme, type LegendChromeTheme } from "@legend-apps/theme";
 import { type HotkeyBindingState, type HotkeyValue } from "@legendapp/spark/shortcuts/commands";
 import { createObservableFile } from "@legend-apps/storage";
+import { parsePaneLayout, type PaneLayout } from "@legend-apps/workspace";
 import { useValue } from "@legendapp/state/react";
 import { useMemo } from "react";
 import {
@@ -55,6 +56,8 @@ type MarkdownSettingsFile = {
   lastDocumentPath: string | null;
   layoutTheme: MarkdownLayoutThemeSetting;
   lineHeight: MarkdownLineHeightSetting;
+  /** The main window's split panes; read through parsePaneLayout, so a bad value falls back to one pane. */
+  paneLayout?: unknown;
   selectionToolbarLayout: MarkdownToolbarLayout;
   sidebarFolders: string[];
   sidebarOpen: boolean;
@@ -183,6 +186,14 @@ export function getMarkdownSidebarFoldersSetting(): string[] {
 
 export function setMarkdownSidebarFoldersSetting(folders: string[]) {
   markdownSettings$.sidebarFolders.set(folders);
+}
+
+export function getMarkdownPaneLayoutSetting(): PaneLayout | undefined {
+  return parsePaneLayout(markdownSettings$.paneLayout.get());
+}
+
+export function setMarkdownPaneLayoutSetting(layout: PaneLayout) {
+  markdownSettings$.paneLayout.set(layout);
 }
 
 export function getMarkdownAutosaveSetting(): MarkdownAutosaveSetting {

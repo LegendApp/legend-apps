@@ -30,9 +30,16 @@ type MarkdownMenuOptions = {
   onSaveDocument: () => Promise<boolean>;
   onSaveDocumentAs: () => Promise<boolean>;
   onSaveWorkspace: () => Promise<void>;
+  /** Close Tab, Close Window and the split pane commands of the window. */
+  paneCommands: Record<MarkdownPaneMenuItem, () => void>;
+  paneCommandState: { canSplitDown: boolean; canSplitRight: boolean; hasOtherPanes: boolean };
   sessionState$: MarkdownDocumentSessionState$;
   windowId: string;
 };
+
+export const markdownPaneMenuItems = ["closeTab", "closeWindow", "splitRight", "splitDown", "closePane", "closeOtherPanes", "focusNextPane", "focusPreviousPane"] as const;
+
+type MarkdownPaneMenuItem = (typeof markdownPaneMenuItems)[number];
 
 function getCurrentFilePath(state: MarkdownDocumentSessionState) {
   return state.documentSource === "untitled" ? null : state.filename;
@@ -54,6 +61,7 @@ const disabledDocumentMenuItems = [
   "link",
   "newFile",
   "newFolder",
+  ...markdownPaneMenuItems.filter(id => id !== "closeTab"),
 ];
 
 function disableDocumentMenuItems() {
@@ -75,10 +83,13 @@ export function useMarkdownMenus({
   onSaveDocument,
   onSaveDocumentAs,
   onSaveWorkspace,
+  paneCommands,
+  paneCommandState,
   sessionState$,
   windowId,
 }: MarkdownMenuOptions) {
   const menuHandlers = useMemo<MarkdownMenuHandlers>(() => ({
+    ...paneCommands,
     addFolder: onAddFolder,
     newFile: onNewFile,
     newFolder: onNewFolder,
@@ -132,6 +143,7 @@ export function useMarkdownMenus({
     onSaveDocument,
     onSaveDocumentAs,
     onSaveWorkspace,
+    paneCommands,
     sessionState$,
   ]);
 
@@ -157,8 +169,15 @@ export function useMarkdownMenus({
       { id: "link", enabled: hasDocument },
       { id: "newFile", enabled: hasFolders },
       { id: "newFolder", enabled: hasFolders },
+      { id: "closeWindow", enabled: true },
+      { id: "splitRight", enabled: paneCommandState.canSplitRight },
+      { id: "splitDown", enabled: paneCommandState.canSplitDown },
+      { id: "closePane", enabled: paneCommandState.hasOtherPanes },
+      { id: "closeOtherPanes", enabled: paneCommandState.hasOtherPanes },
+      { id: "focusNextPane", enabled: paneCommandState.hasOtherPanes },
+      { id: "focusPreviousPane", enabled: paneCommandState.hasOtherPanes },
     ].map(({ id, enabled }) => [id, { disabled: !enabled }])));
-  }, [hasFolders, sessionState$]);
+  }, [hasFolders, paneCommandState, sessionState$]);
 
   useEffect(() => {
     const unregister = registerMarkdownEditorMenuHandlers(windowId, menuHandlers, refreshMenuState);

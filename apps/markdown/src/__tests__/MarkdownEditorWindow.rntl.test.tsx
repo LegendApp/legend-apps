@@ -50,7 +50,8 @@ const mockSession = {
   handleDocumentLoadError: jest.fn(),
   newMarkdownDocument: jest.fn(),
   openMarkdownDialog: jest.fn(),
-  openSelectedFile: jest.fn(),
+  // Opening a file shows it, as the real session does, so the pane's active tab and its document agree.
+  openSelectedFile: jest.fn((path: string) => mockSessionState$.assign({ documentSource: "file", filename: path })),
   openUntitledDocument: jest.fn(),
   prepareCurrentDocumentForClose: jest.fn(async () => true),
   saveCurrentDocument: jest.fn(async () => true),
@@ -117,6 +118,7 @@ jest.mock("../useMarkdownDocumentSession", () => ({
 }));
 
 jest.mock("../useMarkdownDocumentEvents", () => ({
+  getStartupMarkdownPath: jest.fn(() => null),
   useMarkdownAppExit: jest.fn(),
   useMarkdownStartupDocument: jest.fn(),
   useMarkdownWindowCloseRequest: jest.fn(),
@@ -134,9 +136,12 @@ jest.mock("../useMarkdownWindows", () => ({
 
 const mockChromeTheme = { titleBarHeight: 36 };
 let mockSidebarFolders: string[] = [];
+let mockSavedPaneLayout: unknown;
 
 jest.mock("../markdownSettings", () => ({
   applyMarkdownThemeSetting: jest.fn(),
+  getMarkdownPaneLayoutSetting: () => jest.requireActual("@legend-apps/workspace").parsePaneLayout(mockSavedPaneLayout),
+  setMarkdownPaneLayoutSetting: jest.fn(),
   getMarkdownSidebarFoldersSetting: () => mockSidebarFolders,
   getMarkdownSidebarOpenSetting: () => true,
   setMarkdownSidebarFoldersSetting: jest.fn(),
@@ -180,17 +185,17 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
     });
   });
 
-  it("keeps tabs above clear glass with a page-color overlay at 0.8", async () => {
+  it("puts the pane cards over clear glass with a page-color overlay at 0.8", async () => {
     const view = await render(<MarkdownEditorWindow files={["/Alpha.md", "/Beta.md"]} />);
     const glass = view.getByTestId("mock-glass");
     expect(glass.props.glassStyle).toBe("clear");
     const background = glass.parent!;
-    const titlebar = background.parent!;
     expect(background.props.pointerEvents).toBe("none");
-    expect(titlebar.props.pointerEvents).toBe("box-none");
-    expect(within(titlebar).getByLabelText("Beta.md")).toBeTruthy();
-    const overlay = glass.parent!.children[1] as TestInstance;
+    const overlay = background.children[1] as TestInstance;
     expect(overlay.props.style).toEqual(expect.arrayContaining([{ opacity: 0.8 }]));
+    const content = background.parent!;
+    expect(within(content).getAllByLabelText("Beta.md").some(node => node.props.accessibilityRole === "tab")).toBe(true);
+    expect(within(content).getByTestId("markdown-pane-p0")).toBeTruthy();
     await view.unmount();
   });
 
@@ -278,13 +283,15 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
     expect(mockSession.prepareCurrentDocumentForClose).toHaveBeenLastCalledWith({ autosaveEnabled: true, reason: "open" });
     expect(mockSession.openSelectedFile).toHaveBeenLastCalledWith("/docs/b.md");
 
+    mockSession.prepareCurrentDocumentForClose.mockClear();
     mockSession.prepareCurrentDocumentForClose.mockResolvedValueOnce(false);
-    await act(async () => fireEvent.press(view.getByLabelText("Close a.md")));
-    expect(tab(view, "a.md")).toBeTruthy();
-    await act(async () => fireEvent.press(view.getByLabelText("Close a.md")));
+    await act(async () => fireEvent.press(view.getByLabelText("Close b.md")));
+    expect(tab(view, "b.md")).toBeTruthy();
+    await act(async () => fireEvent.press(view.getByLabelText("Close b.md")));
+    expect(mockSession.prepareCurrentDocumentForClose).toHaveBeenCalledTimes(2);
     expect(mockSession.prepareCurrentDocumentForClose).toHaveBeenLastCalledWith({ autosaveEnabled: true, reason: "close" });
-    expect(tab(view, "a.md")).toBeUndefined();
-    expect(mockSession.openSelectedFile).toHaveBeenLastCalledWith("/docs/b.md");
+    expect(tab(view, "b.md")).toBeUndefined();
+    expect(mockSession.openSelectedFile).toHaveBeenLastCalledWith("/docs/a.md");
 
     await act(async () => fireEvent.press(view.getByLabelText("Show Sidebar")));
     expect(view.getByLabelText("Hide Sidebar")).toBeTruthy();
@@ -392,5 +399,108 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
     expect(view.queryByText("Use disk")).toBeNull();
     expect(view.getByText(/removed from disk/)).toBeTruthy();
     await view.unmount();
+  });
+
+  describe("split panes", () => {
+    const menus = () => jest.requireMock("../useMarkdownMenus").useMarkdownMenus.mock.calls.at(-1)[0];
+    const measure = async (view: Awaited<ReturnType<typeof render>>) => {
+      await act(async () => fireEvent(view.getByTestId("markdown-pane-area"), "layout", { nativeEvent: { layout: { height: 800, width: 1206 } } }));
+    };
+    // The animated rect around a pane's tab row and card carries its frame.
+    const paneRect = (view: Awaited<ReturnType<typeof render>>, paneId: string) => {
+      let node = view.getByTestId(`markdown-pane-${paneId}`).parent;
+      while (node && node.type !== "Animated.View") node = node.parent;
+      return node!;
+    };
+    const paneStyle = (view: Awaited<ReturnType<typeof render>>, paneId: string) => {
+      const node = paneRect(view, paneId);
+      const style = StyleSheet.flatten(node!.props.style) as Record<string, { value: number }>;
+      return { left: style.left.value, top: style.top.value, width: style.width.value };
+    };
+
+    beforeEach(() => {
+      mockSavedPaneLayout = undefined;
+      jest.requireMock("../markdownSettings").setMarkdownPaneLayoutSetting.mockClear();
+      mockSessionState$.assign({ documentSource: "file", filename: "/docs/a.md" });
+    });
+
+    it("splits right into a focused pane on the same document, and closes it back into its neighbour", async () => {
+      jest.useFakeTimers();
+      const view = await render(<MarkdownEditorWindow files={["/docs/a.md", "/docs/b.md"]} />);
+      expect(menus().paneCommandState).toEqual({ canSplitDown: false, canSplitRight: false, hasOtherPanes: false });
+      await measure(view);
+      expect(menus().paneCommandState).toEqual({ canSplitDown: true, canSplitRight: true, hasOtherPanes: false });
+
+      await act(async () => menus().paneCommands.splitRight());
+      expect(view.getByTestId("markdown-pane-p1")).toBeTruthy();
+      expect(menus().paneCommandState.hasOtherPanes).toBe(true);
+      // The sidebar hides for single-file windows, so the cards keep a 6 pt gutter on every side but the top.
+      expect(paneStyle(view, "p0")).toEqual({ left: 6, top: 0, width: 594 });
+      expect(paneStyle(view, "p1")).toEqual({ left: 606, top: 0, width: 594 });
+      const tabsOf = (paneId: string) => within(paneRect(view, paneId)).queryAllByLabelText(/\.md$/).filter(node => node.props.accessibilityRole === "tab").map(node => node.props.accessibilityLabel);
+      expect(tabsOf("p1")).toEqual(["a.md"]);
+
+      await act(async () => { jest.advanceTimersByTime(300); });
+      const { setMarkdownPaneLayoutSetting } = jest.requireMock("../markdownSettings");
+      expect(setMarkdownPaneLayoutSetting).toHaveBeenLastCalledWith(expect.objectContaining({ focused: "p1", root: expect.objectContaining({ axis: "horizontal" }) }));
+
+      await act(async () => menus().paneCommands.closePane());
+      expect(view.queryByTestId("markdown-pane-p1")).toBeNull();
+      expect(paneStyle(view, "p0").width).toBe(1194);
+      expect(menus().paneCommandState.hasOtherPanes).toBe(false);
+      await view.unmount();
+      jest.useRealTimers();
+    });
+
+    it("restores saved panes, tabs and focus in the main window", async () => {
+      const { createPaneLayout, openPaneTab, splitPane } = jest.requireActual("@legend-apps/workspace");
+      const saved = splitPane(splitPane(createPaneLayout({ active: "/docs/a.md", paths: ["/docs/a.md"] }), "horizontal"), "vertical");
+      mockSavedPaneLayout = JSON.parse(JSON.stringify({ ...openPaneTab(saved, "p2", "/docs/c.md"), focused: "p1" }));
+      const view = await render(<MarkdownEditorWindow />);
+      expect(["p0", "p1", "p2"].map(id => !!view.queryByTestId(`markdown-pane-${id}`))).toEqual([true, true, true]);
+      await measure(view);
+      expect(paneStyle(view, "p2").top).toBe(397);
+      expect(mockSession.openSelectedFile).toHaveBeenCalledWith("/docs/c.md");
+      await view.unmount();
+
+      // Another window never takes the main window's panes.
+      const other = await render(<MarkdownEditorWindow windowId="markdown-editor-2" />);
+      expect(other.queryByTestId("markdown-pane-p1")).toBeNull();
+      await other.unmount();
+    });
+
+    it("resizes live while dragging a divider and evens a split on double-click", async () => {
+      const view = await render(<MarkdownEditorWindow files={["/docs/a.md"]} />);
+      await measure(view);
+      await act(async () => menus().paneCommands.splitRight());
+      const divider = view.getByLabelText("Resize panes side by side");
+      await act(async () => {
+        divider.props.onPanResponderGrant();
+        divider.props.onPanResponderMove({}, { dx: -120, dy: 0 });
+      });
+      expect(paneStyle(view, "p0").width).toBe(474);
+      await act(async () => divider.props.onPanResponderMove({}, { dx: -2000, dy: 0 }));
+      expect(paneStyle(view, "p0").width).toBe(220);
+      await act(async () => divider.props.onPanResponderRelease());
+      for (let click = 0; click < 2; click++) {
+        await act(async () => {
+          divider.props.onPanResponderGrant();
+          divider.props.onPanResponderRelease();
+        });
+      }
+      expect(paneStyle(view, "p0").width).toBe(594);
+      await view.unmount();
+    });
+
+    it("closes a split pane once Close Tab empties it, keeping focus on the neighbour", async () => {
+      const view = await render(<MarkdownEditorWindow files={["/docs/a.md", "/docs/b.md"]} />);
+      await measure(view);
+      await act(async () => menus().paneCommands.splitDown());
+      expect(view.getByTestId("markdown-pane-p1")).toBeTruthy();
+      await act(async () => menus().paneCommands.closeTab());
+      expect(view.queryByTestId("markdown-pane-p1")).toBeNull();
+      expect(menus().paneCommandState.hasOtherPanes).toBe(false);
+      await view.unmount();
+    });
   });
 });
