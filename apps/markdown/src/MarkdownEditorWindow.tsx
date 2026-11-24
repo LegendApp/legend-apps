@@ -127,15 +127,8 @@ function editorSmokeVariantForScenario(scenario: MarkdownE2ELaunchScenario): Mar
   return null;
 }
 
-type PaneCommands = {
-  closeOtherPanes: () => void;
-  closePane: () => void;
-  closeWindow: () => void;
-  focusNextPane: () => void;
-  focusPreviousPane: () => void;
-  splitDown: () => void;
-  splitRight: () => void;
-};
+type PaneCommands = Omit<Parameters<typeof useMarkdownMenus>[0]["paneCommands"], "closeTab">;
+type PaneCommandState = Parameters<typeof useMarkdownMenus>[0]["paneCommandState"];
 
 type PaneActions = {
   closeTab: (paneId: string, path: string) => void;
@@ -421,7 +414,7 @@ type MarkdownPaneProps = {
   autosaveEnabled: boolean;
   backgroundStyle: { backgroundColor: string };
   colors: MarkdownEditorColors;
-  commandState: { canSplitDown: boolean; canSplitRight: boolean; hasOtherPanes: boolean };
+  commandState: PaneCommandState;
   commands: PaneCommands;
   dangerColor: string;
   focused: boolean;
@@ -644,7 +637,7 @@ function MarkdownPane({
 
 function FocusedPaneBindings({ closeActiveTab, commandState, commands, nativeWindowAppearance, onFind, onInsertLink, session, windowBackgroundColor, windowId, windowMenus }: {
   closeActiveTab: () => void;
-  commandState: MarkdownPaneProps["commandState"];
+  commandState: PaneCommandState;
   commands: PaneCommands;
   nativeWindowAppearance: "dark" | "light";
   onFind: () => void;

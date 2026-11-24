@@ -51,7 +51,6 @@ function AppExitHarness({
 
 describe("useMarkdownAppExit", () => {
   beforeEach(() => {
-    (beforeWindowClose as jest.Mock).mockClear();
     mockAddAppExitListener.mockReset();
     mockAddAppExitListener.mockResolvedValue({ remove: jest.fn(async () => {}) });
   });
@@ -78,41 +77,38 @@ describe("useMarkdownAppExit", () => {
     expect(handleError).not.toHaveBeenCalled();
   });
 
-  it.each(["close", "quit"] as const)("keeps the %s guard across Autosave changes and saves the exact latest draft", async (reason) => {
-    const savedBytes = "Autosave sentinel ALPHA.\r\n";
-    const draftBytes = "Autosave sentinel CLOSE.\r\n";
-    let diskBytes = savedBytes;
+  it("keeps the quit guard across Autosave changes and saves the exact draft", async () => {
+    const draftBytes = "Autosave sentinel QUIT.\r\n";
+    let diskBytes = "Autosave sentinel ALPHA.\r\n";
     const prepare = jest.fn(async ({ autosaveEnabled }: { autosaveEnabled: boolean }) => {
       if (autosaveEnabled) diskBytes = draftBytes;
       return autosaveEnabled;
     });
     const handleError = jest.fn();
-    function Harness({ enabled }: { enabled: boolean }) {
-      const options = { autosaveEnabled: enabled, handleError, prepareCurrentDocumentForClose: prepare, windowId: "markdown-editor" };
-      if (reason === "close") useMarkdownWindowCloseRequest({
-        handleError,
-        prepareWindowForClose: () => prepare({ autosaveEnabled: enabled }),
-        windowId: options.windowId,
-      });
-      else useMarkdownAppExit(options);
-      return null;
-    }
-    const registration = (reason === "close" ? beforeWindowClose : beforeQuit) as jest.Mock;
-    registration.mockClear();
-    const view = await render(<Harness enabled={false} />);
-    await view.rerender(<Harness enabled />);
-    expect(registration).toHaveBeenCalledTimes(1);
-    const guard = registration.mock.calls[0][reason === "close" ? 1 : 0];
+    const harness = (enabled: boolean) => (
+      <AppExitHarness
+        autosaveEnabled={enabled}
+        handleError={handleError}
+        prepareCurrentDocumentForClose={prepare}
+      />
+    );
+    const view = await render(harness(false));
+    await view.rerender(harness(true));
+    expect(mockAddAppExitListener).toHaveBeenCalledTimes(1);
+    const [guard] = mockAddAppExitListener.mock.calls[0];
     expect(await guard()).toBe(true);
     expect(diskBytes).toBe(draftBytes);
-    await view.rerender(<Harness enabled={false} />);
+    await view.rerender(harness(false));
     expect(await guard()).toBe(false);
-    expect(registration).toHaveBeenCalledTimes(1);
+    expect(mockAddAppExitListener).toHaveBeenCalledTimes(1);
     expect(handleError).not.toHaveBeenCalled();
   });
+});
 
+describe("useMarkdownWindowCloseRequest", () => {
   it("serializes close-guard teardown during a development remount", async () => {
-    const registration = beforeWindowClose as jest.Mock;
+    const registration = jest.mocked(beforeWindowClose);
+    registration.mockClear();
     let claimed = false;
     registration.mockImplementation(async () => {
       if (claimed) throw new Error("Window already has a close guard");
@@ -135,24 +131,24 @@ describe("useMarkdownAppExit", () => {
     await view.unmount();
     registration.mockImplementation(async () => ({ remove: jest.fn(async () => {}) }));
   });
-});
 
-it("uses the latest close callback and removes the guard on unmount", async () => {
-  const remove = jest.fn(async () => {});
-  jest.mocked(beforeWindowClose).mockClear();
-  jest.mocked(beforeWindowClose).mockResolvedValue({ remove });
-  const first = jest.fn(async () => true), second = jest.fn(async () => false);
-  const handleError = jest.fn();
-  function CloseHarness({ prepare }: { prepare: typeof first }) {
-    useMarkdownWindowCloseRequest({ handleError, prepareWindowForClose: prepare, windowId: "markdown-editor" });
-    return null;
-  }
-  const view = await render(<CloseHarness prepare={first} />);
-  await view.rerender(<CloseHarness prepare={second} />);
-  expect(beforeWindowClose).toHaveBeenCalledTimes(1);
-  expect(await jest.mocked(beforeWindowClose).mock.calls[0][1]()).toBe(false);
-  expect(second).toHaveBeenCalledTimes(1);
-  expect(first).not.toHaveBeenCalled();
-  await view.unmount();
-  expect(remove).toHaveBeenCalledTimes(1);
+  it("uses the latest close callback and removes the guard on unmount", async () => {
+    const remove = jest.fn(async () => {});
+    jest.mocked(beforeWindowClose).mockClear();
+    jest.mocked(beforeWindowClose).mockResolvedValue({ remove });
+    const first = jest.fn(async () => true), second = jest.fn(async () => false);
+    const handleError = jest.fn();
+    function CloseHarness({ prepare }: { prepare: typeof first }) {
+      useMarkdownWindowCloseRequest({ handleError, prepareWindowForClose: prepare, windowId: "markdown-editor" });
+      return null;
+    }
+    const view = await render(<CloseHarness prepare={first} />);
+    await view.rerender(<CloseHarness prepare={second} />);
+    expect(beforeWindowClose).toHaveBeenCalledTimes(1);
+    expect(await jest.mocked(beforeWindowClose).mock.calls[0][1]()).toBe(false);
+    expect(second).toHaveBeenCalledTimes(1);
+    expect(first).not.toHaveBeenCalled();
+    await view.unmount();
+    expect(remove).toHaveBeenCalledTimes(1);
+  });
 });
