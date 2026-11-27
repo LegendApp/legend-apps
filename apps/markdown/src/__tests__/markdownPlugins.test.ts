@@ -91,6 +91,8 @@ describe("markdown plugin manifests and presets", () => {
       find: "log in",
       replace: "sign in",
     });
+    expect(findMarkdownSuggestion(blocks, resolveMarkdownPluginRules(manifest, { [ruleId]: { enabled: true, replace: "log in" } }), commandId))
+      .toBeUndefined();
   });
 });
 

@@ -863,7 +863,7 @@ MarkdownDocumentTiming HybridMarkdownDocument::getTiming() {
 
 MarkdownTransactionResult HybridMarkdownDocument::applyTransaction(const MarkdownTransaction& transaction) {
   std::lock_guard<std::mutex> lock(documentMutex_);
-  if (transaction.type == "updateBlockMarkdown") {
+  if (transaction.type == "updateBlockMarkdown" || transaction.type == "replaceBlockText") {
     return updateBlockMarkdown(transaction);
   }
   if (transaction.type == "splitBlock") {
@@ -1050,7 +1050,8 @@ MarkdownTransactionResult HybridMarkdownDocument::updateBlockMarkdown(const Mark
   }
 
   const size_t blockIndex = findBlockIndex(transaction.blockId);
-  return replaceBlockRangeIncrementally(blockIndex, blockIndex, transaction.markdown, true);
+  return replaceBlockRangeIncrementally(
+      blockIndex, blockIndex, transaction.markdown, true, transaction.type == "replaceBlockText");
 }
 
 MarkdownTransactionResult HybridMarkdownDocument::splitBlock(const MarkdownTransaction& transaction) {
@@ -1088,14 +1089,15 @@ MarkdownTransactionResult HybridMarkdownDocument::replaceBlockRange(const Markdo
   const size_t secondIndex = findBlockIndex(*transaction.beforeMarkdown);
   const size_t rangeStartIndex = std::min(firstIndex, secondIndex);
   const size_t rangeEndIndex = std::max(firstIndex, secondIndex);
-  return replaceBlockRangeIncrementally(rangeStartIndex, rangeEndIndex, transaction.markdown, false);
+  return replaceBlockRangeIncrementally(rangeStartIndex, rangeEndIndex, transaction.markdown, false, false);
 }
 
 MarkdownTransactionResult HybridMarkdownDocument::replaceBlockRangeIncrementally(
     size_t rangeStartIndex,
     size_t rangeEndIndex,
     const std::optional<std::string>& replacementMarkdown,
-    bool preservesEmptyReplacementBlock) {
+    bool preservesEmptyReplacementBlock,
+    bool requiresOnlyTextChange) {
   const size_t blockCount = blockSequence_->size();
   const bool hasReplacement = replacementMarkdown.has_value();
   const bool hasPreviousBlock = rangeStartIndex > 0;
@@ -1243,6 +1245,13 @@ MarkdownTransactionResult HybridMarkdownDocument::replaceBlockRangeIncrementally
 
   const size_t deleteCount = oldWindowBlocks.size() - prefixCount - suffixCount;
   const size_t insertCount = newWindowBlocks.size() - prefixCount - suffixCount;
+  // Checked before committing: the edited block keeps its id, type and exact text, and every other row is unchanged.
+  if (requiresOnlyTextChange && (
+      deleteCount != 1 || insertCount != 1 ||
+      newWindowBlocks[prefixCount].type != oldWindowBlocks[prefixCount].type ||
+      newWindowMarkdown[prefixCount] != *replacementMarkdown)) {
+    throw std::runtime_error("This fix could change the document structure.");
+  }
   const bool preservesFirstEditedBlockId = deleteCount > 0 && insertCount > 0;
   const size_t preservedOldIndex = rangeStartIndex - parseStartIndex;
   std::vector<std::string> retiredBlockIds;

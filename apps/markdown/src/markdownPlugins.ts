@@ -178,6 +178,7 @@ export function findMarkdownSuggestion(
 ): MarkdownSuggestion | undefined {
   for (const block of blocks) {
     for (const rule of rules) {
+      if (rule.replace === rule.find) continue;
       const match = new RegExp(`\\b${escapeRegExp(rule.find)}\\b`).exec(block.markdown);
       if (match) {
         const after = block.markdown.slice(0, match.index) + rule.replace + block.markdown.slice(match.index + rule.find.length);

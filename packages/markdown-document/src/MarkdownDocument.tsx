@@ -3321,8 +3321,9 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       if (isActive && draftMarkdown$.peek() !== committedMarkdownRef.current) return false;
       const block = adapter.getBlockSync(state.snapshot.documentId, blockId);
       if (block?.markdown !== before) return false;
+      if (before === after) return true;
       if (block.type !== "paragraph" || !isPlainParagraphEdit(before, after)) throw new Error("This fix could change the document structure.");
-      const result = adapter.applyTransactionSync(state.snapshot.documentId, { type: "updateBlockMarkdown", blockId, markdown: after });
+      const result = adapter.applyTransactionSync(state.snapshot.documentId, { type: "replaceBlockText", blockId, markdown: after });
       validateTransactionResult(result);
       pushUpdateBlockHistoryEntry({ type: "updateBlockMarkdown", blockId, beforeMarkdown: before, afterMarkdown: after });
       applyTransactionResult(result);

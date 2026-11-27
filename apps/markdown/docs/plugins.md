@@ -18,9 +18,9 @@ Install with **Install Plugin…**. The app validates the file and copies it int
 
 Command and rule IDs must start with the plugin ID and a dot, and must be unique within the manifest and across installed plugins. Installing a plugin that reuses another plugin's ID fails and changes nothing.
 
-**Check Document** reads the open document, including unsaved edits, and offers the first match of an enabled rule. **Apply** replaces that one match as a single undoable edit. Apply withdraws the suggestion instead of editing if the matched block changed, another document was loaded, or the rule was disabled or changed after the check; run the check again.
+**Check Document** reads the open document, including unsaved edits, and offers the first match of an enabled rule. **Apply** replaces that one match as a single undoable edit. A rule whose replacement equals its phrase is never offered. Apply withdraws the suggestion instead of editing if the matched block changed, another document was loaded, or the rule was disabled or changed after the check; run the check again.
 
-Apply edits only a plain paragraph and only when the result stays one paragraph: neither the paragraph nor the replacement may contain Markdown syntax characters (anything other than letters, digits, spaces and `.,;:!?'’"()`), the replacement may not add or remove lines, and every changed line must start with a letter. Any other fix, such as one in a heading, list or table, is refused with a message before the document changes. The edit is written synchronously, which the app's native document supports.
+Apply edits only a plain paragraph and only when the result stays one paragraph: neither the paragraph nor the replacement may contain Markdown syntax characters (anything other than letters, digits, spaces and `.,;:!?'’"()`), the replacement may not add or remove lines, and every changed line must start with a letter. Any other fix, such as one in a heading, list or table, or one whose reparse would change a neighboring block (for example the empty line Return leaves next to the paragraph), is refused with a message before the document changes. The edit is written synchronously, which the app's native document supports.
 
 ## Preset
 

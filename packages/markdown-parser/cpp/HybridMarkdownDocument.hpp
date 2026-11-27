@@ -97,7 +97,8 @@ private:
       size_t rangeStartIndex,
       size_t rangeEndIndex,
       const std::optional<std::string>& replacementMarkdown,
-      bool preservesEmptyReplacementBlock);
+      bool preservesEmptyReplacementBlock,
+      bool requiresOnlyTextChange);
   MarkdownTransactionResult moveBlockRange(const MarkdownTransaction& transaction);
   MarkdownTransactionResult makeTransactionResult(
       size_t startBlockIndex,

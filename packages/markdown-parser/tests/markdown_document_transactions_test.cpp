@@ -459,6 +459,43 @@ void testTypingAfterSplitPreservesPreviousParagraph() {
   }
 }
 
+void testReplaceBlockTextRefusesNeighborChanges() {
+  LoadedDocument loaded("Please log in to continue.\n\nNext\n");
+  const auto targetId = loaded.document->getBlockKey(0);
+  const auto expectRefused = [&](const std::string& markdown) {
+    const auto source = savedSourceFor(loaded.document);
+    const auto before = blocksFor(loaded.document);
+    bool refused = false;
+    try {
+      loaded.document->applyTransaction(MarkdownTransaction("replaceBlockText", targetId, markdown, std::nullopt, std::nullopt));
+    } catch (const std::runtime_error& error) {
+      refused = std::string(error.what()) == "This fix could change the document structure.";
+    }
+    expect(refused, "text replacement refuses a change beyond its text: " + markdown);
+    expectEqual(savedSourceFor(loaded.document), source, "refused replacement keeps the source");
+    const auto after = blocksFor(loaded.document);
+    expectEqual(after.size(), before.size(), "refused replacement keeps the rows");
+    for (size_t index = 0; index < after.size(); index += 1) {
+      expectEqual(after[index].id, before[index].id, "refused replacement keeps row ids");
+      expectEqual(after[index].markdown, before[index].markdown, "refused replacement keeps row markdown");
+    }
+  };
+
+  expectRefused("- Please log in to continue.");
+  expectRefused("Please log in\n\nto continue.");
+  expectRefused("\nPlease log in to continue.");
+  const auto replaced = loaded.document->applyTransaction(
+      MarkdownTransaction("replaceBlockText", targetId, "Please sign in to continue.", std::nullopt, std::nullopt));
+  expectEqual(replaced.changedRange.deleteCount, 1, "text replacement changes one block");
+  expectEqual(loaded.document->getRenderBlockById(targetId).markdown, "Please sign in to continue.", "text replacement applies");
+
+  // Return leaves an empty row that reparsing the target would drop.
+  const auto emptyId = loaded.document->applyTransaction(splitBlock(targetId, "Please sign in to continue.", "")).changedRange.blockIds[1];
+  expectRefused("Please log in to continue.");
+  expectEqual(loaded.document->getIndexForBlockId(emptyId), 1, "the row Return created stays addressable");
+  expectDocumentInvariants(loaded.document);
+}
+
 void testRegisteredBlockReadsDuringStructuralEdits() {
   LoadedDocument loaded("Hello world\n\nTail\n");
   const auto blockId = loaded.document->getBlockKey(0);
@@ -965,6 +1002,7 @@ int main() {
       {"update paragraph to heading preserves id and changes type", testUpdateParagraphToHeadingPreservesIdAndTypeChanges},
       {"split block creates second block", testSplitBlockCreatesSecondBlock},
       {"typing after split preserves previous paragraph", testTypingAfterSplitPreservesPreviousParagraph},
+      {"replace block text refuses neighbor changes", testReplaceBlockTextRefusesNeighborChanges},
       {"registered block reads during structural edits", testRegisteredBlockReadsDuringStructuralEdits},
       {"update block can become multiple paragraphs", testUpdateBlockCanBecomeMultipleParagraphs},
       {"update block uses parser for code block boundaries", testUpdateBlockUsesParserForCodeBlockBoundaries},

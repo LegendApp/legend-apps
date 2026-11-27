@@ -36,7 +36,8 @@ export type MarkdownDocumentSnapshot = {
 
 export type MarkdownTransaction =
   | {
-      type: "updateBlockMarkdown";
+      // replaceBlockText refuses, without writing, a reparse that changes the block's id or type or any other row.
+      type: "updateBlockMarkdown" | "replaceBlockText";
       blockId: string;
       markdown: string;
     }
@@ -134,8 +135,9 @@ export type MarkdownDocumentCommands = {
   readBlocks(): Promise<{ generation: number; blocks: { id: string; markdown: string }[] }>;
   /**
    * Synchronously replaces block `blockId` of document `generation` with `after` as one undoable edit when it still
-   * reads `before`; returns false when it doesn't. Throws without writing unless the edit keeps a plain paragraph one
-   * paragraph and the adapter has `getBlockSync` and `applyTransactionSync`.
+   * reads `before`; returns false when it doesn't. An identical `after` changes nothing. Throws without writing unless
+   * the edit keeps a plain paragraph one paragraph, leaves every other block unchanged, and the adapter has
+   * `getBlockSync` and `applyTransactionSync`.
    */
   replaceBlockText(generation: number, blockId: string, before: string, after: string): boolean;
 };

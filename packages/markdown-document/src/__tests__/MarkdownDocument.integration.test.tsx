@@ -889,6 +889,11 @@ describe("MarkdownDocument mounted editing", () => {
 
       applyTransactionSync(_documentId: string, transaction: MarkdownTransaction) {
         this.applyTransactions.push(transaction);
+        // Like the native parser's replaceBlockText: reparsing beside the empty row Return leaves would drop that row.
+        const index = this.blockIds.indexOf(transactionBlockId(transaction));
+        if (transaction.type === "replaceBlockText" && [index - 1, index + 1].some((i) => this.blockSnapshots[i]?.markdown === "")) {
+          throw new Error("This fix could change the document structure.");
+        }
         return this.applyTransactionNow(transaction);
       }
     }
@@ -924,6 +929,45 @@ describe("MarkdownDocument mounted editing", () => {
       expect(await replace(commandsRef, generation, "d1:b0", original, fixed)).toBe(false);
       await read(commandsRef);
       expect(adapter.sourceMarkdown).toBe(`Please log in now.\n\n${second}`);
+    });
+
+    it("refuses a fix beside the row Return created, keeping its IDs, source and Undo", async () => {
+      const adapter = pluginDocument();
+      const { renderer, commandsRef } = await renderDocument({ adapter });
+      await changeText(editorInput(renderer), `${original}\n`);
+      const { generation, blocks } = await read(commandsRef);
+      const blockIds = adapter.blockIds;
+      expect(blocks.map((candidate) => candidate.markdown)).toEqual([original, "", second]);
+
+      expect(() => commandsRef.current!.replaceBlockText(generation, "d1:b0", original, fixed)).toThrow("structure");
+      expect(adapter.applyTransactions.at(-1)).toEqual({ type: "replaceBlockText", blockId: "d1:b0", markdown: fixed });
+      expect(adapter.blockIds).toEqual(blockIds);
+      expect(adapter.sourceMarkdown).toBe(`${original}\n\n\n\n${second}`);
+      await undo(commandsRef);
+      expect(adapter.sourceMarkdown).toBe(`${original}\n\n${second}`);
+      const restored = (await read(commandsRef)).blocks;
+      expect(restored.map((candidate) => candidate.markdown)).toEqual([original, second]);
+      expect(await replace(commandsRef, generation, restored[0]!.id, original, fixed)).toBe(true);
+      expect(adapter.sourceMarkdown).toBe(`${fixed}\n\n${second}`);
+    });
+
+    it("leaves the document, dirty state and Redo untouched for an identical replacement", async () => {
+      const adapter = pluginDocument();
+      const onCommandStateChange = jest.fn();
+      const onDirtyChange = jest.fn();
+      const { commandsRef } = await renderDocument({ adapter, onCommandStateChange, onDirtyChange });
+      const { generation } = await read(commandsRef);
+      await replace(commandsRef, generation, "d1:b0", original, fixed);
+      await undo(commandsRef);
+      expect(onCommandStateChange).toHaveBeenLastCalledWith(expect.objectContaining({ canRedo: true }));
+      const transactionCount = adapter.applyTransactions.length;
+      onDirtyChange.mockClear();
+
+      expect(await replace(commandsRef, generation, "d1:b0", original, original)).toBe(true);
+      expect(adapter.applyTransactions).toHaveLength(transactionCount);
+      expect(onDirtyChange).not.toHaveBeenCalled();
+      await redo(commandsRef);
+      expect(adapter.sourceMarkdown).toBe(`${fixed}\n\n${second}`);
     });
 
     it("shows the fix in the focused input and keeps it through the next keystroke", async () => {
