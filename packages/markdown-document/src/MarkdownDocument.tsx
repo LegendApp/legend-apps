@@ -3306,6 +3306,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     const updateBlockMarkdown = useCallback((generation: number, blockId: string, transform: (markdown: string) => string) => {
       const run = async () => {
         await runCommitActiveBlock({ updateReactState: true, throwOnError: true });
+        if (generation !== loadVersionRef.current) return false;
         const block = await loadBlockAtIndex(blockId, getBlockIndexById(blockId));
         const state = documentState$.peek();
         const isActive = activeEditor$.blockId.peek() === blockId;

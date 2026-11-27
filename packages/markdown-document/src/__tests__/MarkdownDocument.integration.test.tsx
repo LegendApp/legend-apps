@@ -985,6 +985,19 @@ describe("MarkdownDocument mounted editing", () => {
       expect(onCommandStateChange).toHaveBeenLastCalledWith(expect.objectContaining({ canUndo: false }));
     });
 
+    it("withdraws a fix after the pane loads a document with different block IDs", async () => {
+      const adapter = pluginDocument();
+      const { commandsRef, onError, renderer } = await renderDocument({ adapter });
+      const { generation } = await read(commandsRef);
+      const otherAdapter = new MountedEditorAdapter(snapshot([block("d2:b0", 0, original)]));
+      await act(async () => renderer.update(<MarkdownDocument adapter={otherAdapter} autoFocusFirstBlock commandsRef={commandsRef}
+        filename="other.md" onError={onError} savePolicy={{ autosave: false }} />));
+      await flushPromises();
+      expect(await settle(commandsRef.current!.updateBlockMarkdown(generation, "d1:b0", replaceText(original, fixed)))).toBe(false);
+      expect(otherAdapter.applyTransactions).toEqual([]);
+      expect(onError).not.toHaveBeenCalled();
+    });
+
     it("does not apply a fix from a previous editor instance on the same commands ref", async () => {
       const adapter = pluginDocument();
       const { commandsRef, renderer } = await renderDocument({ adapter });
