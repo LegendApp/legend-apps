@@ -1,0 +1,171 @@
+import { useRoutedHotkeys } from "@legendapp/spark/shortcuts/commands";
+import { listWorkspaceFiles } from "@legend-apps/workspace";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { getRecentMarkdownFiles } from "./appMetadata";
+import { isMarkdownPath } from "./markdownFiles";
+import { markdownHotkeyRouter } from "./markdownHotkeys";
+import { findOpenFileResults } from "./markdownOpenFile";
+
+const rowHeight = 28;
+const resultsHeight = 320;
+const panelDefinitions = [
+  { id: "next", title: "Next File", defaultBindings: ["Down"], repeat: true },
+  { id: "previous", title: "Previous File", defaultBindings: ["Up"], repeat: true },
+  { id: "open", title: "Open File", defaultBindings: ["Enter"] },
+  { id: "dismiss", title: "Dismiss Open File", defaultBindings: ["Escape"] },
+];
+
+export type MarkdownOpenFilePanelProps = {
+  folders: readonly string[];
+  /** The footer's Open File: dismisses the panel for the system picker. */
+  onBrowse: () => void;
+  onDismiss: () => void;
+  onError: (error: unknown) => void;
+  onOpen: (path: string) => void;
+  windowId: string;
+};
+
+/** Open File over a pane: searches the Markdown files of every workspace folder, recent ones first. */
+export function MarkdownOpenFilePanel({ folders, onBrowse, onDismiss, onError, onOpen, windowId }: MarkdownOpenFilePanelProps) {
+  const [files, setFiles] = useState<string[] | null>(null);
+  const [query, setQuery] = useState("");
+  const [highlighted, setHighlighted] = useState(0);
+  // autoFocus does not take focus on macOS here, so focus once the panel is in the window.
+  const input = useRef<TextInput>(null);
+  useEffect(() => {
+    const timeout = setTimeout(() => input.current?.focus(), 0);
+    return () => clearTimeout(timeout);
+  }, []);
+  useEffect(() => {
+    let current = true;
+    setFiles(null);
+    // Unreadable directories go to onError while the rest still list, so this never rejects.
+    void listWorkspaceFiles(folders, onError).then(found => { if (current) setFiles(found.filter(isMarkdownPath)); });
+    return () => { current = false; };
+  }, [folders, onError]);
+  const results = useMemo(
+    () => files ? findOpenFileResults(files, folders, getRecentMarkdownFiles().map(file => file.path), query) : [],
+    [files, folders, query],
+  );
+  const selectedIndex = Math.min(highlighted, results.length - 1);
+  const selected = results[selectedIndex];
+  // Keeps the highlighted row in view as the keyboard moves it.
+  const scroll = useRef<ScrollView>(null);
+  const offset = useRef(0);
+  useEffect(() => {
+    if (selectedIndex < 0) return;
+    const top = selectedIndex * rowHeight;
+    if (top < offset.current) scroll.current?.scrollTo({ animated: false, y: top });
+    else if (top + rowHeight > offset.current + resultsHeight) scroll.current?.scrollTo({ animated: false, y: top + rowHeight - resultsHeight });
+  }, [selectedIndex]);
+
+  useRoutedHotkeys({
+    definitions: panelDefinitions,
+    handlers: {
+      dismiss: onDismiss,
+      next: () => setHighlighted(index => Math.min(index + 1, results.length - 1)),
+      open: () => { if (selected) onOpen(selected.path); },
+      previous: () => setHighlighted(index => Math.max(index - 1, 0)),
+    },
+    router: markdownHotkeyRouter,
+    scope: { kind: "window", windowId },
+    onError,
+  });
+
+  return (
+    <View style={StyleSheet.absoluteFill}>
+      <Pressable accessible={false} onPress={onDismiss} style={StyleSheet.absoluteFill} />
+      <View accessibilityLabel="Open File" accessibilityRole="menu" className="border border-border bg-surface" style={styles.panel}>
+        <TextInput
+          accessibilityLabel="Search Markdown files"
+          autoCorrect={false}
+          className="border-b border-border text-foreground"
+          onChangeText={text => { setQuery(text); setHighlighted(0); }}
+          placeholder="Search files"
+          ref={input}
+          style={styles.input}
+          value={query}
+        />
+        <ScrollView
+          keyboardShouldPersistTaps="always"
+          onScroll={event => { offset.current = event.nativeEvent.contentOffset.y; }}
+          ref={scroll}
+          scrollEventThrottle={32}
+          style={styles.results}
+        >
+          {results.map(result => (
+            <Pressable
+              accessibilityLabel={`${result.name}, ${result.directory}`}
+              accessibilityRole="menuitem"
+              accessibilityState={{ selected: result === selected }}
+              className={result === selected ? "bg-surface-muted" : undefined}
+              key={result.path}
+              onHoverIn={() => setHighlighted(results.indexOf(result))}
+              onPress={() => onOpen(result.path)}
+              style={styles.row}
+            >
+              <Text className="text-foreground" numberOfLines={1} style={styles.name}>{result.name}</Text>
+              <Text className="text-muted" numberOfLines={1} style={styles.directory}>{result.directory}</Text>
+            </Pressable>
+          ))}
+          {files && results.length === 0
+            ? <Text className="text-muted" style={styles.empty}>{query.trim() ? "No matching files" : "No recent files"}</Text>
+            : null}
+        </ScrollView>
+        <Pressable accessibilityRole="button" className="border-t border-border" onPress={onBrowse} style={styles.footer}>
+          <Text className="text-foreground" style={styles.name}>Open File</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  directory: {
+    flexShrink: 1,
+    fontSize: 11,
+  },
+  empty: {
+    fontSize: 13,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  footer: {
+    height: 32,
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+  input: {
+    fontSize: 14,
+    height: 38,
+    paddingHorizontal: 12,
+  },
+  name: {
+    flexShrink: 0,
+    fontSize: 13,
+  },
+  panel: {
+    alignSelf: "center",
+    borderRadius: 8,
+    marginTop: 18,
+    maxWidth: "90%",
+    overflow: "hidden",
+    shadowColor: "#000000",
+    shadowOffset: { height: 4, width: 0 },
+    shadowOpacity: 0.16,
+    shadowRadius: 12,
+    width: 440,
+  },
+  results: {
+    maxHeight: resultsHeight,
+  },
+  row: {
+    alignItems: "baseline",
+    flexDirection: "row",
+    gap: 8,
+    height: rowHeight,
+    paddingHorizontal: 12,
+    paddingTop: 6,
+  },
+});
