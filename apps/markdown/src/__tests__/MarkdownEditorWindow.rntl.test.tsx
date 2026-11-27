@@ -1,11 +1,14 @@
 import { act, fireEvent, render, within } from "@testing-library/react-native";
+import { openFileDialog, saveFileDialog } from "@legendapp/spark/dialogs";
 import { watch } from "@legendapp/spark/files";
 import { beforeWindowClose } from "@legendapp/spark/windows";
 import { observable } from "@legendapp/state";
 import React from "react";
 import { StyleSheet, Text } from "react-native";
 import type { TestInstance } from "test-renderer";
+import type { MarkdownDocumentProps } from "@legend-apps/markdown-document";
 import { MarkdownEditorWindow } from "../MarkdownEditorWindow";
+import { confirmDirtyDocumentTransition } from "../confirmDirtyDocumentTransition";
 import { createMarkdownDraft, removeMarkdownDraft } from "../markdownDrafts";
 import { newMarkdownDocumentLaunchArgument } from "../markdownFiles";
 import { getLastMarkdownDocumentPath, getMarkdownStartupBehaviorSetting } from "../markdownSettings";
@@ -15,7 +18,7 @@ import type { MarkdownDocumentSessionState } from "../useMarkdownDocumentSession
 const mockRegisterMarkdownWindowQuitGuard = jest.mocked(registerMarkdownWindowQuitGuard);
 const mockBeforeWindowClose = jest.mocked(beforeWindowClose);
 const { useMarkdownDocumentSession: mockUseMarkdownDocumentSession } = jest.requireMock<{
-  useMarkdownDocumentSession: jest.Mock<typeof mockSession, []>;
+  useMarkdownDocumentSession: jest.Mock<typeof mockSession | ReturnType<typeof import("../useMarkdownDocumentSession").useMarkdownDocumentSession>, [import("../useMarkdownDocumentSession").MarkdownDocumentSessionOptions]>;
 }>("../useMarkdownDocumentSession");
 const mockWatchFiles = watch as jest.MockedFunction<typeof watch>;
 
@@ -90,6 +93,7 @@ jest.mock("@legendapp/spark/dialogs", () => ({
 jest.mock("@legend-apps/markdown-document", () => ({
   MarkdownDocument: (props: unknown) => mockMarkdownDocument(props),
   nativeMarkdownDocumentAdapter: {},
+  isMarkdownFileConflictError: () => false,
 }));
 
 jest.mock("../MarkdownE2EEditorSmoke", () => ({
@@ -117,6 +121,20 @@ jest.mock("../MarkdownFloatingSurface", () => ({
     const React = require("react");
     return React.createElement(React.Fragment, null, children);
   },
+}));
+
+jest.mock("../confirmDirtyDocumentTransition", () => ({
+  confirmDirtyDocumentTransition: jest.fn(),
+}));
+
+jest.mock("../appMetadata", () => ({
+  ...jest.requireActual("../appMetadata"),
+  addRecentMarkdownFile: jest.fn(),
+}));
+
+jest.mock("@legendapp/spark/app/documents", () => ({
+  ...jest.requireActual("@legendapp/spark/app/documents"),
+  noteRecentDocument: jest.fn(),
 }));
 
 jest.mock("../markdownDrafts", () => ({
@@ -158,6 +176,7 @@ jest.mock("../markdownSettings", () => ({
   setMarkdownPaneLayoutSetting: jest.fn(),
   getMarkdownSidebarFoldersSetting: () => mockSidebarFolders,
   getMarkdownSidebarOpenSetting: () => true,
+  setLastMarkdownDocumentPath: jest.fn(),
   setMarkdownSidebarFoldersSetting: jest.fn(),
   setMarkdownSidebarOpenSetting: jest.fn(),
   useMarkdownAppearanceSettings: () => ({}),
@@ -652,5 +671,112 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
       expect(menus().paneCommandState.hasOtherPanes).toBe(false);
       await view.unmount();
     });
+  });
+});
+
+describe("MarkdownEditorWindow save identity", () => {
+  const { useMarkdownMenus } = jest.requireMock("../useMarkdownMenus");
+  const menu = () => useMarkdownMenus.mock.lastCall[0] as Parameters<typeof import("../useMarkdownMenus").useMarkdownMenus>[0];
+  const saveAs = jest.fn(async (_path: string) => {});
+  const draft = "/test-drafts/Untitled.md";
+  const destination = "/docs/copy.md";
+  const tab = (view: Awaited<ReturnType<typeof render>>, label: string) =>
+    view.queryAllByLabelText(label).find(node => node.props.accessibilityRole === "tab");
+
+  beforeEach(() => {
+    (globalThis as typeof globalThis & { __DEV__?: boolean }).__DEV__ = true;
+    mockUseMarkdownDocumentSession.mockImplementation(jest.requireActual("../useMarkdownDocumentSession").useMarkdownDocumentSession);
+    mockMarkdownDocument.mockImplementation(props => {
+      const { commandsRef, filename } = props as MarkdownDocumentProps;
+      React.useEffect(() => {
+        if (!commandsRef || typeof commandsRef === "function") return;
+        commandsRef.current = { saveAs, commitAndBlurActiveBlock: jest.fn() } as unknown as NonNullable<typeof commandsRef.current>;
+        return () => { commandsRef.current = null; };
+      }, [commandsRef]);
+      return <Text>{`document:${filename}`}</Text>;
+    });
+    jest.mocked(createMarkdownDraft).mockReturnValue(draft);
+    jest.mocked(saveFileDialog).mockReset();
+    jest.mocked(removeMarkdownDraft).mockClear();
+    saveAs.mockClear();
+  });
+
+  afterEach(() => {
+    mockUseMarkdownDocumentSession.mockImplementation(() => mockSession);
+    mockMarkdownDocument.mockImplementation(() => <Text>markdown-document</Text>);
+    mockSavedPaneLayout = undefined;
+  });
+
+  it.each(["draft", "file"] as const)("preserves the mounted document after saving a %s under a new path", async source => {
+    const original = source === "draft" ? draft : "/docs/original.md";
+    const view = await render(<MarkdownEditorWindow files={source === "draft" ? [] : [original]} />);
+    if (source === "draft") await act(async () => menu().onNewDocument());
+    const document = view.getByText(`document:${original}`);
+    const save = source === "draft" ? menu().onSaveDocument : menu().onSaveDocumentAs;
+    await act(async () => { menu().sessionState$.isDirty.set(true); });
+    jest.mocked(saveFileDialog).mockResolvedValueOnce({ canceled: true });
+    await act(async () => { expect(await save()).toBe(false); });
+    expect(view.getByText(`document:${original}`)).toBe(document);
+    expect(menu().sessionState$.isDirty.peek()).toBe(true);
+
+    jest.mocked(saveFileDialog).mockResolvedValueOnce({ canceled: false, path: destination });
+    await act(async () => { expect(await save()).toBe(true); });
+    expect(view.getByText(`document:${destination}`)).toBe(document);
+    expect(tab(view, "copy.md")?.props.accessibilityState.selected).toBe(true);
+    expect(menu().sessionState$.isDirty.peek()).toBe(false);
+    expect(saveAs).toHaveBeenCalledWith(destination);
+    if (source === "draft") expect(removeMarkdownDraft).toHaveBeenCalledWith(draft);
+    else expect(removeMarkdownDraft).not.toHaveBeenCalled();
+
+    await fireEvent.press(view.getByLabelText("Close copy.md"));
+    expect(view.queryByText(`document:${destination}`)).toBeNull();
+    jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: [destination] });
+    await act(async () => menu().onOpenDocument());
+    expect(view.getByText(`document:${destination}`)).not.toBe(document);
+    await view.unmount();
+  });
+
+  it.each([true, false])("keeps the destination when closing a draft into it (visited: %s)", async visited => {
+    const view = await render(<MarkdownEditorWindow files={[destination, ...(visited ? [] : ["/docs/other.md"])]} />);
+    const document = view.queryByText(`document:${destination}`);
+    await act(async () => menu().onNewDocument());
+    await act(async () => { menu().sessionState$.isDirty.set(true); });
+    jest.mocked(confirmDirtyDocumentTransition).mockResolvedValueOnce("cancel");
+    await fireEvent.press(view.getByLabelText("Close Untitled.md"));
+    expect(tab(view, "Untitled.md")?.props.accessibilityState.selected).toBe(true);
+
+    jest.mocked(confirmDirtyDocumentTransition).mockResolvedValueOnce("save");
+    jest.mocked(saveFileDialog).mockResolvedValueOnce({ canceled: false, path: destination });
+    await fireEvent.press(view.getByLabelText("Close Untitled.md"));
+    expect(tab(view, "Untitled.md")).toBeUndefined();
+    expect(tab(view, "copy.md")?.props.accessibilityState.selected).toBe(true);
+    const savedDocument = view.getByText(`document:${destination}`);
+    if (visited) expect(savedDocument).toBe(document);
+    expect(saveAs).toHaveBeenCalledWith(destination);
+    expect(removeMarkdownDraft).toHaveBeenCalledWith(draft);
+    await view.unmount();
+  });
+
+  it("renames a restored tab independently of the same path in another pane", async () => {
+    const { createPaneLayout, openPaneTab, focusPane, splitPane } = jest.requireActual("@legend-apps/workspace");
+    const original = "/docs/original.md";
+    const split = splitPane(createPaneLayout({ active: original, paths: [original] }), "horizontal");
+    mockSavedPaneLayout = focusPane(openPaneTab(split, split.focused, destination), "p0");
+    const view = await render(<MarkdownEditorWindow />);
+    const left = within(view.getByTestId("markdown-pane-p0"));
+    const right = within(view.getByTestId("markdown-pane-p1"));
+    const sourceDocument = left.getByText(`document:${original}`);
+    const otherDocument = right.getByText(`document:${destination}`);
+
+    jest.mocked(saveFileDialog).mockResolvedValueOnce({ canceled: false, path: destination });
+    await act(async () => { expect(await menu().onSaveDocumentAs()).toBe(true); });
+    expect(left.getByText(`document:${destination}`)).toBe(sourceDocument);
+    expect(right.getByText(`document:${destination}`)).toBe(otherDocument);
+
+    jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: [original] });
+    await act(async () => menu().onOpenDocument());
+    expect(left.getByText(`document:${original}`)).not.toBe(sourceDocument);
+    expect(left.getByText(`document:${destination}`, { includeHiddenElements: true })).toBe(sourceDocument);
+    await view.unmount();
   });
 });

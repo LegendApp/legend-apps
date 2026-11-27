@@ -143,7 +143,7 @@ type PrepareTabForClose = (reason: CloseReason) => Promise<string | null>;
 type PaneActions = {
   /** Whether the tab being dragged in this window can drop on that part of the pane. */
   canDropTab: (paneId: string, zone: TabDropZone) => boolean;
-  closeTab: (paneId: string, path: string) => void;
+  closeTab: (paneId: string, path: string, editorKey: number | undefined) => void;
   dragTab: (paneId: string, path: string) => void;
   /** Drops the dragged tab at a slot in the pane's bar, into the pane, or on an edge to split it. */
   dropTab: (paneId: string, drop: number | TabDropZone) => void;
@@ -153,7 +153,35 @@ type PaneActions = {
   renameTab: (paneId: string, from: string, to: string) => void;
 };
 
-type LayoutState = { animate: boolean; layout: PaneLayout };
+type TabRename = { paneId: string; from: string; to: string };
+
+type LayoutState = {
+  animate: boolean;
+  layout: PaneLayout;
+  editorKeys: Record<string, ReadonlyMap<string, number>>;
+  nextEditorKey: number;
+};
+
+function updateLayoutState(layout: PaneLayout, animate: boolean, previous?: LayoutState, rename?: TabRename): LayoutState {
+  if (previous?.layout.panes === layout.panes) return { ...previous, animate, layout };
+  let nextEditorKey = previous?.nextEditorKey ?? 0;
+  const editorKeys = Object.fromEntries(Object.entries(layout.panes).map(([paneId, tabs]) => {
+    const previousKeys = previous?.editorKeys[paneId];
+    const previousTabs = previous?.layout.panes[paneId];
+    if (previousKeys && tabs === previousTabs) return [paneId, previousKeys];
+
+    const keys = new Map<string, number>();
+    for (const path of tabs.paths) {
+      let key = previousKeys?.get(path);
+      if (key === undefined && rename?.paneId === paneId && rename.to === path && !previousTabs?.paths.includes(path)) {
+        key = previousKeys?.get(rename.from);
+      }
+      if (key !== undefined || path === tabs.active) keys.set(path, key ?? nextEditorKey++);
+    }
+    return [paneId, keys];
+  }));
+  return { animate, layout, editorKeys, nextEditorKey };
+}
 
 function layoutWithoutDrafts(layout: PaneLayout): PaneLayout {
   return {
@@ -211,14 +239,21 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
     const path = initialPanes.panes[initialPanes.focused].active;
     if (path && !isMarkdownDraft(path)) openWorkspaceTab(path);
   }, [initialPanes, openWorkspaceTab]);
-  const [{ animate, layout }, setLayoutState] = useState<LayoutState>({ animate: false, layout: initialPanes });
+  const [layoutState, setLayoutState] = useState(() => updateLayoutState(initialPanes, false));
+  const { animate, layout, editorKeys } = layoutState;
   // Actions read the ref so consecutive calls see each other's changes before rendering.
-  const layoutRef = useRef(layout);
-  const setLayout = useCallback((change: (layout: PaneLayout) => PaneLayout, animated = true) => {
-    const next = change(layoutRef.current);
-    if (next === layoutRef.current) return;
-    layoutRef.current = next;
-    setLayoutState({ animate: animated, layout: next });
+  const layoutStateRef = useRef(layoutState);
+  const setLayout = useCallback((
+    change: (layout: PaneLayout) => PaneLayout,
+    animated = true,
+    rename?: TabRename,
+  ) => {
+    const previous = layoutStateRef.current;
+    const next = change(previous.layout);
+    if (next === previous.layout) return;
+    const state = updateLayoutState(next, animated, previous, rename);
+    layoutStateRef.current = state;
+    setLayoutState(state);
   }, []);
   useEffect(() => {
     if (!keepsFolders) return;
@@ -249,7 +284,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
     return true;
   }, []);
   const discardWindowDrafts = useCallback(() => {
-    const paths = new Set(Object.values(layoutRef.current.panes).flatMap(tabs => tabs.paths));
+    const paths = new Set(Object.values(layoutStateRef.current.layout.panes).flatMap(tabs => tabs.paths));
     for (const path of paths) removeMarkdownDraft(path);
   }, []);
   const tabDrag = useRef<{ paneId: string; path: string } | null>(null);
@@ -258,10 +293,15 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
       const drag = tabDrag.current;
       if (!drag) return false;
       if (zone === "center") return drag.paneId !== paneId;
-      const ownOnlyTab = drag.paneId === paneId && layoutRef.current.panes[paneId]?.paths.length === 1;
+      const ownOnlyTab = drag.paneId === paneId && layoutStateRef.current.layout.panes[paneId]?.paths.length === 1;
       return !ownOnlyTab && canSplitPane(framesRef.current.find(frame => frame.id === paneId), zone === "left" || zone === "right" ? "horizontal" : "vertical");
     },
-    closeTab: (paneId, path) => setLayout(current => closePaneTab(current, paneId, path)),
+    closeTab: (paneId, path, editorKey) => {
+      const current = layoutStateRef.current;
+      if (!current.layout.panes[paneId]?.paths.includes(path) || current.editorKeys[paneId].get(path) !== editorKey) return;
+      removeMarkdownDraft(path);
+      setLayout(layout => closePaneTab(layout, paneId, path));
+    },
     dragTab: (paneId, path) => { tabDrag.current = { paneId, path }; },
     dropTab: (paneId, drop) => {
       const drag = tabDrag.current;
@@ -289,7 +329,10 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
     renameTab: (paneId, from, to) => {
       if (isMarkdownDraft(from)) openWorkspaceTab(to);
       else renameWorkspaceTab(from, to);
-      setLayout(current => renamePaneTab(current, paneId, from, to), false);
+      setLayout(current => {
+        const tabs = current.panes[paneId];
+        return from !== to && tabs?.paths.includes(from) ? renamePaneTab(current, paneId, from, to) : current;
+      }, false, { paneId, from, to });
     },
   }), [openWorkspaceTab, preparePanes, renameWorkspaceTab, reportError, setLayout]);
   const resize = useCallback((splitId: string, fraction: number, animated: boolean) => {
@@ -339,18 +382,18 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
   }, []);
 
   const closePaneById = useCallback(async (paneId: string) => {
-    if (getPaneHeir(layoutRef.current, paneId) && await preparePanes([paneId])) {
+    if (getPaneHeir(layoutStateRef.current.layout, paneId) && await preparePanes([paneId])) {
       setLayout(current => closePane(current, paneId));
     }
   }, [preparePanes, setLayout]);
   const paneCommands = useMemo<PaneCommands>(() => ({
     closeOtherPanes: () => {
-      const { focused, root } = layoutRef.current;
+      const { focused, root } = layoutStateRef.current.layout;
       preparePanes(getPaneIds(root).filter(id => id !== focused)).then(ready => {
         if (ready) setLayout(current => closeOtherPanes(current, focused));
       }).catch(reportError);
     },
-    closePane: () => { closePaneById(layoutRef.current.focused).catch(reportError); },
+    closePane: () => { closePaneById(layoutStateRef.current.layout.focused).catch(reportError); },
     closeWindow: () => { closeWindow(windowId).catch(reportError); },
     focusNextPane: () => setLayout(current => focusAdjacentPane(current, 1), false),
     focusPreviousPane: () => setLayout(current => focusAdjacentPane(current, -1), false),
@@ -362,7 +405,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
   const focusedTabs = layout.panes[layout.focused];
   const activePath = focusedTabs?.active ?? null;
   const currentFile = activePath && !isMarkdownDraft(activePath) ? activePath : null;
-  const openInFocusedPane = useCallback((path: string) => paneActions.openTab(layoutRef.current.focused, path), [paneActions]);
+  const openInFocusedPane = useCallback((path: string) => paneActions.openTab(layoutStateRef.current.layout.focused, path), [paneActions]);
   const addFolder = useCallback(() => { chooseFolders().then(addFolders).catch(reportError); }, [addFolders, reportError]);
   const newEntryDirectory = getNewEntryDirectory(workspaceFolders, currentFile);
   const newFile = useCallback(() => {
@@ -400,13 +443,13 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
     windowId: e2eRun ? undefined : windowId,
     handleError: reportError,
     prepareWindowForClose: async () => {
-      if (!await preparePanes(getPaneIds(layoutRef.current.root))) return false;
+      if (!await preparePanes(getPaneIds(layoutStateRef.current.layout.root))) return false;
       discardWindowDrafts();
       return true;
     },
   });
   useEffect(() => e2eRun ? undefined : registerMarkdownWindowQuitGuard({
-    prepare: () => preparePanes(getPaneIds(layoutRef.current.root), "quit"),
+    prepare: () => preparePanes(getPaneIds(layoutStateRef.current.layout.root), "quit"),
     discardDrafts: discardWindowDrafts,
   }), [discardWindowDrafts, e2eRun, preparePanes]);
 
@@ -452,6 +495,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
             commandState={paneCommandState}
             commands={paneCommands}
             dangerColor={displayTheme.colors.danger}
+            editorKeys={editorKeys[frame.id]}
             focused={frame.id === layout.focused}
             formattingToolbarMode={formattingToolbarMode}
             frame={frame}
@@ -527,6 +571,7 @@ type MarkdownPaneProps = {
   commandState: PaneCommandState;
   commands: PaneCommands;
   dangerColor: string;
+  editorKeys: ReadonlyMap<string, number>;
   focused: boolean;
   formattingToolbarMode: MarkdownFormattingToolbarMode;
   frame: PaneFrame;
@@ -553,6 +598,7 @@ function MarkdownPane({
   commandState,
   commands,
   dangerColor,
+  editorKeys,
   focused,
   formattingToolbarMode,
   frame,
@@ -570,8 +616,6 @@ function MarkdownPane({
   const paneId = frame.id;
   const isOnlyPane = !commandState.hasOtherPanes;
   const active = tabs.active;
-  const [visited, setVisited] = useState<string[]>([]);
-  if (active && !visited.includes(active)) setVisited([...visited, active]);
   const tabClosers = useRef(new Map<string, PrepareTabForClose>());
   const registerTab = useCallback((path: string, prepare: PrepareTabForClose) => {
     tabClosers.current.set(path, prepare);
@@ -586,19 +630,14 @@ function MarkdownPane({
   }), [actions, paneId]);
 
   const openTab = useCallback((path: string) => actions.openTab(paneId, path), [actions, paneId]);
-  const renameTab = useCallback((from: string, to: string) => {
-    setVisited(paths => paths.filter(path => path !== from));
-    actions.renameTab(paneId, from, to);
-  }, [actions, paneId]);
+  const renameTab = useCallback((from: string, to: string) => actions.renameTab(paneId, from, to), [actions, paneId]);
   const newDocument = useCallback(async () => { openTab(createMarkdownDraft()); }, [openTab]);
   const closeTab = useCallback(async (path: string) => {
     const prepare = tabClosers.current.get(path);
     const closingPath = prepare ? await prepare("close") : path;
     if (!closingPath) return;
-    removeMarkdownDraft(closingPath);
-    setVisited(paths => paths.filter(visitedPath => visitedPath !== closingPath));
-    actions.closeTab(paneId, closingPath);
-  }, [actions, paneId]);
+    actions.closeTab(paneId, closingPath, editorKeys.get(path));
+  }, [actions, editorKeys, paneId]);
   const reportError = useCallback((error: unknown) => console.error(error), []);
 
   const closeActiveTab = useCallback(() => {
@@ -634,9 +673,9 @@ function MarkdownPane({
       <PaneTabDropTarget accepts={zone => actions.canDropTab(paneId, zone)} color={colors.primary ?? colors.foreground} onDrop={zone => actions.dropTab(paneId, zone)} type={tabDragType}>
         {/* Clicking anywhere in a pane focuses it without taking the click from the editor. */}
         <View onStartShouldSetResponderCapture={() => { actions.focus(paneId); return false; }} style={styles.root} testID={`markdown-pane-${paneId}`}>
-          {(active ? tabs.paths.filter(path => visited.includes(path)) : [null]).map(path => (
+          {(active ? tabs.paths.filter(path => editorKeys.has(path)) : [null]).map(path => (
             <MarkdownTabEditor
-              key={path ?? ""}
+              key={path === null ? "idle" : editorKeys.get(path)}
               path={path}
               visible={path === active}
               focused={focused && path === active}
