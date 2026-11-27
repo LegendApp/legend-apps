@@ -25,7 +25,9 @@ jest.mock("@legendapp/spark/files", () => ({
   stat: jest.fn(async (path: string) => ({ type: mockTree[path] === null ? "directory" : "file" })),
 }));
 const mockFocus = jest.fn();
-// The search field is focused through its ref once the panel mounts.
+const mockScrollTo = jest.fn();
+let mockScrollLayout: ((event: object) => void) | undefined;
+// The search field is focused through its ref once the panel mounts, and the results scroll through theirs.
 jest.mock("react-native", () => {
   const React = require("react");
   const actual = jest.requireActual("react-native");
@@ -34,6 +36,11 @@ jest.mock("react-native", () => {
     TextInput: React.forwardRef((props: object, ref: React.Ref<unknown>) => {
       React.useImperativeHandle(ref, () => ({ focus: mockFocus }));
       return React.createElement("TextInput", props);
+    }),
+    ScrollView: React.forwardRef((props: { onLayout?: (event: object) => void }, ref: React.Ref<unknown>) => {
+      React.useImperativeHandle(ref, () => ({ scrollTo: mockScrollTo }));
+      mockScrollLayout = props.onLayout;
+      return React.createElement(actual.View, props);
     }),
   };
 });
@@ -75,6 +82,17 @@ describe("MarkdownOpenFilePanel", () => {
     await act(async () => fireEvent.press(view.getByText("Open File")));
     expect(props.onBrowse).toHaveBeenCalledTimes(1);
     expect(props.onOpen).toHaveBeenCalledTimes(1);
+    await view.unmount();
+  });
+
+  it("keeps the keyboard's row inside the results as laid out", async () => {
+    const view = await render(<MarkdownOpenFilePanel {...props} folders={["/notes", "/work"]} />);
+    await act(async () => mockScrollLayout!({ nativeEvent: { layout: { height: 56 } } }));
+    await act(async () => fireEvent.changeText(view.getByLabelText("Search Markdown files"), "md"));
+    await act(async () => handlers().next());
+    expect(mockScrollTo).not.toHaveBeenCalled();
+    await act(async () => handlers().next());
+    expect(mockScrollTo).toHaveBeenLastCalledWith({ animated: false, y: 28 });
     await view.unmount();
   });
 

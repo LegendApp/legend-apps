@@ -8,7 +8,6 @@ import { markdownHotkeyRouter } from "./markdownHotkeys";
 import { findOpenFileResults } from "./markdownOpenFile";
 
 const rowHeight = 28;
-const resultsHeight = 320;
 const panelDefinitions = [
   { id: "next", title: "Next File", defaultBindings: ["Down"], repeat: true },
   { id: "previous", title: "Previous File", defaultBindings: ["Up"], repeat: true },
@@ -53,11 +52,13 @@ export function MarkdownOpenFilePanel({ folders, onBrowse, onDismiss, onError, o
   // Keeps the highlighted row in view as the keyboard moves it.
   const scroll = useRef<ScrollView>(null);
   const offset = useRef(0);
+  const viewportHeight = useRef(0);
   useEffect(() => {
-    if (selectedIndex < 0) return;
+    const height = viewportHeight.current;
+    if (selectedIndex < 0 || !height) return;
     const top = selectedIndex * rowHeight;
     if (top < offset.current) scroll.current?.scrollTo({ animated: false, y: top });
-    else if (top + rowHeight > offset.current + resultsHeight) scroll.current?.scrollTo({ animated: false, y: top + rowHeight - resultsHeight });
+    else if (top + rowHeight > offset.current + height) scroll.current?.scrollTo({ animated: false, y: top + rowHeight - height });
   }, [selectedIndex]);
 
   useRoutedHotkeys({
@@ -89,6 +90,7 @@ export function MarkdownOpenFilePanel({ folders, onBrowse, onDismiss, onError, o
         />
         <ScrollView
           keyboardShouldPersistTaps="always"
+          onLayout={event => { viewportHeight.current = event.nativeEvent.layout.height; }}
           onScroll={event => { offset.current = event.nativeEvent.contentOffset.y; }}
           ref={scroll}
           scrollEventThrottle={32}
@@ -148,6 +150,9 @@ const styles = StyleSheet.create({
   panel: {
     alignSelf: "center",
     borderRadius: 8,
+    // The panel shrinks to the pane, taking its rows from the results so the search field and footer stay.
+    flexShrink: 1,
+    marginBottom: 8,
     marginTop: 18,
     maxWidth: "90%",
     overflow: "hidden",
@@ -158,7 +163,7 @@ const styles = StyleSheet.create({
     width: 440,
   },
   results: {
-    maxHeight: resultsHeight,
+    maxHeight: 320,
   },
   row: {
     alignItems: "baseline",
