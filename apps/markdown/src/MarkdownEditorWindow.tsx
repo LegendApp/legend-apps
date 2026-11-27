@@ -799,7 +799,13 @@ function MarkdownTabEditor({
   renameTab: (from: string, to: string) => void;
   showOpenFile: (from: string | null, browse: () => Promise<void>) => Promise<void>;
 }) {
-  const openFile = useCallback((file: string) => openFrom(path, file), [openFrom, path]);
+  // A picker can answer after this editor unmounts, and the idle pane's next editor shares its null path.
+  const live = useRef(false);
+  useEffect(() => {
+    live.current = true;
+    return () => { live.current = false; };
+  }, []);
+  const openFile = useCallback((file: string) => { if (live.current) openFrom(path, file); }, [openFrom, path]);
   const newFile = useCallback(() => newDocument(path), [newDocument, path]);
   const session = useMarkdownDocumentSession({ onOpenFile: openFile, onFileSavedAs: renameTab, windowId });
   const { documentCommandsRef, handleError, openMarkdownDialog, openSelectedFile, prepareCurrentDocumentForClose, sessionState$ } = session;

@@ -488,6 +488,22 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
       await view.unmount();
     });
 
+    it("drops a picker result once its idle pane has had a tab, and opens one from the idle pane it shows now", async () => {
+      const view = await render(<MarkdownEditorWindow />);
+      await act(async () => menus().onOpenDocument());
+      const latePick = mockUseMarkdownDocumentSession.mock.calls.at(-1)![0].onOpenFile;
+      await act(async () => fireEvent.press(button(view, "New Tab")));
+      await act(async () => fireEvent.press(view.getByLabelText("Close New Tab")));
+      expect(tabs(view)).toEqual([]);
+      await act(async () => latePick("/outside/late.md"));
+      expect(tabs(view)).toEqual([]);
+
+      await act(async () => menus().onOpenDocument());
+      await act(async () => mockUseMarkdownDocumentSession.mock.calls.at(-1)![0].onOpenFile("/outside/picked.md"));
+      expect(tabs(view)).toEqual(["picked.md*"]);
+      await view.unmount();
+    });
+
     it("drops a picker result for an already open file once its empty tab has closed", async () => {
       mockSessionState$.isDirty.set(false);
       const view = await render(<MarkdownEditorWindow files={["/docs/a.md", "/docs/b.md"]} />);
