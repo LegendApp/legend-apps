@@ -98,7 +98,7 @@ import { MarkdownLinkPopover } from "./MarkdownLinkPopover";
 import { loadMarkdownUserThemesSync } from "./userThemes";
 import { createMarkdownDraft, isMarkdownDraft, removeMarkdownDraft } from "./markdownDrafts";
 import { createEmptyTab, getMarkdownTabTitle, isEmptyTab, MarkdownEmptyState } from "./MarkdownEmptyTab";
-import { MarkdownOpenFilePanel } from "./MarkdownOpenFilePanel";
+import { MarkdownOpenFilePanel, openFilePanelMinHeight } from "./MarkdownOpenFilePanel";
 import { refreshMarkdownEditorMenuState } from "./markdownEditorActions";
 import { createMarkdownAssistant } from "./markdownAssistant";
 import { MarkdownAssistantPanel } from "./MarkdownAssistantPanel";
@@ -272,17 +272,19 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
 
   const [areaSize, setAreaSize] = useState({ height: 0, width: 0 });
   const sidebarOpen = workspace.state.sidebarOpen;
+  const { titleBarHeight } = useMarkdownChromeTheme();
+  const paneMinHeight = titleBarHeight + openFilePanelMinHeight;
   const { panes: frames, splits } = useMemo(() => layoutPanes(layout.root, {
     height: Math.max(0, areaSize.height - paneGap),
     width: Math.max(0, areaSize.width - 2 * paneGap),
     x: paneGap,
     y: 0,
-  }), [areaSize, layout.root]);
+  }, paneMinHeight), [areaSize, layout.root, paneMinHeight]);
   const framesRef = useRef(frames);
   framesRef.current = frames;
   const focusedFrame = frames.find(frame => frame.id === layout.focused);
-  const canSplitRight = canSplitPane(focusedFrame, "horizontal");
-  const canSplitDown = canSplitPane(focusedFrame, "vertical");
+  const canSplitRight = canSplitPane(focusedFrame, "horizontal", paneMinHeight);
+  const canSplitDown = canSplitPane(focusedFrame, "vertical", paneMinHeight);
   const hasOtherPanes = layout.root.kind === "split";
 
   const paneClosers = useRef(new Map<string, (reason: CloseReason, path?: string) => Promise<boolean>>());
@@ -316,7 +318,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
         if (!drag) return false;
         if (zone === "center") return drag.paneId !== paneId;
         const ownOnlyTab = drag.paneId === paneId && layoutStateRef.current.layout.panes[paneId]?.paths.length === 1;
-        return !ownOnlyTab && canSplitPane(framesRef.current.find(frame => frame.id === paneId), zone === "left" || zone === "right" ? "horizontal" : "vertical");
+        return !ownOnlyTab && canSplitPane(framesRef.current.find(frame => frame.id === paneId), zone === "left" || zone === "right" ? "horizontal" : "vertical", paneMinHeight);
       },
       closeTab: (paneId, path, editorKey) => {
         const current = layoutStateRef.current;
@@ -358,7 +360,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
       },
       renameTab,
     };
-  }, [openWorkspaceTab, preparePanes, renameWorkspaceTab, reportError, setLayout]);
+  }, [openWorkspaceTab, paneMinHeight, preparePanes, renameWorkspaceTab, reportError, setLayout]);
   const resize = useCallback((splitId: string, fraction: number, animated: boolean) => {
     setLayout(current => setSplitFraction(current, splitId, fraction), animated);
   }, [setLayout]);
@@ -386,7 +388,6 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
   const autosave = useMarkdownAutosaveSetting();
   const storedAppearance = useMarkdownAppearanceSettings();
   const appearanceSettings = useMemo(() => preview ? { ...storedAppearance, ...preview } : storedAppearance, [preview, storedAppearance]);
-  const { titleBarHeight } = useMarkdownChromeTheme();
   const markdownStyle = useMemo(
     () => getMarkdownStyleForAppearance(displayTheme, layoutTheme, appearanceSettings),
     [appearanceSettings, displayTheme, layoutTheme],
@@ -536,6 +537,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
             windowMenus={windowMenus}
           />
         )}
+        paneMinHeight={paneMinHeight}
         root={layout.root}
         splits={splits}
         tabBarHeight={titleBarHeight}

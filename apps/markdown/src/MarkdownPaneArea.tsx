@@ -33,6 +33,8 @@ type MarkdownPaneAreaProps = {
   hairlineColor: string;
   onResize: (splitId: string, fraction: number, animate: boolean) => void;
   onSizeChange: (size: { height: number; width: number }) => void;
+  /** The shortest a pane can be: its tab bar plus room for Open File. */
+  paneMinHeight: number;
   renderPane: (frame: PaneFrame) => ReactNode;
   root: PaneNode;
   splits: SplitFrame[];
@@ -59,7 +61,7 @@ type LeavingPane = { from: PaneFrame; to: PaneRect };
  * Lays document panes out as rounded cards over the window's glass. Split, close and even-out glide;
  * a new pane grows from its outer edge and a closing one shrinks back into it.
  */
-export function MarkdownPaneArea({ animate, cardColor, frames, hairlineColor, onResize, onSizeChange, renderPane, root, splits, tabBarHeight }: MarkdownPaneAreaProps) {
+export function MarkdownPaneArea({ animate, cardColor, frames, hairlineColor, onResize, onSizeChange, paneMinHeight, renderPane, root, splits, tabBarHeight }: MarkdownPaneAreaProps) {
   const previous = useRef<{ frames: PaneFrame[]; root: PaneNode } | null>(null);
   // Closing panes render in the same commit that removes them, so they shrink from where they were.
   const leaving = useRef<LeavingPane[]>([]);
@@ -104,7 +106,7 @@ export function MarkdownPaneArea({ animate, cardColor, frames, hairlineColor, on
         </AnimatedRect>
       ))}
       {splits.map(split => (
-        <SplitDivider key={split.id} onResize={onResize} root={root} split={split} />
+        <SplitDivider key={split.id} minHeight={paneMinHeight} onResize={onResize} root={root} split={split} />
       ))}
     </View>
   );
@@ -248,22 +250,22 @@ export function PaneTabDropTarget({ accepts, children, color, onDrop, type }: {
   );
 }
 
-function SplitDivider({ onResize, root, split }: { onResize: MarkdownPaneAreaProps["onResize"]; root: PaneNode; split: SplitFrame }) {
-  const latest = useRef({ onResize, root, split });
-  latest.current = { onResize, root, split };
+function SplitDivider({ minHeight, onResize, root, split }: { minHeight: number; onResize: MarkdownPaneAreaProps["onResize"]; root: PaneNode; split: SplitFrame }) {
+  const latest = useRef({ minHeight, onResize, root, split });
+  latest.current = { minHeight, onResize, root, split };
   const drag = useRef({ fraction: 0.5, lastRelease: 0, moved: false });
   const [responder] = useState(() => PanResponder.create({
     onMoveShouldSetPanResponder: () => true,
     onStartShouldSetPanResponder: () => true,
     onPanResponderGrant: () => {
       // Starts from the laid-out fraction, which keeps each side's minimum after the area shrank.
-      const { root: tree, split: frame } = latest.current;
+      const { minHeight: min, root: tree, split: frame } = latest.current;
       const node = findSplit(tree, frame.id);
-      drag.current.fraction = node ? clampSplitFraction(node, frame.axis === "horizontal" ? frame.width : frame.height, node.fraction) : 0.5;
+      drag.current.fraction = node ? clampSplitFraction(node, frame.axis === "horizontal" ? frame.width : frame.height, node.fraction, min) : 0.5;
       drag.current.moved = false;
     },
     onPanResponderMove: (_event, gesture) => {
-      const { onResize: resize, root: tree, split: frame } = latest.current;
+      const { minHeight: min, onResize: resize, root: tree, split: frame } = latest.current;
       const node = findSplit(tree, frame.id);
       if (!node) return;
       const horizontal = frame.axis === "horizontal";
@@ -272,14 +274,14 @@ function SplitDivider({ onResize, root, split }: { onResize: MarkdownPaneAreaPro
       drag.current.moved = true;
       const size = horizontal ? frame.width : frame.height;
       const gap = horizontal ? paneGap : 0;
-      resize(frame.id, clampSplitFraction(node, size, drag.current.fraction + delta / (size + gap)), false);
+      resize(frame.id, clampSplitFraction(node, size, drag.current.fraction + delta / (size + gap), min), false);
     },
     onPanResponderRelease: () => {
       const now = Date.now();
       if (!drag.current.moved && now - drag.current.lastRelease < doubleClickMs) {
-        const { onResize: resize, root: tree, split: frame } = latest.current;
+        const { minHeight: min, onResize: resize, root: tree, split: frame } = latest.current;
         const node = findSplit(tree, frame.id);
-        if (node) resize(frame.id, clampSplitFraction(node, frame.axis === "horizontal" ? frame.width : frame.height, 0.5), true);
+        if (node) resize(frame.id, clampSplitFraction(node, frame.axis === "horizontal" ? frame.width : frame.height, 0.5, min), true);
         drag.current.lastRelease = 0;
         return;
       }

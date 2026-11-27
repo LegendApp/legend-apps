@@ -18,6 +18,7 @@ import {
   type PaneLayout,
 } from "../paneLayout";
 
+const minHeight = 156;
 const one = () => createPaneLayout({ active: "/a.md", paths: ["/a.md", "/b.md"] });
 
 function fractions(layout: PaneLayout) {
@@ -46,7 +47,7 @@ describe("splitPane", () => {
     const three = splitPane(splitPane(one(), "horizontal"), "horizontal");
     expect(getPaneIds(three.root)).toEqual(["p0", "p1", "p2"]);
     expect(fractions(three)).toEqual([0.333, 0.5]);
-    const frames = layoutPanes(three.root, { height: 400, width: 912, x: 0, y: 0 }).panes;
+    const frames = layoutPanes(three.root, { height: 400, width: 912, x: 0, y: 0 }, minHeight).panes;
     expect(frames.map(frame => frame.width)).toEqual([300, 300, 300]);
   });
 
@@ -166,22 +167,22 @@ describe("resizing", () => {
   it("clamps a split so both sides keep their minimum", () => {
     const layout = splitPane(one(), "horizontal");
     const split = findSplit(layout.root, "s1")!;
-    expect(clampSplitFraction(split, 1006, 0.05)).toBeCloseTo(0.2233);
-    expect(clampSplitFraction(split, 1006, 0.95)).toBeCloseTo(0.7767);
-    expect(clampSplitFraction(split, 1006, 0.4)).toBe(0.4);
+    expect(clampSplitFraction(split, 1006, 0.05, minHeight)).toBeCloseTo(0.2233);
+    expect(clampSplitFraction(split, 1006, 0.95, minHeight)).toBeCloseTo(0.7767);
+    expect(clampSplitFraction(split, 1006, 0.4, minHeight)).toBe(0.4);
     expect(fractions(setSplitFraction(layout, "s1", 0.3))).toEqual([0.3]);
   });
 
   it("keeps a side's minimum when the area shrinks under its saved fraction", () => {
     const layout = setSplitFraction(splitPane(one(), "horizontal"), "s1", 226 / 1206);
-    expect(layoutPanes(layout.root, { height: 400, width: 1200, x: 0, y: 0 }).panes[0].width).toBe(220);
-    expect(layoutPanes(layout.root, { height: 400, width: 650, x: 0, y: 0 }).panes.map(pane => pane.width)).toEqual([220, 424]);
+    expect(layoutPanes(layout.root, { height: 400, width: 1200, x: 0, y: 0 }, minHeight).panes[0].width).toBe(220);
+    expect(layoutPanes(layout.root, { height: 400, width: 650, x: 0, y: 0 }, minHeight).panes.map(pane => pane.width)).toEqual([220, 424]);
     const stacked = setSplitFraction(splitPane(one(), "vertical"), "s1", 0.9);
-    expect(layoutPanes(stacked.root, { height: 400, width: 600, x: 0, y: 0 }).panes.map(pane => pane.height)).toEqual([244, 156]);
+    expect(layoutPanes(stacked.root, { height: 400, width: 600, x: 0, y: 0 }, minHeight).panes.map(pane => pane.height)).toEqual([244, 156]);
   });
 
   it("fits two minimum panes with the gap whichever side the saved fraction favours", () => {
-    const widths = (fraction: number) => layoutPanes(setSplitFraction(splitPane(one(), "horizontal"), "s1", fraction).root, { height: 400, width: 446, x: 0, y: 0 }).panes.map(pane => pane.width);
+    const widths = (fraction: number) => layoutPanes(setSplitFraction(splitPane(one(), "horizontal"), "s1", fraction).root, { height: 400, width: 446, x: 0, y: 0 }, minHeight).panes.map(pane => pane.width);
     expect(widths(0.75)).toEqual([220, 220]);
     expect(widths(0.25)).toEqual([220, 220]);
   });
@@ -189,26 +190,26 @@ describe("resizing", () => {
   it("keeps a tree's saved proportions when the area cannot fit every minimum", () => {
     const columns = splitPaneWithTab(splitPane(one(), "horizontal"), "p0", "/b.md", "p1", "left");
     const layout = setSplitFraction(setSplitFraction(columns, "s1", 679 / 1206), "s2", 226 / 527);
-    const widths = (width: number) => layoutPanes(layout.root, { height: 400, width, x: 0, y: 0 }).panes.map(pane => [pane.id, pane.width]);
+    const widths = (width: number) => layoutPanes(layout.root, { height: 400, width, x: 0, y: 0 }, minHeight).panes.map(pane => [pane.id, pane.width]);
     expect(widths(1200)).toEqual([["p0", 673], ["p2", 220], ["p1", 295]]);
     // The first pane keeps its minimum, so its New Tab button stays in view; the starved columns keep their ratio.
     expect(widths(400)).toEqual([["p0", 220], ["p2", 71], ["p1", 97]]);
     // A split that cannot fit both minimums gives neither side more than its minimum.
-    const two = (fraction: number) => layoutPanes(setSplitFraction(splitPane(one(), "horizontal"), "s1", fraction).root, { height: 400, width: 400, x: 0, y: 0 }).panes.map(pane => pane.width);
+    const two = (fraction: number) => layoutPanes(setSplitFraction(splitPane(one(), "horizontal"), "s1", fraction).root, { height: 400, width: 400, x: 0, y: 0 }, minHeight).panes.map(pane => pane.width);
     expect(two(0.95)).toEqual([220, 174]);
     expect(two(0.5)).toEqual([197, 197]);
     expect(fractions(layout)).toEqual([0.563, 0.429]);
   });
 
   it("only splits a pane with room for two minimums", () => {
-    expect(canSplitPane({ height: 400, width: 446, x: 0, y: 0 }, "horizontal")).toBe(true);
-    expect(canSplitPane({ height: 400, width: 445, x: 0, y: 0 }, "horizontal")).toBe(false);
-    expect(canSplitPane({ height: 311, width: 900, x: 0, y: 0 }, "vertical")).toBe(false);
+    expect(canSplitPane({ height: 400, width: 446, x: 0, y: 0 }, "horizontal", minHeight)).toBe(true);
+    expect(canSplitPane({ height: 400, width: 445, x: 0, y: 0 }, "horizontal", minHeight)).toBe(false);
+    expect(canSplitPane({ height: 311, width: 900, x: 0, y: 0 }, "vertical", minHeight)).toBe(false);
   });
 
   it("stacks vertical panes edge to edge and spaces side-by-side panes by the gap", () => {
     const grid = splitPane(splitPane(splitPane(one(), "horizontal"), "vertical", "p0"), "vertical", "p1");
-    const { panes } = layoutPanes(grid.root, { height: 600, width: 806, x: 0, y: 0 });
+    const { panes } = layoutPanes(grid.root, { height: 600, width: 806, x: 0, y: 0 }, minHeight);
     expect(panes).toEqual([
       { id: "p0", height: 300, width: 400, x: 0, y: 0 },
       { id: "p2", height: 300, width: 400, x: 0, y: 300 },

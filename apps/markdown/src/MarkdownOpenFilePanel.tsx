@@ -8,6 +8,8 @@ import { markdownHotkeyRouter } from "./markdownHotkeys";
 import { findOpenFileResults } from "./markdownOpenFile";
 
 const rowHeight = 28;
+/** The pane body Open File needs: its 26 pt of margins, 2 pt of borders, the 38 pt search field, a 22 pt results viewport and the 32 pt footer. */
+export const openFilePanelMinHeight = 120;
 const panelDefinitions = [
   { id: "next", title: "Next File", defaultBindings: ["Down"], repeat: true },
   { id: "previous", title: "Previous File", defaultBindings: ["Up"], repeat: true },

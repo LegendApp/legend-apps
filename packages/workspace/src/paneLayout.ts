@@ -24,7 +24,6 @@ export type SplitFrame = PaneRect & { axis: PaneAxis; divider: PaneRect; id: str
 
 export const paneGap = 6;
 export const paneMinWidth = 220;
-export const paneMinHeight = 156;
 
 export function createPaneLayout(tabs: DocumentTabs = { active: null, paths: [] }): PaneLayout {
   return { focused: "p0", nextId: 1, panes: { p0: tabs }, root: { kind: "pane", id: "p0" } };
@@ -187,7 +186,7 @@ export function splitPaneWithTab(layout: PaneLayout, fromId: string, path: strin
 }
 
 /** Lays the tree out in `rect`: side-by-side panes keep a gap between them; stacked panes share an edge. */
-export function layoutPanes(node: PaneNode, rect: PaneRect, frames: { panes: PaneFrame[]; splits: SplitFrame[] } = { panes: [], splits: [] }) {
+export function layoutPanes(node: PaneNode, rect: PaneRect, minHeight: number, frames: { panes: PaneFrame[]; splits: SplitFrame[] } = { panes: [], splits: [] }) {
   if (node.kind === "pane") {
     frames.panes.push({ id: node.id, ...rect });
     return frames;
@@ -197,7 +196,7 @@ export function layoutPanes(node: PaneNode, rect: PaneRect, frames: { panes: Pan
   // As in Silica, each side counts with the gap that follows it, so evenly split panes come out the same width.
   const size = (horizontal ? rect.width : rect.height) - gap;
   // A saved fraction can leave a side under its minimum once the area shrinks, so lay out the clamped one.
-  const firstSize = Math.round((size + 2 * gap) * clampSplitFraction(node, size + gap, node.fraction)) - gap;
+  const firstSize = Math.round((size + 2 * gap) * clampSplitFraction(node, size + gap, node.fraction, minHeight)) - gap;
   const first = horizontal ? { ...rect, width: firstSize } : { ...rect, height: firstSize };
   const second = horizontal
     ? { ...rect, width: size - firstSize, x: rect.x + firstSize + gap }
@@ -207,15 +206,15 @@ export function layoutPanes(node: PaneNode, rect: PaneRect, frames: { panes: Pan
     ? { height: rect.height, width: paneGap, x: rect.x + firstSize, y: rect.y }
     : { height: paneGap, width: rect.width, x: rect.x, y: rect.y + firstSize - paneGap / 2 };
   frames.splits.push({ axis: node.axis, divider, id: node.id, ...rect });
-  layoutPanes(node.first, first, frames);
-  layoutPanes(node.second, second, frames);
+  layoutPanes(node.first, first, minHeight, frames);
+  layoutPanes(node.second, second, minHeight, frames);
   return frames;
 }
 
-function minimumSize(node: PaneNode, axis: PaneAxis): number {
-  if (node.kind === "pane") return axis === "horizontal" ? paneMinWidth : paneMinHeight;
-  const first = minimumSize(node.first, axis);
-  const second = minimumSize(node.second, axis);
+function minimumSize(node: PaneNode, axis: PaneAxis, minHeight: number): number {
+  if (node.kind === "pane") return axis === "horizontal" ? paneMinWidth : minHeight;
+  const first = minimumSize(node.first, axis, minHeight);
+  const second = minimumSize(node.second, axis, minHeight);
   return node.axis === axis ? first + second + (axis === "horizontal" ? paneGap : 0) : Math.max(first, second);
 }
 
@@ -223,12 +222,12 @@ function minimumSize(node: PaneNode, axis: PaneAxis): number {
  * Clamps a split's fraction so both sides keep their minimum size inside `size`. When both minimums
  * cannot fit, neither side gets more than its minimum and the saved proportion holds between them.
  */
-export function clampSplitFraction(node: Extract<PaneNode, { kind: "split" }>, size: number, fraction: number) {
+export function clampSplitFraction(node: Extract<PaneNode, { kind: "split" }>, size: number, fraction: number, minHeight: number) {
   const gap = node.axis === "horizontal" ? paneGap : 0;
   const available = size + gap;
   if (size <= 0) return 0.5;
-  const low = (minimumSize(node.first, node.axis) + gap) / available;
-  const high = 1 - (minimumSize(node.second, node.axis) + gap) / available;
+  const low = (minimumSize(node.first, node.axis, minHeight) + gap) / available;
+  const high = 1 - (minimumSize(node.second, node.axis, minHeight) + gap) / available;
   return Math.min(Math.max(low, high), Math.max(Math.min(low, high), fraction));
 }
 
@@ -238,9 +237,9 @@ export function findSplit(node: PaneNode, splitId: string): Extract<PaneNode, { 
 }
 
 /** Whether the pane's frame has room for two minimum panes along `axis`. */
-export function canSplitPane(frame: PaneRect | undefined, axis: PaneAxis) {
+export function canSplitPane(frame: PaneRect | undefined, axis: PaneAxis, minHeight: number) {
   if (!frame) return false;
-  return axis === "horizontal" ? frame.width >= paneMinWidth * 2 + paneGap : frame.height >= paneMinHeight * 2;
+  return axis === "horizontal" ? frame.width >= paneMinWidth * 2 + paneGap : frame.height >= minHeight * 2;
 }
 
 function parseTabs(value: unknown): DocumentTabs | undefined {

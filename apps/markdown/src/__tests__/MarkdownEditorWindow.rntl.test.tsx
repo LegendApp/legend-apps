@@ -146,6 +146,7 @@ jest.mock("../markdownDrafts", () => ({
 let mockOpenFilePanel: { folders: readonly string[]; onBrowse: () => void; onDismiss: () => void; onOpen: (path: string) => void } | null = null;
 jest.mock("../MarkdownOpenFilePanel", () => ({
   MarkdownOpenFilePanel: (props: typeof mockOpenFilePanel) => { mockOpenFilePanel = props; return null; },
+  openFilePanelMinHeight: jest.requireActual("../MarkdownOpenFilePanel").openFilePanelMinHeight,
 }));
 
 jest.mock("../useMarkdownDocumentSession", () => ({
@@ -613,7 +614,7 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
     const paneStyle = (view: Awaited<ReturnType<typeof render>>, paneId: string) => {
       const node = paneRect(view, paneId);
       const style = StyleSheet.flatten(node!.props.style) as Record<string, { value: number }>;
-      return { left: style.left.value, top: style.top.value, width: style.width.value };
+      return { height: style.height.value, left: style.left.value, top: style.top.value, width: style.width.value };
     };
 
     beforeEach(() => {
@@ -633,8 +634,8 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
       expect(view.getByTestId("markdown-pane-p1")).toBeTruthy();
       expect(menus().paneCommandState.hasOtherPanes).toBe(true);
       // The sidebar hides for single-file windows, so the cards keep a 6 pt gutter on every side but the top.
-      expect(paneStyle(view, "p0")).toEqual({ left: 6, top: 0, width: 594 });
-      expect(paneStyle(view, "p1")).toEqual({ left: 606, top: 0, width: 594 });
+      expect(paneStyle(view, "p0")).toEqual({ height: 794, left: 6, top: 0, width: 594 });
+      expect(paneStyle(view, "p1")).toEqual({ height: 794, left: 606, top: 0, width: 594 });
       await fireEvent.press(view.getByLabelText("Show Sidebar"));
       expect(view.getByLabelText("Hide Sidebar")).toBeTruthy();
       expect(paneStyle(view, "p0").left).toBe(6);
@@ -793,6 +794,23 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
       }
       expect(paneStyle(view, "p0").width).toBe(594);
       await view.unmount();
+    });
+
+    it("keeps a stacked pane tall enough for Open File under the chrome theme's tab bar", async () => {
+      for (const [titleBarHeight, minHeight] of [[36, 156], [80, 200]]) {
+        mockChromeTheme.titleBarHeight = titleBarHeight;
+        const view = await render(<MarkdownEditorWindow files={["/docs/a.md"]} />);
+        await measure(view);
+        await act(async () => menus().paneCommands.splitDown());
+        const divider = view.getByLabelText("Resize stacked panes");
+        await act(async () => {
+          divider.props.onPanResponderGrant();
+          divider.props.onPanResponderMove({}, { dx: 0, dy: 2000 });
+        });
+        expect(paneStyle(view, "p1").height).toBe(minHeight);
+        await view.unmount();
+      }
+      mockChromeTheme.titleBarHeight = 36;
     });
 
     it("closes a split pane once Close Tab empties it, keeping focus on the neighbour", async () => {
