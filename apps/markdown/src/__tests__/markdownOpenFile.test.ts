@@ -29,6 +29,15 @@ describe("findOpenFileResults", () => {
     expect(findOpenFileResults(todos, roots, [], "b/notes todo").map(result => result.path)).toEqual(["/b/Notes/archive/todo.md"]);
   });
 
+  it("shows the full folder of files whose labels still match under overlapping roots, and searches by it", () => {
+    const roots = ["/x/Notes", "/x/Notes/Wrapper/Notes/Archive", "/y/Archive"];
+    const todos = ["/x/Notes/Archive/todo.md", "/x/Notes/Wrapper/Notes/Archive/todo.md", "/y/Archive/other/todo.md"];
+    expect(findOpenFileResults(todos, roots, [], "todo").map(result => result.directory))
+      .toEqual(["/x/Notes/Archive", "/x/Notes/Wrapper/Notes/Archive", "y/Archive/other"]);
+    expect(findOpenFileResults(todos, roots, [todos[1]], "").map(result => result.directory)).toEqual(["/x/Notes/Wrapper/Notes/Archive"]);
+    expect(findOpenFileResults(todos, roots, [], "wrapper todo").map(result => result.path)).toEqual([todos[1]]);
+  });
+
   it("ranks names starting with the query first, then names holding it, then recent files", () => {
     expect(findOpenFileResults(files, folders, ["/b/work/plans/q4.md"], "plan").map(result => result.path))
       .toEqual(["/a/notes/deep/nested/plan.md", "/b/work/plans/q4.md"]);
