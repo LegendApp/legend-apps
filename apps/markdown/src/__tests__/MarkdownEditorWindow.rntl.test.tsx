@@ -143,6 +143,11 @@ jest.mock("../markdownDrafts", () => ({
   removeMarkdownDraft: jest.fn(),
 }));
 
+let mockOpenFilePanel: { folders: readonly string[]; onBrowse: () => void; onDismiss: () => void; onOpen: (path: string) => void } | null = null;
+jest.mock("../MarkdownOpenFilePanel", () => ({
+  MarkdownOpenFilePanel: (props: typeof mockOpenFilePanel) => { mockOpenFilePanel = props; return null; },
+}));
+
 jest.mock("../useMarkdownDocumentSession", () => ({
   useMarkdownDocumentSession: jest.fn(() => mockSession),
 }));
@@ -365,7 +370,7 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
       .mockReturnValueOnce("/test-drafts/Untitled.md")
       .mockReturnValueOnce("/test-drafts/Untitled 2.md");
     const view = await render(<MarkdownEditorWindow />);
-    expect(view.getByText("New Document")).toBeTruthy();
+    expect(view.getByLabelText("New File")).toBeTruthy();
     expect(mockMarkdownDocument).not.toHaveBeenCalled();
 
     await act(async () => newDocument());
@@ -381,6 +386,93 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
     expect(removeMarkdownDraft).not.toHaveBeenCalled();
 
     await view.unmount();
+  });
+
+  describe("empty tabs", () => {
+    const { useMarkdownMenus } = jest.requireMock("../useMarkdownMenus");
+    const menus = () => useMarkdownMenus.mock.calls.at(-1)[0];
+    const tabs = (view: Awaited<ReturnType<typeof render>>) => view.queryAllByLabelText(/./).filter(node => node.props.accessibilityRole === "tab")
+      .map(node => `${node.props.accessibilityLabel}${node.props.accessibilityState.selected ? "*" : ""}`);
+    const button = (view: Awaited<ReturnType<typeof render>>, label: string) => view.getAllByLabelText(label).find(node => node.props.accessibilityRole === "button")!;
+    const showPanel = async (view: Awaited<ReturnType<typeof render>>) => {
+      mockOpenFilePanel = null;
+      await act(async () => fireEvent.press(button(view, "Open File")));
+      return mockOpenFilePanel!;
+    };
+
+    beforeEach(() => {
+      mockSession.openMarkdownDialog.mockReset().mockResolvedValue(undefined);
+      mockSessionState$.assign({ documentSource: "file", filename: "/docs/a.md", isDirty: true });
+    });
+    afterEach(() => {
+      mockSessionState$.isDirty.set(false);
+      mockSidebarFolders = [];
+    });
+
+    it("opens a New Tab beside a dirty document without preparing it, and New File turns it into a draft", async () => {
+      const view = await render(<MarkdownEditorWindow files={["/docs/a.md"]} />);
+      mockSession.openSelectedFile.mockClear();
+      await act(async () => fireEvent.press(button(view, "New Tab")));
+      expect(tabs(view)).toEqual(["a.md", "New Tab*"]);
+      expect(mockSession.prepareCurrentDocumentForClose).not.toHaveBeenCalled();
+      expect(mockSession.openSelectedFile).not.toHaveBeenCalled();
+      expect(button(view, "New File").props.accessibilityHint).toBe("⌘N");
+      expect(button(view, "Open File").props.accessibilityHint).toBe("⌘O");
+
+      jest.mocked(createMarkdownDraft).mockReturnValueOnce("/test-drafts/Untitled.md");
+      await act(async () => menus().onNewDocument());
+      expect(tabs(view)).toEqual(["a.md", "Untitled.md*"]);
+      expect(mockSession.openSelectedFile).toHaveBeenCalledWith("/test-drafts/Untitled.md");
+      expect(mockSession.prepareCurrentDocumentForClose).not.toHaveBeenCalled();
+      await view.unmount();
+    });
+
+    it("searches the folders from an empty tab: a result replaces it, an open file's tab takes over, and dismissing keeps it", async () => {
+      mockSidebarFolders = ["/notes", "/work"];
+      const view = await render(<MarkdownEditorWindow />);
+      await act(async () => fireEvent.press(button(view, "New Tab")));
+      let panel = await showPanel(view);
+      expect(panel.folders).toEqual(["/notes", "/work"]);
+      await act(async () => panel.onDismiss());
+      mockOpenFilePanel = null;
+      expect(tabs(view)).toEqual(["New Tab*"]);
+
+      // Cmd+O runs the same Open File.
+      mockOpenFilePanel = null;
+      await act(async () => menus().onOpenDocument());
+      await act(async () => mockOpenFilePanel!.onOpen("/work/deep/plan.md"));
+      expect(tabs(view)).toEqual(["plan.md*"]);
+      expect(mockSession.openSelectedFile).toHaveBeenLastCalledWith("/work/deep/plan.md");
+
+      await act(async () => fireEvent.press(button(view, "New Tab")));
+      panel = await showPanel(view);
+      await act(async () => panel.onOpen("/work/deep/plan.md"));
+      expect(tabs(view)).toEqual(["plan.md*"]);
+
+      // The footer's Open File hands over to the system picker; canceling it leaves the empty tab.
+      await act(async () => fireEvent.press(button(view, "New Tab")));
+      panel = await showPanel(view);
+      await act(async () => panel.onBrowse());
+      expect(mockSession.openMarkdownDialog).toHaveBeenCalledTimes(1);
+      expect(tabs(view)).toEqual(["plan.md", "New Tab*"]);
+      expect(mockSession.openSelectedFile).toHaveBeenCalledTimes(1);
+      await view.unmount();
+    });
+
+    it("opens the system picker without folders, and its file replaces the empty tab", async () => {
+      const view = await render(<MarkdownEditorWindow files={["/docs/a.md"]} />);
+      await act(async () => fireEvent.press(button(view, "New Tab")));
+      mockOpenFilePanel = null;
+      await act(async () => fireEvent.press(button(view, "Open File")));
+      expect(mockOpenFilePanel).toBeNull();
+      expect(mockSession.openMarkdownDialog).toHaveBeenCalledTimes(1);
+      expect(tabs(view)).toEqual(["a.md", "New Tab*"]);
+
+      // The empty tab's session renders last and opens what the picker chose in its place.
+      await act(async () => (mockUseMarkdownDocumentSession.mock.calls.at(-1) as unknown as [{ onOpenFile: (path: string) => void }])[0].onOpenFile("/elsewhere/b.md"));
+      expect(tabs(view)).toEqual(["a.md", "b.md*"]);
+      await view.unmount();
+    });
   });
 
   it("opens a draft tab for the New startup setting", async () => {

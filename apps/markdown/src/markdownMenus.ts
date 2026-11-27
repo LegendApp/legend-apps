@@ -34,7 +34,7 @@ export const markdownMenuConfig: MenuRootItem[] = [
       { ...workspaceMenuItems.newWindow, placement: { after: { id: "newFolder" } } },
       { type: "action",
         id: "open",
-        target: { role: "open" }, label: "Open…",
+        target: { role: "open" }, label: "Open…", shortcut: "Cmd+o",
         placement: { after: { id: "newWindow" } },
       },
       { type: "action", id: "addFolder", label: "Add Folder…", shortcut: "Cmd+Shift+o", placement: { after: { role: "open" } } },
@@ -153,3 +153,21 @@ export const markdownMenuConfig: MenuRootItem[] = [
     ],
   },
 ];
+
+// In the menu bar's order.
+const modifierSymbols = [["Ctrl", "⌃"], ["Alt", "⌥"], ["Shift", "⇧"], ["Cmd", "⌘"]] as const;
+
+/** A menu item's shortcut as the menu bar shows it, such as ⌘N. */
+export function getMarkdownMenuShortcutLabel(id: string) {
+  type MenuNode = { id?: string; items?: readonly MenuNode[]; shortcut?: string };
+  const find = (items: readonly MenuNode[]): string | undefined => {
+    for (const item of items) {
+      const found = item.id === id ? item.shortcut : item.items && find(item.items);
+      if (found) return found;
+    }
+    return undefined;
+  };
+  const parts = find(markdownMenuConfig as readonly MenuNode[])?.split("+") ?? [];
+  const key = parts.pop() ?? "";
+  return modifierSymbols.filter(([modifier]) => parts.includes(modifier)).map(([, symbol]) => symbol).join("") + key.toUpperCase();
+}

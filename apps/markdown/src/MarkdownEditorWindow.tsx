@@ -97,6 +97,8 @@ import { getMarkdownMeasurementSignature } from "./markdownMeasurementSignature"
 import { MarkdownLinkPopover } from "./MarkdownLinkPopover";
 import { loadMarkdownUserThemesSync } from "./userThemes";
 import { createMarkdownDraft, isMarkdownDraft, removeMarkdownDraft } from "./markdownDrafts";
+import { createEmptyTab, getMarkdownTabTitle, isEmptyTab, MarkdownEmptyState } from "./MarkdownEmptyTab";
+import { MarkdownOpenFilePanel } from "./MarkdownOpenFilePanel";
 import { refreshMarkdownEditorMenuState } from "./markdownEditorActions";
 import { createMarkdownAssistant } from "./markdownAssistant";
 import { MarkdownAssistantPanel } from "./MarkdownAssistantPanel";
@@ -183,11 +185,16 @@ function updateLayoutState(layout: PaneLayout, animate: boolean, previous?: Layo
   return { animate, layout, editorKeys, nextEditorKey };
 }
 
+/** Drafts and empty tabs are not files the workspace or the restored panes keep. */
+function isFileTab(path: string) {
+  return !isMarkdownDraft(path) && !isEmptyTab(path);
+}
+
 function layoutWithoutDrafts(layout: PaneLayout): PaneLayout {
   return {
     ...layout,
     panes: Object.fromEntries(Object.entries(layout.panes).map(([id, tabs]) => {
-      const paths = tabs.paths.filter(path => !isMarkdownDraft(path));
+      const paths = tabs.paths.filter(isFileTab);
       const active = tabs.active && paths.includes(tabs.active) ? tabs.active : paths[0] ?? null;
       return [id, { active, paths }];
     })),
@@ -197,7 +204,7 @@ function layoutWithoutDrafts(layout: PaneLayout): PaneLayout {
 function splitMarkdownPane(layout: PaneLayout, axis: PaneAxis) {
   const next = splitPane(layout, axis);
   const path = next.panes[next.focused]?.active;
-  if (next !== layout && path && isMarkdownDraft(path)) {
+  if (next !== layout && path && !isFileTab(path)) {
     next.panes[next.focused] = { active: null, paths: [] };
   }
   return next;
@@ -237,7 +244,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
   });
   useEffect(() => {
     const path = initialPanes.panes[initialPanes.focused].active;
-    if (path && !isMarkdownDraft(path)) openWorkspaceTab(path);
+    if (path && isFileTab(path)) openWorkspaceTab(path);
   }, [initialPanes, openWorkspaceTab]);
   const [layoutState, setLayoutState] = useState(() => updateLayoutState(initialPanes, false));
   const { animate, layout, editorKeys } = layoutState;
@@ -319,7 +326,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
     },
     focus: paneId => setLayout(current => focusPane(current, paneId), false),
     openTab: (paneId, path) => {
-      if (!isMarkdownDraft(path)) openWorkspaceTab(path);
+      if (isFileTab(path)) openWorkspaceTab(path);
       setLayout(current => openPaneTab(current, paneId, path), false);
     },
     register: (paneId, prepareForClose) => {
@@ -327,8 +334,8 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
       return () => { if (paneClosers.current.get(paneId) === prepareForClose) paneClosers.current.delete(paneId); };
     },
     renameTab: (paneId, from, to) => {
-      if (isMarkdownDraft(from)) openWorkspaceTab(to);
-      else renameWorkspaceTab(from, to);
+      if (isFileTab(from)) renameWorkspaceTab(from, to);
+      else if (isFileTab(to)) openWorkspaceTab(to);
       setLayout(current => {
         const tabs = current.panes[paneId];
         return from !== to && tabs?.paths.includes(from) ? renamePaneTab(current, paneId, from, to) : current;
@@ -404,7 +411,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
 
   const focusedTabs = layout.panes[layout.focused];
   const activePath = focusedTabs?.active ?? null;
-  const currentFile = activePath && !isMarkdownDraft(activePath) ? activePath : null;
+  const currentFile = activePath && isFileTab(activePath) ? activePath : null;
   const openInFocusedPane = useCallback((path: string) => paneActions.openTab(layoutStateRef.current.layout.focused, path), [paneActions]);
   const addFolder = useCallback(() => { chooseFolders().then(addFolders).catch(reportError); }, [addFolders, reportError]);
   const newEntryDirectory = getNewEntryDirectory(workspaceFolders, currentFile);
@@ -497,6 +504,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
             dangerColor={displayTheme.colors.danger}
             editorKeys={editorKeys[frame.id]}
             focused={frame.id === layout.focused}
+            folders={workspaceFolders}
             formattingToolbarMode={formattingToolbarMode}
             frame={frame}
             markdownLayout={markdownLayout}
@@ -573,6 +581,8 @@ type MarkdownPaneProps = {
   dangerColor: string;
   editorKeys: ReadonlyMap<string, number>;
   focused: boolean;
+  /** The window's root folders, which Open File searches. */
+  folders: readonly string[];
   formattingToolbarMode: MarkdownFormattingToolbarMode;
   frame: PaneFrame;
   markdownLayout: MarkdownDocumentProps["markdownLayout"];
@@ -600,6 +610,7 @@ function MarkdownPane({
   dangerColor,
   editorKeys,
   focused,
+  folders,
   formattingToolbarMode,
   frame,
   markdownLayout,
@@ -631,7 +642,22 @@ function MarkdownPane({
 
   const openTab = useCallback((path: string) => actions.openTab(paneId, path), [actions, paneId]);
   const renameTab = useCallback((from: string, to: string) => actions.renameTab(paneId, from, to), [actions, paneId]);
-  const newDocument = useCallback(async () => { openTab(createMarkdownDraft()); }, [openTab]);
+  /** Opens a file from the tab `from`: an empty tab becomes the file, or gives way to the file's tab in this pane. */
+  const openFrom = useCallback((from: string | null, file: string) => {
+    if (!isEmptyTab(from)) openTab(file);
+    else if (tabs.paths.includes(file)) {
+      openTab(file);
+      actions.closeTab(paneId, from!, editorKeys.get(from!));
+    } else renameTab(from!, file);
+  }, [actions, editorKeys, openTab, paneId, renameTab, tabs.paths]);
+  const newDocument = useCallback(async (from: string | null) => { openFrom(from, createMarkdownDraft()); }, [openFrom]);
+  // Open File searches the root folders in a panel over this pane; without folders, or from the panel's footer, it is the system picker.
+  const [openFile, setOpenFile] = useState<{ browse: () => Promise<void>; from: string | null } | null>(null);
+  useEffect(() => { if (!focused) setOpenFile(null); }, [focused]);
+  const showOpenFile = useCallback(async (from: string | null, browse: () => Promise<void>) => {
+    if (folders.length > 0) setOpenFile({ browse, from });
+    else await browse();
+  }, [folders.length]);
   const closeTab = useCallback(async (path: string) => {
     const prepare = tabClosers.current.get(path);
     const closingPath = prepare ? await prepare("close") : path;
@@ -658,12 +684,14 @@ function MarkdownPane({
             colors={colors}
             focused={focused}
             onClose={path => { actions.focus(paneId); closeTab(path).catch(reportError); }}
+            onNewTab={() => { actions.focus(paneId); openTab(createEmptyTab()); }}
             onSelect={path => { actions.focus(paneId); actions.openTab(paneId, path); }}
             onToggleSidebar={onToggleSidebar}
             sidebarOpen={!onToggleSidebar}
             paths={tabs.paths}
             separated={false}
             tabDrag={{ onDragStart: path => actions.dragTab(paneId, path), onDrop: index => actions.dropTab(paneId, index), type: tabDragType }}
+            title={getMarkdownTabTitle}
             titleBarHeight={titleBarHeight}
           />
         </View>
@@ -692,14 +720,25 @@ function MarkdownPane({
               measurementSignature={measurementSignature}
               nativeWindowAppearance={nativeWindowAppearance}
               newDocument={newDocument}
-              openTab={openTab}
+              openFrom={openFrom}
               registerTab={registerTab}
               renameTab={renameTab}
+              showOpenFile={showOpenFile}
               theme={theme}
               windowId={windowId}
               windowMenus={windowMenus}
             />
           ))}
+          {openFile ? (
+            <MarkdownOpenFilePanel
+              folders={folders}
+              onBrowse={() => { setOpenFile(null); openFile.browse().catch(reportError); }}
+              onDismiss={() => setOpenFile(null)}
+              onError={reportError}
+              onOpen={file => { setOpenFile(null); openFrom(openFile.from, file); }}
+              windowId={windowId}
+            />
+          ) : null}
         </View>
       </PaneTabDropTarget>
     </MarkdownPaneChrome>
@@ -723,9 +762,10 @@ function MarkdownTabEditor({
   measurementSignature,
   nativeWindowAppearance,
   newDocument,
-  openTab,
+  openFrom,
   registerTab,
   renameTab,
+  showOpenFile,
   theme,
   windowId,
   windowMenus,
@@ -736,23 +776,28 @@ function MarkdownTabEditor({
   visible: boolean;
   foregroundColor: string;
   closeActiveTab: () => void;
-  newDocument: () => Promise<void>;
-  openTab: (path: string) => void;
+  newDocument: (from: string | null) => Promise<void>;
+  openFrom: (from: string | null, file: string) => void;
   registerTab: (path: string, prepare: PrepareTabForClose) => () => void;
   renameTab: (from: string, to: string) => void;
+  showOpenFile: (from: string | null, browse: () => Promise<void>) => Promise<void>;
 }) {
-  const session = useMarkdownDocumentSession({ onOpenFile: openTab, onFileSavedAs: renameTab });
-  const { documentCommandsRef, handleError, openSelectedFile, prepareCurrentDocumentForClose, sessionState$ } = session;
+  const openFile = useCallback((file: string) => openFrom(path, file), [openFrom, path]);
+  const newFile = useCallback(() => newDocument(path), [newDocument, path]);
+  const session = useMarkdownDocumentSession({ onOpenFile: openFile, onFileSavedAs: renameTab });
+  const { documentCommandsRef, handleError, openMarkdownDialog, openSelectedFile, prepareCurrentDocumentForClose, sessionState$ } = session;
+  const openDocument = useCallback(() => showOpenFile(path, openMarkdownDialog), [openMarkdownDialog, path, showOpenFile]);
+  const documentPath = isEmptyTab(path) ? null : path;
   useEffect(() => {
-    if (path) openSelectedFile(path);
-  }, [openSelectedFile, path]);
+    if (documentPath) openSelectedFile(documentPath);
+  }, [documentPath, openSelectedFile]);
   useEffect(() => {
-    if (!path) return;
-    return registerTab(path, async reason => {
+    if (!documentPath) return;
+    return registerTab(documentPath, async reason => {
       const ready = await prepareCurrentDocumentForClose({ autosaveEnabled, reason });
       return ready ? sessionState$.filename.peek() : null;
     });
-  }, [autosaveEnabled, path, prepareCurrentDocumentForClose, registerTab, sessionState$]);
+  }, [autosaveEnabled, documentPath, prepareCurrentDocumentForClose, registerTab, sessionState$]);
   useEffect(() => {
     if (!visible) documentCommandsRef.current?.commitAndBlurActiveBlock();
   }, [documentCommandsRef, visible]);
@@ -800,8 +845,9 @@ function MarkdownTabEditor({
           nativeWindowAppearance={nativeWindowAppearance}
           onFind={() => setFindVisible(true)}
           onInsertLink={insertLink}
-          onNewDocument={newDocument}
-          onOpenFile={openTab}
+          onNewDocument={newFile}
+          onOpenDocument={openDocument}
+          onOpenFile={openFile}
           session={session}
           windowId={windowId}
           windowMenus={windowMenus}
@@ -816,11 +862,9 @@ function MarkdownTabEditor({
         <Text className="text-muted">{findStatus}</Text>
         <Pressable accessibilityRole="button" accessibilityLabel="Close Find" onPress={() => setFindVisible(false)}><Text className="text-foreground">Done</Text></Pressable>
       </View>}
-      {!path ? (
+      {!documentPath ? (
         <View style={styles.idlePane}>
-          <Pressable accessibilityRole="button" onPress={() => { newDocument().catch(session.handleError); }}>
-            <Text style={{ color: foregroundColor }}>New Document</Text>
-          </Pressable>
+          <MarkdownEmptyState onNewFile={() => { newFile().catch(handleError); }} onOpenFile={() => { openDocument().catch(handleError); }} />
           <MarkdownSessionError color={dangerColor} session={session} />
         </View>
       ) : (
@@ -846,7 +890,7 @@ function MarkdownTabEditor({
   );
 }
 
-function FocusedPaneBindings({ closeActiveTab, commandState, commands, nativeWindowAppearance, onFind, onInsertLink, onNewDocument, onOpenFile, session, windowId, windowMenus }: {
+function FocusedPaneBindings({ closeActiveTab, commandState, commands, nativeWindowAppearance, onFind, onInsertLink, onNewDocument, onOpenDocument, onOpenFile, session, windowId, windowMenus }: {
   closeActiveTab: () => void;
   commandState: PaneCommandState;
   commands: PaneCommands;
@@ -854,6 +898,7 @@ function FocusedPaneBindings({ closeActiveTab, commandState, commands, nativeWin
   onFind: () => void;
   onInsertLink: () => void;
   onNewDocument: () => Promise<void>;
+  onOpenDocument: () => Promise<void>;
   onOpenFile: (path: string) => void;
   session: MarkdownDocumentSession;
   windowId: string;
@@ -876,7 +921,7 @@ function FocusedPaneBindings({ closeActiveTab, commandState, commands, nativeWin
     onFind,
     onInsertLink,
     onNewDocument,
-    onOpenDocument: session.openMarkdownDialog,
+    onOpenDocument,
     onSaveDocument: session.saveCurrentDocument,
     onSaveDocumentAs: session.saveCurrentDocumentAs,
     paneCommands: useMemo(() => ({ ...commands, closeTab: closeActiveTab }), [closeActiveTab, commands]),
