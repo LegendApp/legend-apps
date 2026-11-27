@@ -1,7 +1,6 @@
 import { observable } from "@legendapp/state";
-import { getAICommandAvailability } from "@legendapp/spark/ai";
 import { getDirectory } from "@legendapp/spark/files";
-import { runCommand } from "@legendapp/spark/processes";
+import { resolveCommand, runCommand } from "@legendapp/spark/processes";
 import {
   getMarkdownAppearanceSettings,
   getMarkdownFormattingToolbarModeSetting,
@@ -98,14 +97,15 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Claude CLI arguments for a reply from the prompt alone: no tools, MCP servers, user or project settings
- * (hooks, plugins), slash commands or saved session. Codex has no equivalent that disables file reads, so it is not used.
+ * Claude CLI arguments for a reply from the prompt alone: no tools, MCP servers, user, project or local settings
+ * (hooks, plugins), slash commands or saved session. Admin-managed Claude policy, including its hooks, still applies;
+ * the CLI has no flag that excludes it. Codex has no equivalent that disables file reads, so it is not used.
  */
-export const assistantClaudeArgs = ["-p", "--tools", "", "--strict-mcp-config", "--setting-sources", "", "--disable-slash-commands", "--no-session-persistence"];
+const assistantClaudeArgs = ["-p", "--tools", "", "--strict-mcp-config", "--setting-sources", "", "--disable-slash-commands", "--no-session-persistence"];
 
 /** Runs the user's Claude CLI with `assistantClaudeArgs` from the app's data folder and returns its stdout. */
 export async function runAssistantModel(prompt: string, signal: AbortSignal): Promise<string> {
-  if (!(await getAICommandAvailability()).claude) throw new Error("Install the Claude command-line tool and sign in to use the Assistant.");
+  if (!(await resolveCommand("claude"))) throw new Error("Install the Claude command-line tool and sign in to use the Assistant.");
   const result = await runCommand({ target: { type: "command", name: "claude" }, args: assistantClaudeArgs, input: prompt, cwd: await getDirectory("data"), signal, timeoutMs: 120_000 });
   const decoder = new TextDecoder();
   if (result.aborted) throw new Error("Cancelled.");

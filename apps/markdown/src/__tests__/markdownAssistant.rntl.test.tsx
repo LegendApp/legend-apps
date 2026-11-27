@@ -1,9 +1,8 @@
 import { fireEvent, render } from "@testing-library/react-native";
 import React from "react";
-import { getAICommandAvailability } from "@legendapp/spark/ai";
 import { getDirectory } from "@legendapp/spark/files";
-import { runCommand } from "@legendapp/spark/processes";
-import { assistantClaudeArgs, createMarkdownAssistant, parseAssistantReply, readAssistantSettings, runAssistantModel, type AssistantSettings } from "../markdownAssistant";
+import { resolveCommand, runCommand } from "@legendapp/spark/processes";
+import { createMarkdownAssistant, parseAssistantReply, readAssistantSettings, runAssistantModel, type AssistantSettings } from "../markdownAssistant";
 import { MarkdownAssistantPanel } from "../MarkdownAssistantPanel";
 import {
   setMarkdownContentWidthSetting,
@@ -14,8 +13,7 @@ import {
   setMarkdownLineHeightSetting,
 } from "../markdownSettings";
 
-jest.mock("@legendapp/spark/processes", () => ({ runCommand: jest.fn() }));
-jest.mock("@legendapp/spark/ai", () => ({ ...jest.requireActual("@legendapp/spark/ai"), getAICommandAvailability: jest.fn() }));
+jest.mock("@legendapp/spark/processes", () => ({ resolveCommand: jest.fn(), runCommand: jest.fn() }));
 jest.mock("@legendapp/spark/files", () => ({ getDirectory: jest.fn(async () => "/app-data"), watch: jest.fn() }));
 
 const defaults: AssistantSettings = { contentWidth: "standard", density: "comfortable", fontFamily: "system", fontSize: "default", formattingToolbarMode: "top", lineHeight: "normal" };
@@ -67,22 +65,28 @@ describe("runAssistantModel", () => {
   const exited = (stdout: string, stderr = "", code = 0) => ({ aborted: false, exit: { type: "exited", code }, outputTruncated: false, stderr: encode(stderr), stdout: encode(stdout), timedOut: false });
 
   it("runs only Claude with no tools, MCP, settings or plugins and the prompt on stdin", async () => {
-    (getAICommandAvailability as jest.Mock).mockResolvedValue({ claude: true, codex: true });
+    (resolveCommand as jest.Mock).mockResolvedValue("/usr/local/bin/claude");
     (runCommand as jest.Mock).mockResolvedValue(exited("{\"message\":\"ok\",\"changes\":{}}"));
     await expect(runAssistantModel("the prompt", new AbortController().signal)).resolves.toBe("{\"message\":\"ok\",\"changes\":{}}");
-    expect(runCommand).toHaveBeenLastCalledWith(expect.objectContaining({ args: assistantClaudeArgs, cwd: "/app-data", input: "the prompt", target: { type: "command", name: "claude" } }));
-    expect(assistantClaudeArgs).toEqual(expect.arrayContaining(["--tools", "", "--strict-mcp-config", "--setting-sources"]));
+    expect(runCommand).toHaveBeenLastCalledWith(expect.objectContaining({
+      args: ["-p", "--tools", "", "--strict-mcp-config", "--setting-sources", "", "--disable-slash-commands", "--no-session-persistence"],
+      cwd: "/app-data",
+      input: "the prompt",
+      target: { type: "command", name: "claude" },
+    }));
+    // Only Claude is looked up; Codex is never probed.
+    expect((resolveCommand as jest.Mock).mock.calls).toEqual([["claude"]]);
   });
 
   it("does not fall back to Codex", async () => {
     (runCommand as jest.Mock).mockClear();
-    (getAICommandAvailability as jest.Mock).mockResolvedValue({ claude: false, codex: true });
+    (resolveCommand as jest.Mock).mockImplementation(async (name: string) => name === "codex" ? "/usr/local/bin/codex" : null);
     await expect(runAssistantModel("the prompt", new AbortController().signal)).rejects.toThrow("Install the Claude command-line tool");
     expect(runCommand).not.toHaveBeenCalled();
   });
 
   it("never reads a reply from stderr", async () => {
-    (getAICommandAvailability as jest.Mock).mockResolvedValue({ claude: true, codex: false });
+    (resolveCommand as jest.Mock).mockResolvedValue("/usr/local/bin/claude");
     const reply = JSON.stringify({ message: "ok", changes: { fontFamily: "serif" } });
     (runCommand as jest.Mock).mockResolvedValue(exited("", reply));
     const output = await runAssistantModel("the prompt", new AbortController().signal);

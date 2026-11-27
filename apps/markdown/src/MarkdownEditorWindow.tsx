@@ -705,6 +705,7 @@ function FocusedPaneBindings({ closeActiveTab, commandState, commands, nativeWin
     windowId,
   });
   useMarkdownKeyboardShortcuts({
+    composerFocused$: windowMenus.composerFocused$,
     documentCommandsRef: session.documentCommandsRef,
     sessionState$: session.sessionState$,
     windowId,
