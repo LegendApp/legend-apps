@@ -782,6 +782,8 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
       expect(paneStyle(view, "p0").width).toBe(474);
       await act(async () => divider.props.onPanResponderMove({}, { dx: -2000, dy: 0 }));
       expect(paneStyle(view, "p0").width).toBe(220);
+      await act(async () => divider.props.onPanResponderMove({}, { dx: 2000, dy: 0 }));
+      expect(paneStyle(view, "p1").width).toBe(220);
       await act(async () => divider.props.onPanResponderRelease());
       for (let click = 0; click < 2; click++) {
         await act(async () => {

@@ -219,14 +219,17 @@ function minimumSize(node: PaneNode, axis: PaneAxis): number {
   return node.axis === axis ? first + second + (axis === "horizontal" ? paneGap : 0) : Math.max(first, second);
 }
 
-/** Clamps a split's fraction so both sides keep their minimum size inside `size`. */
+/**
+ * Clamps a split's fraction so both sides keep their minimum size inside `size`. When both minimums
+ * cannot fit, neither side gets more than its minimum and the saved proportion holds between them.
+ */
 export function clampSplitFraction(node: Extract<PaneNode, { kind: "split" }>, size: number, fraction: number) {
   const gap = node.axis === "horizontal" ? paneGap : 0;
   const available = size + gap;
   if (size <= 0) return 0.5;
   const low = (minimumSize(node.first, node.axis) + gap) / available;
-  const high = 1 - minimumSize(node.second, node.axis) / available;
-  return low > high ? 0.5 : Math.min(high, Math.max(low, fraction));
+  const high = 1 - (minimumSize(node.second, node.axis) + gap) / available;
+  return Math.min(Math.max(low, high), Math.max(Math.min(low, high), fraction));
 }
 
 export function findSplit(node: PaneNode, splitId: string): Extract<PaneNode, { kind: "split" }> | undefined {
