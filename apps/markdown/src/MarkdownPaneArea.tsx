@@ -256,7 +256,10 @@ function SplitDivider({ onResize, root, split }: { onResize: MarkdownPaneAreaPro
     onMoveShouldSetPanResponder: () => true,
     onStartShouldSetPanResponder: () => true,
     onPanResponderGrant: () => {
-      drag.current.fraction = findSplit(latest.current.root, latest.current.split.id)?.fraction ?? 0.5;
+      // Starts from the laid-out fraction, which keeps each side's minimum after the area shrank.
+      const { root: tree, split: frame } = latest.current;
+      const node = findSplit(tree, frame.id);
+      drag.current.fraction = node ? clampSplitFraction(node, frame.axis === "horizontal" ? frame.width : frame.height, node.fraction) : 0.5;
       drag.current.moved = false;
     },
     onPanResponderMove: (_event, gesture) => {

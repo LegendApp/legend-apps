@@ -172,6 +172,14 @@ describe("resizing", () => {
     expect(fractions(setSplitFraction(layout, "s1", 0.3))).toEqual([0.3]);
   });
 
+  it("keeps a side's minimum when the area shrinks under its saved fraction", () => {
+    const layout = setSplitFraction(splitPane(one(), "horizontal"), "s1", 226 / 1206);
+    expect(layoutPanes(layout.root, { height: 400, width: 1200, x: 0, y: 0 }).panes[0].width).toBe(220);
+    expect(layoutPanes(layout.root, { height: 400, width: 650, x: 0, y: 0 }).panes.map(pane => pane.width)).toEqual([220, 424]);
+    const stacked = setSplitFraction(splitPane(one(), "vertical"), "s1", 0.9);
+    expect(layoutPanes(stacked.root, { height: 400, width: 600, x: 0, y: 0 }).panes.map(pane => pane.height)).toEqual([244, 156]);
+  });
+
   it("only splits a pane with room for two minimums", () => {
     expect(canSplitPane({ height: 400, width: 446, x: 0, y: 0 }, "horizontal")).toBe(true);
     expect(canSplitPane({ height: 400, width: 445, x: 0, y: 0 }, "horizontal")).toBe(false);

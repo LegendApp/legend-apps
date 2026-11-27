@@ -196,7 +196,8 @@ export function layoutPanes(node: PaneNode, rect: PaneRect, frames: { panes: Pan
   const gap = horizontal ? paneGap : 0;
   // As in Silica, each side counts with the gap that follows it, so evenly split panes come out the same width.
   const size = (horizontal ? rect.width : rect.height) - gap;
-  const firstSize = Math.round((size + 2 * gap) * node.fraction) - gap;
+  // A saved fraction can leave a side under its minimum once the area shrinks, so lay out the clamped one.
+  const firstSize = Math.round((size + 2 * gap) * clampSplitFraction(node, size + gap, node.fraction)) - gap;
   const first = horizontal ? { ...rect, width: firstSize } : { ...rect, height: firstSize };
   const second = horizontal
     ? { ...rect, width: size - firstSize, x: rect.x + firstSize + gap }
