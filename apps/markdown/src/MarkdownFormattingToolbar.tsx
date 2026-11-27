@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { RefObject } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { SFSymbol } from "@legendapp/spark/ui/symbol";
@@ -6,10 +6,13 @@ import { getLegendDisplayTheme } from "@legend-apps/theme";
 import { useResolveClassNames } from "uniwind";
 import type { MarkdownDocumentCommands } from "@legend-apps/markdown-document";
 import {
+  getMarkdownPluginCommand,
   type MarkdownToolbarLayoutId,
   useMarkdownDisplayThemeSetting,
+  useMarkdownPluginToolbarCommands,
   useMarkdownToolbarLayoutSetting,
 } from "./markdownSettings";
+import { findMarkdownSuggestion, type MarkdownSuggestion } from "./markdownPlugins";
 import { markdownToolbarItemMap } from "./markdownToolbarItems";
 
 declare module "react-native" {
@@ -44,7 +47,43 @@ export function MarkdownFormattingToolbar({
     () => toolbarLayout.shown.map((itemId) => markdownToolbarItemMap[itemId]).filter(Boolean),
     [toolbarLayout],
   );
-  const toolbarButtons = toolbarItems.map((item) => (
+  const pluginCommands = useMarkdownPluginToolbarCommands(layoutId);
+  const [pluginResult, setPluginResult] = useState<{ message: string; suggestion?: MarkdownSuggestion }>();
+  const runPluginCommand = async (commandId: string) => {
+    const command = getMarkdownPluginCommand(commandId);
+    const commands = commandsRef.current;
+    if (!command || !commands) return;
+    const suggestion = findMarkdownSuggestion(await commands.readBlocks(), command.rules, command.id);
+    setPluginResult(suggestion
+      ? { message: `Replace “${suggestion.find}” with “${suggestion.replace}”`, suggestion }
+      : { message: `${command.title}: no issues` });
+  };
+  const applySuggestion = async (suggestion: MarkdownSuggestion) => {
+    const commands = commandsRef.current;
+    if (!getMarkdownPluginCommand(suggestion.commandId) || !commands) {
+      setPluginResult({ message: "Plugin is disabled" });
+      return;
+    }
+    const applied = await commands.replaceBlockMarkdown(suggestion.blockId, suggestion.before, suggestion.after);
+    setPluginResult({ message: applied ? "Fix applied" : "Document changed; suggestion withdrawn. Check again." });
+  };
+  const pluginButtons = pluginCommands.map((command) => (
+    <Pressable
+      accessibilityLabel={command.title}
+      accessibilityRole="button"
+      className="border"
+      key={command.id}
+      onPress={() => {
+        runPluginCommand(command.id).catch((error: unknown) => setPluginResult({ message: String(error) }));
+      }}
+      style={[styles.button, buttonStyle]}
+      tooltip={command.title}
+    >
+      {command.icon ? <SFSymbol color={iconColor} name={command.icon} size={14} style={styles.icon} /> : null}
+      <Text className="text-foreground" style={styles.buttonText}>{command.title}</Text>
+    </Pressable>
+  ));
+  const toolbarButtons = [...toolbarItems.map((item) => (
     <Pressable
       accessibilityLabel={item.accessibilityLabel}
       accessibilityRole="button"
@@ -75,9 +114,9 @@ export function MarkdownFormattingToolbar({
         </Text>
       )}
     </Pressable>
-  ));
+  )), ...pluginButtons];
 
-  if (toolbarItems.length === 0) {
+  if (toolbarButtons.length === 0) {
     return null;
   }
 
@@ -102,6 +141,34 @@ export function MarkdownFormattingToolbar({
           {toolbarButtons}
         </ScrollView>
       )}
+      {pluginResult ? (
+        <View style={[styles.toolbarContent, styles.dockedToolbarContent]}>
+          <Text accessibilityLabel="Plugin result" className="text-foreground" style={styles.buttonText}>{pluginResult.message}</Text>
+          {pluginResult.suggestion ? (
+            <Pressable
+              accessibilityLabel="Apply Fix"
+              accessibilityRole="button"
+              className="border"
+              onPress={() => {
+                const { suggestion } = pluginResult;
+                if (suggestion) applySuggestion(suggestion).catch((error: unknown) => setPluginResult({ message: String(error) }));
+              }}
+              style={[styles.button, buttonStyle]}
+            >
+              <Text className="text-foreground" style={styles.buttonText}>Apply</Text>
+            </Pressable>
+          ) : null}
+          <Pressable
+            accessibilityLabel="Dismiss"
+            accessibilityRole="button"
+            className="border"
+            onPress={() => setPluginResult(undefined)}
+            style={[styles.button, buttonStyle]}
+          >
+            <Text className="text-foreground" style={styles.buttonText}>Dismiss</Text>
+          </Pressable>
+        </View>
+      ) : null}
     </View>
   );
 }

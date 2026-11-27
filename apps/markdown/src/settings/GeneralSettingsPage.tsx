@@ -14,6 +14,7 @@ import {
   useMarkdownFormattingToolbarModeSetting,
   useMarkdownStartupBehaviorSetting,
 } from "../markdownSettings";
+import { PluginSettingsSection } from "./PluginSettingsSection";
 import { ToolbarLayoutEditor } from "./ToolbarLayoutEditor";
 
 const startupBehaviorOptions = [
@@ -69,6 +70,7 @@ export function GeneralSettingsContent() {
           title="Floating Toolbar"
         />
       </SettingsSection>
+      <PluginSettingsSection />
     </>
   );
 }

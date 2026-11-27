@@ -33,6 +33,7 @@ jest.mock("../markdownSettings", () => ({
   useMarkdownAutosaveSetting: () => mockSettings.autosave,
   useMarkdownDisplayThemeSetting: () => "light",
   useMarkdownFormattingToolbarModeSetting: () => mockSettings.formattingToolbarMode,
+  useMarkdownInstalledPlugins: () => [],
   useMarkdownStartupBehaviorSetting: () => mockSettings.startupBehavior,
   useMarkdownToolbarLayoutSetting: (layoutId: "selection" | "top") => mockSettings.toolbarLayouts[layoutId],
 }));

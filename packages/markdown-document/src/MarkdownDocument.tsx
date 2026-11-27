@@ -3295,6 +3295,33 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       selectDocument().catch(reportAsyncError);
     }, [commitActiveBlock, getBlockCount, getBlockIdAtIndex, reportAsyncError, setKeyboardBlockSelection]);
 
+    /** Commits the active draft, then applies `transform` to the block's current markdown as one undoable edit. Returns whether it changed. */
+    const updateBlockMarkdown = useCallback(async (blockId: string, transform: (markdown: string) => string | undefined) => {
+      if (!adapter.applyTransaction) return false;
+      await commitActiveBlock({ updateReactState: true, throwOnError: true });
+      const state = documentState$.peek();
+      if (state.status !== "loaded") return false;
+      const block = await loadBlockAtIndex(blockId, getBlockIndexById(blockId));
+      if (!block) return false;
+      const markdown = transform(block.markdown);
+      if (markdown === undefined || markdown === block.markdown) return false;
+      const result = await adapter.applyTransaction(state.snapshot.documentId, {
+        type: "updateBlockMarkdown",
+        blockId,
+        markdown,
+      });
+      validateTransactionResult(result);
+      pushUpdateBlockHistoryEntry({
+        type: "updateBlockMarkdown",
+        blockId,
+        beforeMarkdown: block.markdown,
+        afterMarkdown: markdown,
+      });
+      applyTransactionResult(result);
+      markDirty();
+      return true;
+    }, [adapter, applyTransactionResult, commitActiveBlock, documentState$, getBlockIndexById, loadBlockAtIndex, markDirty, pushUpdateBlockHistoryEntry, validateTransactionResult]);
+
     const find = useCallback(async (query: string, backwards = false) => {
       if (!query) return false;
       await commitActiveBlock({ updateReactState: true });
@@ -3441,8 +3468,24 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           formatCurrentBlockRange(toggleUnorderedListMarkdown);
         },
         undo,
+        async readBlocks() {
+          await commitActiveBlock({ updateReactState: true, throwOnError: true });
+          const blocks: { id: string; markdown: string }[] = [];
+          for (let index = 0; index < getBlockCount(); index += 1) {
+            const block = await loadBlockAtIndex(getBlockIdAtIndex(index), index);
+            if (block) blocks.push({ id: block.id, markdown: block.markdown });
+          }
+          return blocks;
+        },
+        replaceBlockMarkdown(blockId, expectedMarkdown, markdown) {
+          return updateBlockMarkdown(blockId, (current) => (current === expectedMarkdown ? markdown : undefined));
+        },
       }),
       [commitAndBlurActiveBlock,
+        commitActiveBlock,
+        getBlockCount,
+        loadBlockAtIndex,
+        updateBlockMarkdown,
         getBlockIdAtIndex,
         getBlockIndexById,
         reportAsyncError,
@@ -3542,37 +3585,14 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       () => [styles.blockSelectionOverlay, { backgroundColor: resolveSelectionColor(theme?.selectionColor) }],
       [theme?.selectionColor],
     );
-    const handleTaskListItemPress = useCallback(async (blockId: string, taskIndex: number, checked: boolean) => {
-      if (!adapter.applyTransaction) return;
-      try {
-        await commitActiveBlock({ updateReactState: true, throwOnError: true });
-        const state = documentState$.peek();
-        if (state.status !== "loaded") return;
-        const block = await loadBlockAtIndex(blockId, getBlockIndexById(blockId));
-        if (!block) return;
+    const handleTaskListItemPress = useCallback((blockId: string, taskIndex: number, checked: boolean) => {
+      updateBlockMarkdown(blockId, (markdown) => {
         let index = 0;
-        const markdown = block.markdown.replace(/^([ \t]*[-*+][ \t]+\[)[ xX](\])/gm, (match, prefix, suffix) => (
+        return markdown.replace(/^([ \t]*[-*+][ \t]+\[)[ xX](\])/gm, (match, prefix, suffix) => (
           index++ === taskIndex ? `${prefix}${checked ? "x" : " "}${suffix}` : match
         ));
-        if (markdown === block.markdown) return;
-        const result = await adapter.applyTransaction(state.snapshot.documentId, {
-          type: "updateBlockMarkdown",
-          blockId,
-          markdown,
-        });
-        validateTransactionResult(result);
-        pushUpdateBlockHistoryEntry({
-          type: "updateBlockMarkdown",
-          blockId,
-          beforeMarkdown: block.markdown,
-          afterMarkdown: markdown,
-        });
-        applyTransactionResult(result);
-        markDirty();
-      } catch (error) {
-        reportAsyncError(error);
-      }
-    }, [adapter, applyTransactionResult, commitActiveBlock, documentState$, getBlockIndexById, loadBlockAtIndex, markDirty, reportAsyncError, pushUpdateBlockHistoryEntry, validateTransactionResult]);
+      }).catch(reportAsyncError);
+    }, [reportAsyncError, updateBlockMarkdown]);
     const handleEditorReady = useCallback((blockId: string) => {
       const host = containerRef.current;
       if (host) MarkdownEditorHostCommands.completeKeyboardHandoff(host, blockId);

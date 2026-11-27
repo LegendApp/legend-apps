@@ -872,6 +872,40 @@ describe("MarkdownDocument mounted editing", () => {
     jest.useRealTimers();
   });
 
+  it("replaces a block as one undoable edit and rejects a replacement whose block changed", async () => {
+    const adapter = new MountedEditorAdapter(snapshot([
+      block("d1:b0", 0, "Please log in to continue."),
+      block("d1:b1", 1, "Second paragraph."),
+    ]));
+    const { renderer, commandsRef } = await renderDocument({ adapter });
+    await flushPromises();
+    await act(async () => jest.runOnlyPendingTimers());
+
+    let blocks: { id: string; markdown: string }[] = [];
+    await act(async () => { blocks = await commandsRef.current!.readBlocks(); });
+    expect(blocks).toEqual([
+      { id: "d1:b0", markdown: "Please log in to continue." },
+      { id: "d1:b1", markdown: "Second paragraph." },
+    ]);
+
+    let applied: boolean | undefined;
+    await act(async () => {
+      applied = await commandsRef.current!.replaceBlockMarkdown("d1:b0", blocks[0]!.markdown, "Please sign in to continue.");
+    });
+    expect(applied).toBe(true);
+    expect(adapter.sourceMarkdown).toBe("Please sign in to continue.\n\nSecond paragraph.");
+
+    await undo(commandsRef);
+    expect(adapter.sourceMarkdown).toBe("Please log in to continue.\n\nSecond paragraph.");
+
+    await changeText(editorInput(renderer), "Please log in now.");
+    await act(async () => {
+      applied = await commandsRef.current!.replaceBlockMarkdown("d1:b0", blocks[0]!.markdown, "Please sign in to continue.");
+    });
+    expect(applied).toBe(false);
+    expect(adapter.sourceMarkdown).toBe("Please log in now.\n\nSecond paragraph.");
+  });
+
   it("reloads genuine external changes immediately but preserves history for own saves", async () => {
     const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, "Original")]));
     const load = jest.spyOn(adapter, "load");

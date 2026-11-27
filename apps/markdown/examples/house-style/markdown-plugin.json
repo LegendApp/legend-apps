@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "com.example.house-style",
+  "name": "House Style",
+  "version": "1.0.0",
+  "commands": [
+    {
+      "id": "com.example.house-style.check-document",
+      "title": "Check Document",
+      "icon": "checkmark.seal",
+      "kind": "checkDocument"
+    }
+  ],
+  "rules": [
+    {
+      "id": "com.example.house-style.sign-in",
+      "title": "Say “sign in”",
+      "find": "log in",
+      "replace": "sign in",
+      "enabled": false
+    }
+  ]
+}

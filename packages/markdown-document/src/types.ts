@@ -129,6 +129,10 @@ export type MarkdownDocumentCommands = {
   toggleUnorderedList(): void;
   insertThematicBreak(): void;
   insertLink(options?: { text?: string; url?: string }): void;
+  /** Commits the active draft and returns every block's current markdown. */
+  readBlocks(): Promise<{ id: string; markdown: string }[]>;
+  /** Replaces a block as one undoable edit only while it still equals `expectedMarkdown`; returns false when stale. */
+  replaceBlockMarkdown(blockId: string, expectedMarkdown: string, markdown: string): Promise<boolean>;
 };
 
 export type MarkdownDocumentCommandState = {

@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "formattingToolbarMode": "top",
+  "toolbar": {
+    "top": ["com.example.house-style.check-document"]
+  },
+  "rules": {
+    "com.example.house-style.sign-in": { "enabled": true }
+  }
+}

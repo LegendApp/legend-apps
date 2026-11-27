@@ -12,8 +12,18 @@ const mockToolbarLayouts = {
   },
 };
 
+const mockPluginCommand = {
+  id: "com.example.house-style.check-document",
+  kind: "checkDocument",
+  rules: [{ enabled: true, find: "log in", id: "com.example.house-style.sign-in", replace: "sign in", title: "Sign in" }],
+  title: "Check Document",
+};
+const mockPlugin = { enabled: false };
+
 jest.mock("../markdownSettings", () => ({
+  getMarkdownPluginCommand: () => (mockPlugin.enabled ? mockPluginCommand : undefined),
   useMarkdownDisplayThemeSetting: () => "light",
+  useMarkdownPluginToolbarCommands: (layoutId: "selection" | "top") => (mockPlugin.enabled && layoutId === "top" ? [mockPluginCommand] : []),
   useMarkdownToolbarLayoutSetting: (layoutId: "selection" | "top") => mockToolbarLayouts[layoutId],
 }));
 
@@ -44,6 +54,7 @@ function commandsRefFixture(commands = commandsFixture()) {
 
 describe("MarkdownFormattingToolbar", () => {
   beforeEach(() => {
+    mockPlugin.enabled = false;
     mockToolbarLayouts.selection = {
       shown: ["bold", "italic", "link"],
     };
@@ -83,6 +94,36 @@ describe("MarkdownFormattingToolbar", () => {
     for (const label of ["Paragraph", "Bold", "Italic", "Link"]) {
       expect(view.getAllByLabelText(label)[0].props.tooltip).toBe(label);
     }
+    await view.unmount();
+  });
+
+  it("checks the document with a plugin command, applies the fix, and withdraws stale or disabled fixes", async () => {
+    mockPlugin.enabled = true;
+    const blocks = [{ id: "b0", markdown: "Please log in to continue." }, { id: "b1", markdown: "Second." }];
+    const commands = {
+      ...commandsFixture(),
+      readBlocks: jest.fn(async () => blocks),
+      replaceBlockMarkdown: jest.fn(async () => true),
+    } as unknown as MarkdownDocumentCommands;
+    const { commandsRef } = commandsRefFixture(commands);
+    const view = await render(<MarkdownFormattingToolbar commandsRef={commandsRef} />);
+
+    await fireEvent.press(view.getByLabelText("Check Document"));
+    expect(view.getByLabelText("Plugin result").props.children).toBe("Replace “log in” with “sign in”");
+    await fireEvent.press(view.getByLabelText("Apply Fix"));
+    expect(commands.replaceBlockMarkdown).toHaveBeenCalledWith("b0", "Please log in to continue.", "Please sign in to continue.");
+    expect(view.getByLabelText("Plugin result").props.children).toBe("Fix applied");
+
+    jest.mocked(commands.replaceBlockMarkdown).mockResolvedValueOnce(false);
+    await fireEvent.press(view.getByLabelText("Check Document"));
+    await fireEvent.press(view.getByLabelText("Apply Fix"));
+    expect(view.getByLabelText("Plugin result").props.children).toBe("Document changed; suggestion withdrawn. Check again.");
+
+    await fireEvent.press(view.getByLabelText("Check Document"));
+    mockPlugin.enabled = false;
+    await fireEvent.press(view.getByLabelText("Apply Fix"));
+    expect(commands.replaceBlockMarkdown).toHaveBeenCalledTimes(2);
+    expect(view.getByLabelText("Plugin result").props.children).toBe("Plugin is disabled");
     await view.unmount();
   });
 });

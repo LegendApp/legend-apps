@@ -14,6 +14,14 @@ import {
   type MarkdownToolbarLayout,
   type MarkdownToolbarLayoutId,
 } from "./markdownToolbarLayout";
+import {
+  resolveMarkdownPluginRules,
+  type MarkdownPluginCommand,
+  type MarkdownPluginManifest,
+  type MarkdownPluginRule,
+  type MarkdownPreset,
+  type MarkdownRuleOverride,
+} from "./markdownPlugins";
 
 export type MarkdownDisplayThemeSetting = string;
 export type MarkdownLayoutThemeSetting = string;
@@ -58,6 +66,12 @@ type MarkdownSettingsFile = {
   lineHeight: MarkdownLineHeightSetting;
   /** The main window's split panes; read through parsePaneLayout, so a bad value falls back to one pane. */
   paneLayout?: unknown;
+  /** Plugin command IDs appended to the docked toolbar, kept apart from the built-in layout. */
+  pluginToolbar?: { top?: string[] };
+  /** Preset overrides for plugin-declared rules, keyed by rule ID. */
+  pluginRuleOverrides?: Record<string, MarkdownRuleOverride>;
+  /** Installed plugin manifests, keyed by plugin ID. */
+  plugins?: Record<string, { enabled: boolean; manifest: MarkdownPluginManifest }>;
   selectionToolbarLayout: MarkdownToolbarLayout;
   sidebarFolders: string[];
   sidebarOpen: boolean;
@@ -477,4 +491,63 @@ export function clearLastMarkdownDocumentPath(path?: string) {
 
 export function applyMarkdownThemeSetting() {
   applyLegendDisplayThemeToUniwind(getMarkdownDisplayThemeSetting());
+}
+
+export type MarkdownInstalledPlugin = { enabled: boolean; manifest: MarkdownPluginManifest };
+
+function installedPlugins(plugins: MarkdownSettingsFile["plugins"]): MarkdownInstalledPlugin[] {
+  return plugins && typeof plugins === "object" ? Object.values(plugins) : [];
+}
+
+export function getMarkdownInstalledPlugins(): MarkdownInstalledPlugin[] {
+  return installedPlugins(markdownSettings$.plugins.get());
+}
+
+export function useMarkdownInstalledPlugins(): MarkdownInstalledPlugin[] {
+  const plugins = useValue(markdownSettings$.plugins);
+  return useMemo(() => installedPlugins(plugins), [plugins]);
+}
+
+/** Installing replaces any earlier version of the same plugin and enables it. */
+export function installMarkdownPlugin(manifest: MarkdownPluginManifest) {
+  markdownSettings$.plugins[manifest.id].set({ enabled: true, manifest });
+}
+
+export function setMarkdownPluginEnabled(pluginId: string, enabled: boolean) {
+  markdownSettings$.plugins[pluginId].enabled.set(enabled);
+}
+
+export function applyMarkdownPreset(preset: MarkdownPreset) {
+  if (preset.formattingToolbarMode) setMarkdownFormattingToolbarModeSetting(preset.formattingToolbarMode);
+  if (preset.toolbar) markdownSettings$.pluginToolbar.set({ top: preset.toolbar.top });
+  if (preset.rules) markdownSettings$.pluginRuleOverrides.set(preset.rules);
+}
+
+export type ResolvedMarkdownPluginCommand = MarkdownPluginCommand & { rules: MarkdownPluginRule[] };
+
+function resolvePluginCommand(
+  commandId: string,
+  plugins: MarkdownSettingsFile["plugins"],
+  overrides: MarkdownSettingsFile["pluginRuleOverrides"],
+): ResolvedMarkdownPluginCommand | undefined {
+  for (const { enabled, manifest } of installedPlugins(plugins)) {
+    const command = enabled ? manifest.commands.find((candidate) => candidate.id === commandId) : undefined;
+    if (command) return { ...command, rules: resolveMarkdownPluginRules(manifest, overrides ?? {}) };
+  }
+  return undefined;
+}
+
+/** Resolves an enabled plugin's command at dispatch time, so disabling a plugin takes effect immediately. */
+export function getMarkdownPluginCommand(commandId: string): ResolvedMarkdownPluginCommand | undefined {
+  return resolvePluginCommand(commandId, markdownSettings$.plugins.get(), markdownSettings$.pluginRuleOverrides.get());
+}
+
+export function useMarkdownPluginToolbarCommands(layoutId: MarkdownToolbarLayoutId): ResolvedMarkdownPluginCommand[] {
+  const toolbar = useValue(markdownSettings$.pluginToolbar);
+  const plugins = useValue(markdownSettings$.plugins);
+  const overrides = useValue(markdownSettings$.pluginRuleOverrides);
+  return useMemo(() => {
+    const ids = layoutId === "top" && Array.isArray(toolbar?.top) ? toolbar.top : [];
+    return ids.flatMap((id) => resolvePluginCommand(id, plugins, overrides) ?? []);
+  }, [layoutId, overrides, plugins, toolbar]);
 }
