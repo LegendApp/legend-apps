@@ -508,13 +508,19 @@ export function useMarkdownInstalledPlugins(): MarkdownInstalledPlugin[] {
   return useMemo(() => installedPlugins(plugins), [plugins]);
 }
 
+// Plugin writes replace the whole map so hooks memoized on its reference see the change.
+function setMarkdownPlugin(pluginId: string, plugin: MarkdownInstalledPlugin) {
+  markdownSettings$.plugins.set({ ...markdownSettings$.plugins.peek(), [pluginId]: plugin });
+}
+
 /** Installing replaces any earlier version of the same plugin and enables it. */
 export function installMarkdownPlugin(manifest: MarkdownPluginManifest) {
-  markdownSettings$.plugins[manifest.id].set({ enabled: true, manifest });
+  setMarkdownPlugin(manifest.id, { enabled: true, manifest });
 }
 
 export function setMarkdownPluginEnabled(pluginId: string, enabled: boolean) {
-  markdownSettings$.plugins[pluginId].enabled.set(enabled);
+  const plugin = markdownSettings$.plugins.peek()?.[pluginId];
+  if (plugin) setMarkdownPlugin(pluginId, { ...plugin, enabled });
 }
 
 export function applyMarkdownPreset(preset: MarkdownPreset) {

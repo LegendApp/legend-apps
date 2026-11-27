@@ -1,3 +1,4 @@
+import { act, renderHook } from "@testing-library/react-native";
 import { readFileSync } from "fs";
 import { join } from "path";
 import {
@@ -14,6 +15,8 @@ import {
   getMarkdownToolbarLayoutSetting,
   installMarkdownPlugin,
   setMarkdownPluginEnabled,
+  useMarkdownInstalledPlugins,
+  useMarkdownPluginToolbarCommands,
 } from "../markdownSettings";
 import { getDefaultMarkdownToolbarLayout } from "../markdownToolbarLayout";
 
@@ -96,5 +99,18 @@ describe("markdown plugin settings", () => {
 
     setMarkdownPluginEnabled(manifest.id, false);
     expect(getMarkdownPluginCommand(commandId)).toBeUndefined();
+  });
+
+  it("re-renders toolbar commands and the plugin switch when a plugin is disabled", async () => {
+    const manifest = parseMarkdownPluginManifest(manifestSource);
+    installMarkdownPlugin(manifest);
+    const { result } = await renderHook(() => ({
+      commands: useMarkdownPluginToolbarCommands("top"),
+      plugins: useMarkdownInstalledPlugins(),
+    }));
+    expect(result.current.commands.map((command) => command.id)).toEqual([commandId]);
+    await act(async () => setMarkdownPluginEnabled(manifest.id, false));
+    expect(result.current.commands).toEqual([]);
+    expect(result.current.plugins.map(({ enabled }) => enabled)).toEqual([false]);
   });
 });
