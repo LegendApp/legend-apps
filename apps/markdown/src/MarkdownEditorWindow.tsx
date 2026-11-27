@@ -151,6 +151,8 @@ type PaneActions = {
   dropTab: (paneId: string, drop: number | TabDropZone) => void;
   focus: (paneId: string) => void;
   openTab: (paneId: string, path: string) => void;
+  /** Opens a file from the tab `from` (null in an idle pane) unless that tab has since closed, moved or been replaced. */
+  openFrom: (paneId: string, from: string | null, editorKey: number | undefined, file: string) => void;
   register: (paneId: string, prepareForClose: (reason: CloseReason, path?: string) => Promise<boolean>) => () => void;
   renameTab: (paneId: string, from: string, to: string) => void;
 };
@@ -295,53 +297,68 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
     for (const path of paths) removeMarkdownDraft(path);
   }, []);
   const tabDrag = useRef<{ paneId: string; path: string } | null>(null);
-  const paneActions = useMemo<PaneActions>(() => ({
-    canDropTab: (paneId, zone) => {
-      const drag = tabDrag.current;
-      if (!drag) return false;
-      if (zone === "center") return drag.paneId !== paneId;
-      const ownOnlyTab = drag.paneId === paneId && layoutStateRef.current.layout.panes[paneId]?.paths.length === 1;
-      return !ownOnlyTab && canSplitPane(framesRef.current.find(frame => frame.id === paneId), zone === "left" || zone === "right" ? "horizontal" : "vertical");
-    },
-    closeTab: (paneId, path, editorKey) => {
-      const current = layoutStateRef.current;
-      if (!current.layout.panes[paneId]?.paths.includes(path) || current.editorKeys[paneId].get(path) !== editorKey) return;
-      removeMarkdownDraft(path);
-      setLayout(layout => closePaneTab(layout, paneId, path));
-    },
-    dragTab: (paneId, path) => { tabDrag.current = { paneId, path }; },
-    dropTab: (paneId, drop) => {
-      const drag = tabDrag.current;
-      tabDrag.current = null;
-      if (!drag) return;
-      const { paneId: from, path } = drag;
-      void (async () => {
-        // The shown document leaves its pane, so save it first and the destination opens what the user sees.
-        const leaves = !(from === paneId && typeof drop === "number");
-        if (leaves && !await preparePanes([from], "close", path)) return;
-        setLayout(current => typeof drop === "number" ? movePaneTab(current, from, path, paneId, drop)
-          : drop === "center" ? movePaneTab(current, from, path, paneId, current.panes[paneId]?.paths.length ?? 0)
-          : splitPaneWithTab(current, from, path, paneId, drop));
-      })().catch(reportError);
-    },
-    focus: paneId => setLayout(current => focusPane(current, paneId), false),
-    openTab: (paneId, path) => {
+  const paneActions = useMemo<PaneActions>(() => {
+    const openTab = (paneId: string, path: string) => {
       if (isFileTab(path)) openWorkspaceTab(path);
       setLayout(current => openPaneTab(current, paneId, path), false);
-    },
-    register: (paneId, prepareForClose) => {
-      paneClosers.current.set(paneId, prepareForClose);
-      return () => { if (paneClosers.current.get(paneId) === prepareForClose) paneClosers.current.delete(paneId); };
-    },
-    renameTab: (paneId, from, to) => {
+    };
+    const renameTab = (paneId: string, from: string, to: string) => {
       if (isFileTab(from)) renameWorkspaceTab(from, to);
       else if (isFileTab(to)) openWorkspaceTab(to);
       setLayout(current => {
         const tabs = current.panes[paneId];
         return from !== to && tabs?.paths.includes(from) ? renamePaneTab(current, paneId, from, to) : current;
       }, false, { paneId, from, to });
-    },
-  }), [openWorkspaceTab, preparePanes, renameWorkspaceTab, reportError, setLayout]);
+    };
+    return {
+      canDropTab: (paneId, zone) => {
+        const drag = tabDrag.current;
+        if (!drag) return false;
+        if (zone === "center") return drag.paneId !== paneId;
+        const ownOnlyTab = drag.paneId === paneId && layoutStateRef.current.layout.panes[paneId]?.paths.length === 1;
+        return !ownOnlyTab && canSplitPane(framesRef.current.find(frame => frame.id === paneId), zone === "left" || zone === "right" ? "horizontal" : "vertical");
+      },
+      closeTab: (paneId, path, editorKey) => {
+        const current = layoutStateRef.current;
+        if (!current.layout.panes[paneId]?.paths.includes(path) || current.editorKeys[paneId].get(path) !== editorKey) return;
+        removeMarkdownDraft(path);
+        setLayout(layout => closePaneTab(layout, paneId, path));
+      },
+      dragTab: (paneId, path) => { tabDrag.current = { paneId, path }; },
+      dropTab: (paneId, drop) => {
+        const drag = tabDrag.current;
+        tabDrag.current = null;
+        if (!drag) return;
+        const { paneId: from, path } = drag;
+        void (async () => {
+          // The shown document leaves its pane, so save it first and the destination opens what the user sees.
+          const leaves = !(from === paneId && typeof drop === "number");
+          if (leaves && !await preparePanes([from], "close", path)) return;
+          setLayout(current => typeof drop === "number" ? movePaneTab(current, from, path, paneId, drop)
+            : drop === "center" ? movePaneTab(current, from, path, paneId, current.panes[paneId]?.paths.length ?? 0)
+            : splitPaneWithTab(current, from, path, paneId, drop));
+        })().catch(reportError);
+      },
+      focus: paneId => setLayout(current => focusPane(current, paneId), false),
+      openTab,
+      // An empty tab becomes the file, or gives way to the file's tab already in its pane.
+      openFrom: (paneId, from, editorKey, file) => {
+        const { editorKeys, layout } = layoutStateRef.current;
+        const tabs = layout.panes[paneId];
+        if (!tabs || (from === null ? tabs.active !== null : editorKeys[paneId].get(from) !== editorKey)) return;
+        if (from === null || !isEmptyTab(from)) openTab(paneId, file);
+        else if (tabs.paths.includes(file)) {
+          openTab(paneId, file);
+          setLayout(current => closePaneTab(current, paneId, from));
+        } else renameTab(paneId, from, file);
+      },
+      register: (paneId, prepareForClose) => {
+        paneClosers.current.set(paneId, prepareForClose);
+        return () => { if (paneClosers.current.get(paneId) === prepareForClose) paneClosers.current.delete(paneId); };
+      },
+      renameTab,
+    };
+  }, [openWorkspaceTab, preparePanes, renameWorkspaceTab, reportError, setLayout]);
   const resize = useCallback((splitId: string, fraction: number, animated: boolean) => {
     setLayout(current => setSplitFraction(current, splitId, fraction), animated);
   }, [setLayout]);
@@ -642,22 +659,20 @@ function MarkdownPane({
 
   const openTab = useCallback((path: string) => actions.openTab(paneId, path), [actions, paneId]);
   const renameTab = useCallback((from: string, to: string) => actions.renameTab(paneId, from, to), [actions, paneId]);
-  /** Opens a file from the tab `from`: an empty tab becomes the file, or gives way to the file's tab in this pane. */
-  const openFrom = useCallback((from: string | null, file: string) => {
-    if (!isEmptyTab(from)) openTab(file);
-    else if (tabs.paths.includes(file)) {
-      openTab(file);
-      actions.closeTab(paneId, from!, editorKeys.get(from!));
-    } else renameTab(from!, file);
-  }, [actions, editorKeys, openTab, paneId, renameTab, tabs.paths]);
+  const openFrom = useCallback(
+    (from: string | null, file: string) => actions.openFrom(paneId, from, from === null ? undefined : editorKeys.get(from), file),
+    [actions, editorKeys, paneId],
+  );
   const newDocument = useCallback(async (from: string | null) => { openFrom(from, createMarkdownDraft()); }, [openFrom]);
   // Open File searches the root folders in a panel over this pane; without folders, or from the panel's footer, it is the system picker.
-  const [openFile, setOpenFile] = useState<{ browse: () => Promise<void>; from: string | null } | null>(null);
-  useEffect(() => { if (!focused) setOpenFile(null); }, [focused]);
+  const activeKey = active === null ? undefined : editorKeys.get(active);
+  const [openFile, setOpenFile] = useState<{ browse: () => Promise<void>; from: string | null; key: number | undefined } | null>(null);
+  const openFileCurrent = focused && openFile?.from === active && openFile.key === activeKey;
+  useEffect(() => { if (!openFileCurrent) setOpenFile(null); }, [openFileCurrent]);
   const showOpenFile = useCallback(async (from: string | null, browse: () => Promise<void>) => {
-    if (folders.length > 0) setOpenFile({ browse, from });
+    if (folders.length > 0) setOpenFile({ browse, from, key: from === null ? undefined : editorKeys.get(from) });
     else await browse();
-  }, [folders.length]);
+  }, [editorKeys, folders.length]);
   const closeTab = useCallback(async (path: string) => {
     const prepare = tabClosers.current.get(path);
     const closingPath = prepare ? await prepare("close") : path;
@@ -729,13 +744,13 @@ function MarkdownPane({
               windowMenus={windowMenus}
             />
           ))}
-          {openFile ? (
+          {openFile && openFileCurrent ? (
             <MarkdownOpenFilePanel
               folders={folders}
               onBrowse={() => { setOpenFile(null); openFile.browse().catch(reportError); }}
               onDismiss={() => setOpenFile(null)}
               onError={reportError}
-              onOpen={file => { setOpenFile(null); openFrom(openFile.from, file); }}
+              onOpen={file => { setOpenFile(null); actions.openFrom(paneId, openFile.from, openFile.key, file); }}
               windowId={windowId}
             />
           ) : null}
@@ -784,7 +799,7 @@ function MarkdownTabEditor({
 }) {
   const openFile = useCallback((file: string) => openFrom(path, file), [openFrom, path]);
   const newFile = useCallback(() => newDocument(path), [newDocument, path]);
-  const session = useMarkdownDocumentSession({ onOpenFile: openFile, onFileSavedAs: renameTab });
+  const session = useMarkdownDocumentSession({ onOpenFile: openFile, onFileSavedAs: renameTab, windowId });
   const { documentCommandsRef, handleError, openMarkdownDialog, openSelectedFile, prepareCurrentDocumentForClose, sessionState$ } = session;
   const openDocument = useCallback(() => showOpenFile(path, openMarkdownDialog), [openMarkdownDialog, path, showOpenFile]);
   const documentPath = isEmptyTab(path) ? null : path;

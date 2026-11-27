@@ -33,6 +33,8 @@ export type MarkdownDocumentSessionState$ = Observable<MarkdownDocumentSessionSt
 export type MarkdownDocumentSessionOptions = {
   onOpenFile: (path: string) => void;
   onFileSavedAs: (from: string, to: string) => void;
+  /** The window that owns the Open dialog. */
+  windowId: string;
 };
 
 function markOpenedFile(path: string) {
@@ -41,7 +43,7 @@ function markOpenedFile(path: string) {
   noteRecentDocument(path);
 }
 
-export function useMarkdownDocumentSession({ onOpenFile, onFileSavedAs }: MarkdownDocumentSessionOptions) {
+export function useMarkdownDocumentSession({ onOpenFile, onFileSavedAs, windowId }: MarkdownDocumentSessionOptions) {
   const sessionState$ = useObservable<MarkdownDocumentSessionState>({
     conflict: null,
     commandState: { canCommitAndBlur: false, canRedo: false, canUndo: false },
@@ -245,6 +247,7 @@ export function useMarkdownDocumentSession({ onOpenFile, onFileSavedAs }: Markdo
       const result = await openFileDialog({
         filters: [{ extensions: markdownFileTypes }],
         selection: "files",
+        windowId,
       });
       const paths = result.canceled ? [] : result.paths;
       let path: string | null = null;
@@ -275,7 +278,7 @@ export function useMarkdownDocumentSession({ onOpenFile, onFileSavedAs }: Markdo
     }
 
     openDialogInFlight.current = false;
-  }, [handleError, onOpenFile]);
+  }, [handleError, onOpenFile, windowId]);
 
   return {
     documentCommandsRef,

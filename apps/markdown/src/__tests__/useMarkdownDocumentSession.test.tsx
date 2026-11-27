@@ -37,7 +37,7 @@ jest.mock("../markdownDrafts", () => ({
   removeMarkdownDraft: jest.fn(),
 }));
 
-const defaultOptions = { onOpenFile: jest.fn(), onFileSavedAs: jest.fn() };
+const defaultOptions = { onOpenFile: jest.fn(), onFileSavedAs: jest.fn(), windowId: "markdown-editor" };
 
 function SessionHarness({ onState }: { onState: (state$: MarkdownDocumentSessionState$) => void }) {
   const session = useMarkdownDocumentSession(defaultOptions);
@@ -77,7 +77,7 @@ describe("useMarkdownDocumentSession", () => {
     defaultOptions.onOpenFile.mockClear();
   });
 
-  it("filters the open dialog to Markdown files", async () => {
+  it("filters the open dialog to Markdown files and attaches it to its window", async () => {
     mockOpenFileDialog.mockResolvedValue({ canceled: true });
 
     await render(<SessionHarness onState={() => undefined} />);
@@ -86,6 +86,7 @@ describe("useMarkdownDocumentSession", () => {
       expect(mockOpenFileDialog).toHaveBeenCalledWith({
         filters: [{ extensions: markdownFileTypes }],
         selection: "files",
+        windowId: "markdown-editor",
       });
     });
   });
@@ -182,7 +183,7 @@ describe("useMarkdownDocumentSession", () => {
 
   it("reports opened files and Save As renames so window tabs can follow", async () => {
     let session!: MarkdownDocumentSession;
-    const options = { onOpenFile: jest.fn(), onFileSavedAs: jest.fn() };
+    const options = { ...defaultOptions, onOpenFile: jest.fn(), onFileSavedAs: jest.fn() };
     const saveAs = jest.fn(async () => {});
     const view = await render(<SessionApiHarness onSession={(value) => { session = value; }} options={options} />);
     mockOpenFileDialog.mockResolvedValueOnce({ canceled: false, paths: ["/tmp/notes.md"] });

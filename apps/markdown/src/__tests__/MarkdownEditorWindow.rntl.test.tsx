@@ -473,6 +473,46 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
       expect(tabs(view)).toEqual(["a.md", "b.md*"]);
       await view.unmount();
     });
+
+    it("drops a picker result once its empty tab is replaced, leaving the sidebar alone", async () => {
+      const view = await render(<MarkdownEditorWindow />);
+      await act(async () => fireEvent.press(button(view, "New Tab")));
+      await act(async () => menus().onOpenDocument());
+      const latePick = mockUseMarkdownDocumentSession.mock.calls.at(-1)![0].onOpenFile;
+      jest.mocked(createMarkdownDraft).mockReturnValueOnce("/test-drafts/Untitled.md");
+      await act(async () => menus().onNewDocument());
+      await act(async () => latePick("/outside/late.md"));
+      expect(tabs(view)).toEqual(["Untitled.md*"]);
+      expect(view.queryByText("late.md")).toBeNull();
+      await view.unmount();
+    });
+
+    it("drops a picker result for an already open file once its empty tab has closed", async () => {
+      mockSessionState$.isDirty.set(false);
+      const view = await render(<MarkdownEditorWindow files={["/docs/a.md", "/docs/b.md"]} />);
+      await act(async () => fireEvent.press(button(view, "New Tab")));
+      await act(async () => fireEvent.press(button(view, "Open File")));
+      const latePick = mockUseMarkdownDocumentSession.mock.calls.at(-1)![0].onOpenFile;
+      await act(async () => fireEvent.press(view.getByLabelText("Close New Tab")));
+      await act(async () => fireEvent.press(view.getAllByLabelText("a.md").find(node => node.props.accessibilityRole === "tab")!));
+      await act(async () => latePick("/docs/b.md"));
+      expect(tabs(view)).toEqual(["a.md*", "b.md"]);
+      await view.unmount();
+    });
+
+    it("closes the Open File panel once its empty tab is replaced", async () => {
+      mockSidebarFolders = ["/notes"];
+      const view = await render(<MarkdownEditorWindow />);
+      await act(async () => fireEvent.press(button(view, "New Tab")));
+      const panel = await showPanel(view);
+      mockOpenFilePanel = null;
+      jest.mocked(createMarkdownDraft).mockReturnValueOnce("/test-drafts/Untitled.md");
+      await act(async () => menus().onNewDocument());
+      expect(mockOpenFilePanel).toBeNull();
+      await act(async () => panel.onOpen("/notes/late.md"));
+      expect(tabs(view)).toEqual(["Untitled.md*"]);
+      await view.unmount();
+    });
   });
 
   it("opens a draft tab for the New startup setting", async () => {
