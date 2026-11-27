@@ -371,6 +371,10 @@ class MountedEditorAdapter implements MarkdownDocumentAdapter {
     if (transactionGate) {
       await transactionGate.promise;
     }
+    return this.applyTransactionNow(transaction);
+  }
+
+  protected applyTransactionNow(transaction: MarkdownTransaction) {
     const index = this.blocks.findIndex((candidate) => candidate.id === transactionBlockId(transaction));
     if (index < 0) {
       throw new Error(`Markdown block not found: ${transactionBlockId(transaction)}`);
@@ -872,11 +876,23 @@ describe("MarkdownDocument mounted editing", () => {
     jest.useRealTimers();
   });
 
-  describe("plugin block updates", () => {
+  describe("plugin text replacement", () => {
     const original = "Please log in to continue.";
     const fixed = "Please sign in to continue.";
-    const pluginDocument = () => new MountedEditorAdapter(snapshot([block("d1:b0", 0, original), block("d1:b1", 1, "Second paragraph.")]));
-    const replaceText = (before: string, after: string) => (markdown: string) => (markdown === before ? after : markdown);
+    const second = "Second paragraph.";
+
+    // The app's native adapter reads and writes synchronously; typing commits still use the async path.
+    class SyncEditorAdapter extends MountedEditorAdapter {
+      getBlockSync(_documentId: string, blockId: string) {
+        return this.blockSnapshots.find((candidate) => candidate.id === blockId);
+      }
+
+      applyTransactionSync(_documentId: string, transaction: MarkdownTransaction) {
+        this.applyTransactions.push(transaction);
+        return this.applyTransactionNow(transaction);
+      }
+    }
+    const pluginDocument = (blocks = [original, second]) => new SyncEditorAdapter(snapshot(blocks.map((markdown, index) => markdownBlock(`d1:b${index}`, index, markdown))));
 
     async function read(commandsRef: React.RefObject<MarkdownDocumentCommands | null>) {
       let read: Awaited<ReturnType<MarkdownDocumentCommands["readBlocks"]>> | undefined;
@@ -884,116 +900,153 @@ describe("MarkdownDocument mounted editing", () => {
       return read!;
     }
 
-    async function settle<T>(promise: Promise<T>) {
-      let value: T | undefined;
-      await act(async () => { value = await promise; });
-      return value;
+    async function replace(commandsRef: React.RefObject<MarkdownDocumentCommands | null>, generation: number, blockId: string, before: string, after: string) {
+      let replaced: boolean | undefined;
+      await act(async () => { replaced = commandsRef.current!.replaceBlockText(generation, blockId, before, after); });
+      return replaced;
     }
 
     it("replaces a block as one undoable edit and rejects a replacement whose block changed", async () => {
       const adapter = pluginDocument();
       const { renderer, commandsRef } = await renderDocument({ adapter });
       const { generation, blocks } = await read(commandsRef);
-      expect(blocks).toEqual([{ id: "d1:b0", markdown: original }, { id: "d1:b1", markdown: "Second paragraph." }]);
+      expect(blocks).toEqual([{ id: "d1:b0", markdown: original }, { id: "d1:b1", markdown: second }]);
 
-      expect(await settle(commandsRef.current!.updateBlockMarkdown(generation, "d1:b0", replaceText(original, fixed)))).toBe(true);
-      expect(adapter.sourceMarkdown).toBe(`${fixed}\n\nSecond paragraph.`);
+      expect(await replace(commandsRef, generation, "d1:b0", original, fixed)).toBe(true);
+      expect(adapter.sourceMarkdown).toBe(`${fixed}\n\n${second}`);
       await undo(commandsRef);
-      expect(adapter.sourceMarkdown).toBe(`${original}\n\nSecond paragraph.`);
+      expect(adapter.sourceMarkdown).toBe(`${original}\n\n${second}`);
+      await redo(commandsRef);
+      expect(adapter.sourceMarkdown).toBe(`${fixed}\n\n${second}`);
+      await undo(commandsRef);
 
       await changeText(editorInput(renderer), "Please log in now.");
-      expect(await settle(commandsRef.current!.updateBlockMarkdown(generation, "d1:b0", replaceText(original, fixed)))).toBe(false);
-      expect(adapter.sourceMarkdown).toBe("Please log in now.\n\nSecond paragraph.");
-    });
-
-    it("keeps typing that lands while the fix is being written, in history order", async () => {
-      const adapter = pluginDocument();
-      const { renderer, commandsRef } = await renderDocument({ adapter });
-      const { generation } = await read(commandsRef);
-      const gate = adapter.deferNextTransaction();
-      const apply = commandsRef.current!.updateBlockMarkdown(generation, "d1:b0", replaceText(original, fixed));
-      await flushPromises();
-      await changeText(editorInput(renderer), "Please log in now.");
-      await act(async () => { gate.resolve(); });
-      expect(await settle(apply)).toBe(true);
+      expect(await replace(commandsRef, generation, "d1:b0", original, fixed)).toBe(false);
       await read(commandsRef);
-
-      expect(adapter.sourceMarkdown).toBe("Please log in now.\n\nSecond paragraph.");
-      await undo(commandsRef);
-      expect(adapter.sourceMarkdown).toBe(`${fixed}\n\nSecond paragraph.`);
-      await undo(commandsRef);
-      expect(adapter.sourceMarkdown).toBe(`${original}\n\nSecond paragraph.`);
+      expect(adapter.sourceMarkdown).toBe(`Please log in now.\n\n${second}`);
     });
 
     it("shows the fix in the focused input and keeps it through the next keystroke", async () => {
       const adapter = pluginDocument();
       const { renderer, commandsRef } = await renderDocument({ adapter });
       const { generation } = await read(commandsRef);
-      expect(await settle(commandsRef.current!.updateBlockMarkdown(generation, "d1:b0", replaceText(original, fixed)))).toBe(true);
+      expect(await replace(commandsRef, generation, "d1:b0", original, fixed)).toBe(true);
       expect(__enrichedMarkdownTestHooks.inputInstances().at(-1)!.setValue).toHaveBeenLastCalledWith(fixed);
 
       await changeText(editorInput(renderer), `${fixed}!`);
       await read(commandsRef);
-      expect(adapter.sourceMarkdown).toBe(`${fixed}!\n\nSecond paragraph.`);
+      expect(adapter.sourceMarkdown).toBe(`${fixed}!\n\n${second}`);
+      await undo(commandsRef);
+      expect(adapter.sourceMarkdown).toBe(`${fixed}\n\n${second}`);
+      await undo(commandsRef);
+      expect(adapter.sourceMarkdown).toBe(`${original}\n\n${second}`);
     });
 
-    it("undoes and redoes a replacement that the parser splits into several blocks", async () => {
+    it("fixes another block without disturbing the focused block or its pending typing commit", async () => {
+      const adapter = pluginDocument([second, original]);
+      const { renderer, commandsRef } = await renderDocument({ adapter });
+      const { generation } = await read(commandsRef);
+      const gate = adapter.deferNextTransaction();
+      await changeText(editorInput(renderer), "Second paragraph, typed.");
+      const commit = commandsRef.current!.readBlocks();
+      await flushPromises();
+      // The typing commit is in flight; the focused block is not the target, so the fix applies at once.
+      expect(await replace(commandsRef, generation, "d1:b1", original, fixed)).toBe(true);
+      expect(adapter.sourceMarkdown).toBe(`${second}\n\n${fixed}`);
+      await act(async () => { gate.resolve(); await commit; });
+      expect(adapter.sourceMarkdown).toBe(`Second paragraph, typed.\n\n${fixed}`);
+
+      await changeText(editorInput(renderer), "Second paragraph, typed!");
+      await read(commandsRef);
+      expect(adapter.sourceMarkdown).toBe(`Second paragraph, typed!\n\n${fixed}`);
+      await undo(commandsRef);
+      expect(adapter.sourceMarkdown).toBe(`${second}\n\n${fixed}`);
+      await undo(commandsRef);
+      expect(adapter.sourceMarkdown).toBe(`${second}\n\n${original}`);
+    });
+
+    it("withdraws a fix to the focused block while its typing commit is in flight, keeping the typing", async () => {
       const adapter = pluginDocument();
+      const { renderer, commandsRef } = await renderDocument({ adapter });
+      const { generation } = await read(commandsRef);
+      const gate = adapter.deferNextTransaction();
+      await changeText(editorInput(renderer), "Please log in now.");
+      const commit = commandsRef.current!.readBlocks();
+      await flushPromises();
+      expect(await replace(commandsRef, generation, "d1:b0", original, fixed)).toBe(false);
+      await act(async () => { gate.resolve(); await commit; });
+      expect(adapter.sourceMarkdown).toBe(`Please log in now.\n\n${second}`);
+    });
+
+    it.each([
+      ["a blank line, splitting the block", "Please sign in\n\nto continue."],
+      ["an unclosed fence that would absorb the tail", "Please sign in\n\n```"],
+      ["a line that starts a list", "Please sign in\n- to continue."],
+      ["a changed line that does not start with a letter", "1. Please sign in to continue."],
+      ["Markdown syntax", "Please <div>sign in</div> to continue."],
+    ])("rejects before writing a replacement with %s, keeping the tail, IDs and history", async (_case, after) => {
+      const adapter = pluginDocument([original, "Tail"]);
+      const { renderer, commandsRef } = await renderDocument({ adapter });
+      await changeText(editorInput(renderer), "Please log in to continue!");
+      const { generation } = await read(commandsRef);
+      const transactionCount = adapter.applyTransactions.length;
+      const blockIds = adapter.blockIds;
+
+      expect(() => commandsRef.current!.replaceBlockText(generation, "d1:b0", "Please log in to continue!", after)).toThrow("structure");
+      expect(adapter.applyTransactions).toHaveLength(transactionCount);
+      expect(adapter.blockIds).toEqual(blockIds);
+      expect(adapter.sourceMarkdown).toBe("Please log in to continue!\n\nTail");
+      await undo(commandsRef);
+      expect(adapter.sourceMarkdown).toBe(`${original}\n\nTail`);
+      expect(adapter.blockIds).toEqual(blockIds);
+    });
+
+    it("rejects before writing a replacement in a block that is not a paragraph", async () => {
+      const adapter = pluginDocument(["1. Please log in to continue."]);
       const { commandsRef } = await renderDocument({ adapter });
       const { generation } = await read(commandsRef);
-      const structural = "Please sign in\n\nExtra paragraph to continue.";
-      expect(await settle(commandsRef.current!.updateBlockMarkdown(generation, "d1:b0", replaceText(original, structural)))).toBe(true);
-      expect(adapter.sourceMarkdown).toBe(`${structural}\n\nSecond paragraph.`);
-
-      await undo(commandsRef);
-      expect(adapter.sourceMarkdown).toBe(`${original}\n\nSecond paragraph.`);
-      await redo(commandsRef);
-      expect(adapter.sourceMarkdown).toBe(`${structural}\n\nSecond paragraph.`);
+      expect(adapter.blockTypes).toEqual(["orderedList"]);
+      // Dropping the list marker could merge the line into a preceding paragraph.
+      expect(() => commandsRef.current!.replaceBlockText(generation, "d1:b0", "1. Please log in to continue.", "Please sign in to continue."))
+        .toThrow("structure");
+      expect(adapter.applyTransactions).toEqual([]);
     });
 
-    it("does not apply a fix from a previous document to a newly loaded one with the same block IDs", async () => {
-      const adapter = pluginDocument();
-      const onDirtyChange = jest.fn();
-      const onCommandStateChange = jest.fn();
-      const { commandsRef, renderer } = await renderDocument({ adapter, onCommandStateChange, onDirtyChange });
+    it("rejects before writing on an adapter without synchronous writes, so Return or a focus change cannot interleave", async () => {
+      const adapter = new MountedEditorAdapter(snapshot([block("d1:b0", 0, original)]));
+      const { commandsRef } = await renderDocument({ adapter });
       const { generation } = await read(commandsRef);
-      const loadOther = () => act(async () => renderer.update(<MarkdownDocument adapter={adapter} autoFocusFirstBlock
-        commandsRef={commandsRef} filename="other.md" onCommandStateChange={onCommandStateChange}
-        onDirtyChange={onDirtyChange} savePolicy={{ autosave: false }} />));
+      expect(() => commandsRef.current!.replaceBlockText(generation, "d1:b0", original, fixed)).toThrow("can't apply fixes");
+      expect(adapter.applyTransactions).toEqual([]);
+    });
 
-      // Apply after the other document loaded.
-      await loadOther();
-      await flushPromises();
-      const transactionCount = adapter.applyTransactions.length;
-      expect(await settle(commandsRef.current!.updateBlockMarkdown(generation, "d1:b0", replaceText(original, fixed)))).toBe(false);
-      expect(adapter.applyTransactions).toHaveLength(transactionCount);
-
-      // Apply queued behind a pending typing commit when the other document loads.
-      const next = await read(commandsRef);
-      const gate = adapter.deferNextTransaction();
-      await changeText(editorInput(renderer), "Please log in today.");
-      const apply = commandsRef.current!.updateBlockMarkdown(next.generation, "d1:b0", replaceText("Please log in today.", fixed));
-      await flushPromises();
+    it("withdraws a fix from a previous document without committing the new document's typing", async () => {
+      const adapter = pluginDocument();
+      const { commandsRef, renderer } = await renderDocument({ adapter });
+      const { generation } = await read(commandsRef);
       await act(async () => renderer.update(<MarkdownDocument adapter={adapter} autoFocusFirstBlock
-        commandsRef={commandsRef} filename="third.md" onCommandStateChange={onCommandStateChange}
-        onDirtyChange={onDirtyChange} savePolicy={{ autosave: false }} />));
+        commandsRef={commandsRef} filename="other.md" savePolicy={{ autosave: false }} />));
       await flushPromises();
-      await act(async () => { gate.resolve(); });
-      expect(await settle(apply)).toBe(false);
-      expect(adapter.applyTransactions.filter((transaction) => "markdown" in transaction && transaction.markdown === fixed)).toEqual([]);
-      expect(onDirtyChange).toHaveBeenLastCalledWith(false);
-      expect(onCommandStateChange).toHaveBeenLastCalledWith(expect.objectContaining({ canUndo: false }));
+      await changeText(editorInput(renderer), "Please log in today.");
+      const transactionCount = adapter.applyTransactions.length;
+
+      expect(await replace(commandsRef, generation, "d1:b0", original, fixed)).toBe(false);
+      expect(adapter.applyTransactions).toHaveLength(transactionCount);
+      await read(commandsRef);
+      expect(adapter.sourceMarkdown).toBe(`Please log in today.\n\n${second}`);
+      await undo(commandsRef);
+      expect(adapter.sourceMarkdown).toBe(`${original}\n\n${second}`);
     });
 
     it("withdraws a fix after the pane loads a document with different block IDs", async () => {
       const adapter = pluginDocument();
       const { commandsRef, onError, renderer } = await renderDocument({ adapter });
       const { generation } = await read(commandsRef);
-      const otherAdapter = new MountedEditorAdapter(snapshot([block("d2:b0", 0, original)]));
+      const otherAdapter = new SyncEditorAdapter(snapshot([block("d2:b0", 0, original)]));
       await act(async () => renderer.update(<MarkdownDocument adapter={otherAdapter} autoFocusFirstBlock commandsRef={commandsRef}
         filename="other.md" onError={onError} savePolicy={{ autosave: false }} />));
       await flushPromises();
-      expect(await settle(commandsRef.current!.updateBlockMarkdown(generation, "d1:b0", replaceText(original, fixed)))).toBe(false);
+      expect(await replace(commandsRef, generation, "d1:b0", original, fixed)).toBe(false);
       expect(otherAdapter.applyTransactions).toEqual([]);
       expect(onError).not.toHaveBeenCalled();
     });
@@ -1006,7 +1059,7 @@ describe("MarkdownDocument mounted editing", () => {
         commandsRef={commandsRef} filename="test.md" savePolicy={{ autosave: false }} />));
       await flushPromises();
       const transactionCount = adapter.applyTransactions.length;
-      expect(await settle(commandsRef.current!.updateBlockMarkdown(generation, "d1:b0", replaceText(original, fixed)))).toBe(false);
+      expect(await replace(commandsRef, generation, "d1:b0", original, fixed)).toBe(false);
       expect(adapter.applyTransactions).toHaveLength(transactionCount);
     });
 
@@ -1020,7 +1073,9 @@ describe("MarkdownDocument mounted editing", () => {
       await act(async () => renderer.update(<MarkdownDocument adapter={adapter} autoFocusFirstBlock commandsRef={commandsRef}
         filename="other.md" savePolicy={{ autosave: false }} />));
       await act(async () => { gate.resolve(); });
-      expect(await settle(reading)).toMatch(/changed/);
+      let message: string | undefined;
+      await act(async () => { message = await reading; });
+      expect(message).toMatch(/changed/);
     });
   });
 

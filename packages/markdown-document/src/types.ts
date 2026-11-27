@@ -92,6 +92,7 @@ export type MarkdownDocumentAdapter = {
     documentId: string,
     transaction: MarkdownTransaction,
   ) => MarkdownTransactionResult | Promise<MarkdownTransactionResult>;
+  applyTransactionSync?: (documentId: string, transaction: MarkdownTransaction) => MarkdownTransactionResult;
 };
 
 export type MarkdownDocumentCommands = {
@@ -132,10 +133,11 @@ export type MarkdownDocumentCommands = {
   /** Commits the active draft and returns every block's current markdown with the loaded document's generation. */
   readBlocks(): Promise<{ generation: number; blocks: { id: string; markdown: string }[] }>;
   /**
-   * Replaces a block of the document `generation` as one undoable edit. `transform` runs immediately before the
-   * write; returning the markdown unchanged cancels it. Returns false when nothing was written.
+   * Synchronously replaces block `blockId` of document `generation` with `after` as one undoable edit when it still
+   * reads `before`; returns false when it doesn't. Throws without writing unless the edit keeps a plain paragraph one
+   * paragraph and the adapter has `getBlockSync` and `applyTransactionSync`.
    */
-  updateBlockMarkdown(generation: number, blockId: string, transform: (markdown: string) => string): Promise<boolean>;
+  replaceBlockText(generation: number, blockId: string, before: string, after: string): boolean;
 };
 
 export type MarkdownDocumentCommandState = {

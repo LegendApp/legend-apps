@@ -68,18 +68,14 @@ export function MarkdownFormattingToolbar({
       ? { message: `Replace “${suggestion.find}” with “${suggestion.replace}”`, fix: { generation, suggestion } }
       : { message: `${command.title}: no issues` });
   };
-  const applyFix = async ({ generation, suggestion }: PluginFix) => {
+  const applyFix = ({ generation, suggestion }: PluginFix) => {
     const commands = commandsRef.current;
     if (!commands) return;
-    // The document runs this transform just before its write, so the text and the originating rule are checked there.
-    const applied = await commands.updateBlockMarkdown(generation, suggestion.blockId, (markdown) => (
-      markdown === suggestion.before && isSuggestionCurrent(suggestion) ? suggestion.after : markdown
-    ));
-    let message = "Fix applied";
-    if (!applied) {
-      message = isSuggestionCurrent(suggestion)
-        ? "Document changed; suggestion withdrawn. Check again."
-        : "The plugin rule changed or was disabled; suggestion withdrawn.";
+    let message = "The plugin rule changed or was disabled; suggestion withdrawn.";
+    if (isSuggestionCurrent(suggestion)) {
+      message = commands.replaceBlockText(generation, suggestion.blockId, suggestion.before, suggestion.after)
+        ? "Fix applied"
+        : "Document changed; suggestion withdrawn. Check again.";
     }
     setPluginResult({ message });
   };
@@ -166,8 +162,11 @@ export function MarkdownFormattingToolbar({
               accessibilityRole="button"
               className="border"
               onPress={() => {
-                const { fix } = pluginResult;
-                if (fix) applyFix(fix).catch((error: unknown) => setPluginResult({ message: String(error) }));
+                try {
+                  if (pluginResult.fix) applyFix(pluginResult.fix);
+                } catch (error) {
+                  setPluginResult({ message: String(error) });
+                }
               }}
               style={[styles.button, buttonStyle]}
             >

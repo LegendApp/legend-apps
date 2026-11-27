@@ -96,6 +96,28 @@ function getSession(documentId: string) {
   return session;
 }
 
+function applyTransactionSync(documentId: string, transaction: MarkdownTransaction): MarkdownTransactionResult {
+  const session = getSession(documentId);
+  const nativeTransaction =
+    transaction.type === "replaceBlockRange"
+      ? {
+          type: transaction.type,
+          blockId: transaction.startBlockId,
+          beforeMarkdown: transaction.endBlockId,
+          markdown: transaction.markdown,
+        }
+      : transaction.type === "moveBlockRange"
+      ? {
+          type: transaction.type,
+          blockId: transaction.startBlockId,
+          beforeMarkdown: transaction.endBlockId,
+          markdown: transaction.targetBlockId,
+          afterMarkdown: transaction.placement,
+        }
+      : transaction;
+  return toTransactionResult(session.nativeDocument.applyTransaction(nativeTransaction));
+}
+
 type NativeMarkdownDocumentAdapter = MarkdownDocumentAdapter & {
   loadDocument(filename: string, result: MarkdownFileLoadResult): Promise<MarkdownDocumentSnapshot>;
   loadMarkdown(filename: string, markdown: string): Promise<MarkdownDocumentSnapshot>;
@@ -206,25 +228,6 @@ export const nativeMarkdownDocumentAdapter: NativeMarkdownDocumentAdapter = {
     sessions.delete(documentId);
   },
 
-  applyTransaction(documentId: string, transaction: MarkdownTransaction): MarkdownTransactionResult {
-    const session = getSession(documentId);
-    const nativeTransaction =
-      transaction.type === "replaceBlockRange"
-        ? {
-            type: transaction.type,
-            blockId: transaction.startBlockId,
-            beforeMarkdown: transaction.endBlockId,
-            markdown: transaction.markdown,
-          }
-        : transaction.type === "moveBlockRange"
-        ? {
-            type: transaction.type,
-            blockId: transaction.startBlockId,
-            beforeMarkdown: transaction.endBlockId,
-            markdown: transaction.targetBlockId,
-            afterMarkdown: transaction.placement,
-          }
-        : transaction;
-    return toTransactionResult(session.nativeDocument.applyTransaction(nativeTransaction));
-  },
+  applyTransaction: applyTransactionSync,
+  applyTransactionSync,
 };

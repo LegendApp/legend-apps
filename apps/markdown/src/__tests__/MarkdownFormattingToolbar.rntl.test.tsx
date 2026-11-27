@@ -106,10 +106,10 @@ describe("MarkdownFormattingToolbar", () => {
     const commands = {
       ...commandsFixture(),
       readBlocks: jest.fn(async () => ({ generation: 7, blocks: [{ id: "b0", markdown: source.markdown }, { id: "b1", markdown: "Second." }] })),
-      updateBlockMarkdown: jest.fn(async (_generation: number, _blockId: string, transform: (markdown: string) => string) => {
-        const next = transform(source.markdown);
-        if (next === source.markdown) return false;
-        written.push(next);
+      replaceBlockText: jest.fn((_generation: number, _blockId: string, before: string, after: string) => {
+        if (after.includes("\n")) throw new Error("This fix could change the document structure.");
+        if (before !== source.markdown) return false;
+        written.push(after);
         return true;
       }),
     } as unknown as MarkdownDocumentCommands;
@@ -120,7 +120,7 @@ describe("MarkdownFormattingToolbar", () => {
     await fireEvent.press(view.getByLabelText("Check Document"));
     expect(result()).toBe("Replace “log in” with “sign in”");
     await fireEvent.press(view.getByLabelText("Apply Fix"));
-    expect(commands.updateBlockMarkdown).toHaveBeenCalledWith(7, "b0", expect.any(Function));
+    expect(commands.replaceBlockText).toHaveBeenCalledWith(7, "b0", "Please log in to continue.", "Please sign in to continue.");
     expect(written).toEqual(["Please sign in to continue."]);
     expect(result()).toBe("Fix applied");
 
@@ -134,10 +134,16 @@ describe("MarkdownFormattingToolbar", () => {
     await fireEvent.press(view.getByLabelText("Apply Fix"));
     expect(result()).toBe("The plugin rule changed or was disabled; suggestion withdrawn.");
 
+    mockPluginCommand.rules = [{ ...mockRule, replace: "sign\n\nin" }];
+    await fireEvent.press(view.getByLabelText("Check Document"));
+    await fireEvent.press(view.getByLabelText("Apply Fix"));
+    expect(result()).toBe("Error: This fix could change the document structure.");
+
     await fireEvent.press(view.getByLabelText("Check Document"));
     mockPlugin.enabled = false;
     await fireEvent.press(view.getByLabelText("Apply Fix"));
     expect(result()).toBe("The plugin rule changed or was disabled; suggestion withdrawn.");
+
     expect(written).toEqual(["Please sign in to continue."]);
     await view.unmount();
   });
