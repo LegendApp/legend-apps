@@ -1,0 +1,47 @@
+diff --git a/ios/EnrichedMarkdown.mm b/ios/EnrichedMarkdown.mm
+index b7edde7..9226a69 100644
+--- a/ios/EnrichedMarkdown.mm
++++ b/ios/EnrichedMarkdown.mm
+@@ -838,11 +838,23 @@ - (void)applyRenderedSegments:(NSArray *)renderedSegments
+   _renderedMarkdown = [renderedMarkdown copy];
+   [self updatePendingCodeBlockSegment:endsInsideOpenCodeFence segments:renderedSegments];
+   BOOL segmentTopologyChanged = _streamingAnimation && [self renderedSegmentsChangeTopology:renderedSegments];
++  BOOL reset = (_dirtyFlags & ENRMDirtyRecreateSegments) != 0;
++  // A text segment re-renders entirely from the new config, so restyle text views in place: recreating them would
++  // drop the window's first responder and the selection. The reconciler then reuses them by signature.
++  if (reset && ![self renderedSegmentsChangeTopology:renderedSegments] &&
++      [renderedSegments indexOfObjectPassingTest:^BOOL(ENRMRenderedSegment *segment, NSUInteger i, BOOL *stop) {
++        return segment.kind != ENRMSegmentKindText;
++      }] == NSNotFound) {
++    [renderedSegments enumerateObjectsUsingBlock:^(ENRMRenderedSegment *segment, NSUInteger i, BOOL *stop) {
++      [self->_segmentViewRegistry updateView:self->_segmentViews[i] withSegment:segment];
++    }];
++    reset = NO;
++  }
+ 
+   ENRMSegmentReconciliationResult *result = [ENRMSegmentReconciler reconcileCurrentViews:_segmentViews
+       currentSignatures:_segmentSignatures
+       renderedSegments:renderedSegments
+-      reset:(_dirtyFlags & ENRMDirtyRecreateSegments) != 0
++      reset:reset
+       createView:^RCTUIView *(ENRMRenderedSegment *segment) {
+         return [self->_segmentViewRegistry createViewForSegment:segment];
+       }
+diff --git a/ios/views/EnrichedMarkdownInternalText.m b/ios/views/EnrichedMarkdownInternalText.m
+index 93eef7a..d681aa5 100644
+--- a/ios/views/EnrichedMarkdownInternalText.m
++++ b/ios/views/EnrichedMarkdownInternalText.m
+@@ -74,7 +74,13 @@ - (void)applyAttributedText:(NSMutableAttributedString *)text context:(RenderCon
+   _accessibilityElements = nil;
+   _accessibilityNeedsRebuild = YES;
+ 
++  // Restyling the same text keeps the reader's selection, which replacing the storage would collapse.
++  NSRange selection = _textView.selectedRange;
++  BOOL sameText = [ENRMGetAttributedText(_textView).string isEqualToString:text.string];
+   ENRMSetAttributedText(_textView, text);
++  if (sameText) {
++    _textView.selectedRange = selection;
++  }
+ 
+   [_textView.layoutManager invalidateLayoutForCharacterRange:NSMakeRange(0, text.length) actualCharacterRange:NULL];
+ 

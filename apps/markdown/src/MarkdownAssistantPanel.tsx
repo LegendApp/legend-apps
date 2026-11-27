@@ -1,4 +1,5 @@
 import { SegmentedOptions } from "@legend-apps/design-system";
+import { Button } from "@legendapp/spark/ui";
 import { useValue } from "@legendapp/state/react";
 import { useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
@@ -122,7 +123,9 @@ function ChangesCard({ onApply, onDiscard, onPreview, proposal, showAfter }: {
       </View>
       {proposal.changes.map(change => (
         <View
+          accessible
           accessibilityLabel={`${settingLabel(change.key)}: ${valueLabel(change.key, change.from)} to ${valueLabel(change.key, change.to)}`}
+          accessibilityRole="text"
           className="flex-row items-center justify-between gap-2 border-t border-border px-3 py-2"
           key={change.key}
         >
@@ -136,12 +139,8 @@ function ChangesCard({ onApply, onDiscard, onPreview, proposal, showAfter }: {
       ))}
       {open ? (
         <View className="flex-row flex-wrap justify-end gap-2 border-t border-border px-3 py-2">
-          <Pressable accessibilityRole="button" className="rounded-md border border-border bg-background px-3 py-1" onPress={onDiscard}>
-            <Text className="text-sm text-foreground">Discard</Text>
-          </Pressable>
-          <Pressable accessibilityRole="button" className="rounded-md bg-primary px-3 py-1" onPress={onApply}>
-            <Text className="text-sm font-medium text-primary-foreground">{count === 1 ? "Apply 1 change" : `Apply ${count} changes`}</Text>
-          </Pressable>
+          <Button onPress={onDiscard}>Discard</Button>
+          <Button onPress={onApply}>{count === 1 ? "Apply 1 change" : `Apply ${count} changes`}</Button>
         </View>
       ) : null}
     </View>

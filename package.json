@@ -142,7 +142,8 @@
     "react-native-worklets@0.12.2": "patches/react-native-worklets@0.12.2.patch",
     "number-flow-react-native@0.5.1": "patches/number-flow-react-native@0.5.1.patch",
     "@react-native-windows/cli@0.83.2": "patches/@react-native-windows+cli+0.83.2.patch",
-    "@legendapp/spark@0.0.7": "patches/@legendapp+spark@0.0.7.patch"
+    "@legendapp/spark@0.0.7": "patches/@legendapp+spark@0.0.7.patch",
+    "react-native-enriched-markdown@1.1.1": "patches/react-native-enriched-markdown@1.1.1.patch"
   },
   "catalog": {
     "react": "19.2.0",

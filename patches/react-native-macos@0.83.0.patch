@@ -14,6 +14,26 @@ index 2758cc7..4903c05 100644
    }
  }
  
+diff --git a/Libraries/Text/TextInput/Singleline/RCTUITextField.mm b/Libraries/Text/TextInput/Singleline/RCTUITextField.mm
+index 0f988c1..c7fe0fb 100644
+--- a/Libraries/Text/TextInput/Singleline/RCTUITextField.mm
++++ b/Libraries/Text/TextInput/Singleline/RCTUITextField.mm
+@@ -171,6 +171,15 @@ - (void)setAccessibilityElement:(BOOL)isAccessibilityElement
+   // inside the component.
+ }
+ 
++#if TARGET_OS_OSX // [macOS
++// AppKit exposes the field's cell, not the field, as the text field element, so the label must reach the cell.
++- (void)setAccessibilityLabel:(NSString *)accessibilityLabel
++{
++  [super setAccessibilityLabel:accessibilityLabel];
++  self.cell.accessibilityLabel = accessibilityLabel;
++}
++#endif // macOS]
++
+ #pragma mark - Properties
+ 
+ - (void)setAcceptDragAndDropTypes:(NSArray<NSString *> *)acceptDragAndDropTypes
 diff --git a/React/Fabric/Mounting/ComponentViews/ScrollView/RCTScrollViewComponentView.mm b/React/Fabric/Mounting/ComponentViews/ScrollView/RCTScrollViewComponentView.mm
 index aa79196..ef94b80 100644
 --- a/React/Fabric/Mounting/ComponentViews/ScrollView/RCTScrollViewComponentView.mm

@@ -1,4 +1,4 @@
-import { fireEvent, render } from "@testing-library/react-native";
+import { fireEvent, render, waitFor } from "@testing-library/react-native";
 import React from "react";
 import { getDirectory } from "@legendapp/spark/files";
 import { resolveCommand, runCommand } from "@legendapp/spark/processes";
@@ -30,6 +30,13 @@ beforeEach(() => {
   setMarkdownFormattingToolbarModeSetting(defaults.formattingToolbarMode);
   setMarkdownLineHeightSetting(defaults.lineHeight);
 });
+
+/** Spark's native AppKit Button, mocked as a host component, found by its title. */
+function nativeButton(view: Awaited<ReturnType<typeof render>>, title: string) {
+  const [button] = view.container.queryAll(node => node.type === "NativeButton" && node.props.title === title);
+  if (!button) throw new Error(`No ${title} button`);
+  return button;
+}
 
 function deferred() {
   let resolve!: (value: string) => void;
@@ -239,19 +246,19 @@ it("runs send, After, Discard, then send and Apply through the panel", async () 
   await fireEvent.changeText(view.getByLabelText("Ask Assistant"), "Make this nicer for long-form writing");
   await fireEvent(view.getByLabelText("Ask Assistant"), "submitEditing");
   await view.findByText("Here are 4 settings changes. Switch to After to see them in the editor.");
-  expect(view.getByLabelText("Font: Theme to Serif")).toBeTruthy();
+  expect(view.getByLabelText("Font: Theme to Serif").props.accessible).toBe(true);
   expect(view.getByLabelText("Formatting Toolbar: Top to Floating")).toBeTruthy();
 
   const segmented = () => view.container.queryAll(node => node.type === "NativeSegmentedControl")[0]!;
   await fireEvent(segmented(), "valueChange", { nativeEvent: { value: "1" } });
   expect(assistant.preview$.get()?.fontFamily).toBe("serif");
-  await fireEvent.press(view.getByText("Discard"));
+  await fireEvent(nativeButton(view, "Discard"), "buttonPress");
   expect(assistant.preview$.get()).toBeUndefined();
   expect(view.getByText("Discarded")).toBeTruthy();
 
   await fireEvent.changeText(view.getByLabelText("Ask Assistant"), "Again");
   await fireEvent.press(view.getByLabelText("Send"));
-  await fireEvent.press(await view.findByText("Apply 4 changes"));
+  await fireEvent(await waitFor(() => nativeButton(view, "Apply 4 changes")), "buttonPress");
   expect(readAssistantSettings()).toMatchObject({ contentWidth: "narrow", fontFamily: "serif", fontSize: "large", formattingToolbarMode: "selection" });
   expect(view.getByText("Applied")).toBeTruthy();
   await view.unmount();
@@ -267,11 +274,11 @@ it("keeps each card's buttons on its own proposal and reports composer focus", a
   expect(assistant.state$.composerFocused.peek()).toBe(true);
   await fireEvent.changeText(composer, "long-form");
   await fireEvent(composer, "submitEditing");
-  const olderApply = await view.findByText("Apply 4 changes");
+  const olderApply = await waitFor(() => nativeButton(view, "Apply 4 changes"));
   await fireEvent.changeText(composer, "bigger");
   await fireEvent(composer, "submitEditing");
-  await view.findByText("Apply 1 change");
-  await fireEvent.press(olderApply);
+  await waitFor(() => nativeButton(view, "Apply 1 change"));
+  await fireEvent(olderApply, "buttonPress");
   expect(readAssistantSettings()).toEqual(defaults);
   await fireEvent(composer, "blur");
   expect(assistant.state$.composerFocused.peek()).toBe(false);
