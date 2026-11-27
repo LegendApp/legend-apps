@@ -76,9 +76,6 @@ jest.mock("@legendapp/spark/windows", () => ({
   beforeWindowClose: jest.fn(async () => ({ remove: jest.fn(async () => {}) })),
 }));
 
-jest.mock("@legendapp/spark/ui/glass", () => ({
-  GlassView: (props: object) => require("react").createElement(require("react-native").View, { ...props, testID: "mock-glass" }),
-}));
 jest.mock("@legendapp/spark/shortcuts/commands", () => ({ getDefaultHotkeyBindings: jest.requireActual("@legendapp/spark/shortcuts/commands").getDefaultHotkeyBindings, createHotkeyRouter: jest.fn(() => ({})), useRoutedHotkeys: jest.fn() }));
 
 jest.mock("@legendapp/spark/files", () => ({
@@ -145,6 +142,7 @@ jest.mock("../useMarkdownWindows", () => ({
 }));
 
 const mockChromeTheme = { titleBarHeight: 36 };
+let mockDisplayTheme = "system";
 let mockSidebarFolders: string[] = [];
 let mockSavedPaneLayout: unknown;
 
@@ -161,7 +159,7 @@ jest.mock("../markdownSettings", () => ({
   useMarkdownAppearanceSettings: () => ({}),
   useMarkdownAutosaveSetting: () => "enabled",
   useMarkdownChromeTheme: () => mockChromeTheme,
-  useMarkdownDisplayThemeSetting: () => "system",
+  useMarkdownDisplayThemeSetting: () => mockDisplayTheme,
   useMarkdownFormattingToolbarModeSetting: () => "selection",
   useMarkdownLayoutThemeSetting: () => "default",
   useMarkdownHotkeySettings: () => ({}),
@@ -175,6 +173,7 @@ jest.mock("../userThemes", () => ({
 
 describe("MarkdownEditorWindow e2e launch routing", () => {
   beforeEach(() => {
+    mockDisplayTheme = "system";
     jest.mocked(getLastMarkdownDocumentPath).mockReturnValue(null);
     jest.mocked(getMarkdownStartupBehaviorSetting).mockReturnValue("newDocument");
     mockCheckForExternalChanges.mockClear();
@@ -199,28 +198,18 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
     });
   });
 
-  it("puts the pane cards on one Liquid Glass chrome that meets AppKit's sidebar glass through a clear divider", async () => {
+  it.each([["light", 0.8], ["dark", 0.88]])("configures native %s glass behind the pane cards", async (theme, opacity) => {
+    mockDisplayTheme = theme;
     const view = await render(<MarkdownEditorWindow files={["/Alpha.md", "/Beta.md"]} />);
-    const glass = view.getByTestId("mock-glass");
-    const surface = glass.parent!;
-    expect(surface.props.pointerEvents).toBe("none");
-    expect(glass.props.glassStyle).toBeUndefined();
-    expect((surface.children[1] as TestInstance).props.style).toEqual(expect.arrayContaining([{ opacity: 0.8 }]));
-    // The split view sits over the glass, divider clear, with the pane cards in its content.
-    const splitView = surface.parent!.children[1] as TestInstance;
+    const splitView = view.root!.children[0] as TestInstance;
+    expect(splitView.props.contentGlassTint).toEqual({ color: expect.stringMatching(/^#[\da-f]{6}$/i), opacity });
     expect(splitView.props.dividerColor).toBe("#00000000");
+    expect(splitView.props.onResize).toBeUndefined();
     expect(within(splitView).getAllByLabelText("Beta.md").some(node => node.props.accessibilityRole === "tab")).toBe(true);
     expect(within(splitView).getByTestId("markdown-pane-p0")).toBeTruthy();
-    // AppKit already draws the sidebar in glass: the sidebar takes only the tint, and this glass starts at its edge.
     const sidebar = splitView.children[0] as TestInstance;
     expect(within(sidebar).getByText("Add Folder…")).toBeTruthy();
     expect(StyleSheet.flatten((sidebar.children[0] as TestInstance).props.style).opacity).toBe(0.8);
-    const left = () => StyleSheet.flatten(surface.props.style).left;
-    expect(left()).toBe(0);
-    await act(async () => splitView.props.onResize({ contentX: 221, sidebarWidth: 220, sidebarX: 0 }));
-    expect(left()).toBe(220);
-    await act(async () => splitView.props.onResize({ contentX: 0, sidebarWidth: 0, sidebarX: 0 }));
-    expect(left()).toBe(0);
     await view.unmount();
   });
 

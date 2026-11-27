@@ -1,5 +1,4 @@
 import { watch } from "@legendapp/spark/files";
-import { GlassView } from "@legendapp/spark/ui/glass";
 import { ownRegistration } from "@legend-apps/runtime-utils";
 import { getDirectory } from "./markdownFiles";
 import { SidebarSplitView } from "@legendapp/spark/ui/split-view";
@@ -43,8 +42,7 @@ import {
 } from "@legend-apps/workspace";
 import { closeWindow } from "@legendapp/spark/windows";
 import { getPaneCardColor, MarkdownPaneArea, MarkdownPaneChrome, PaneTabDropTarget, type TabDropZone } from "./MarkdownPaneArea";
-import type { Observable } from "@legendapp/state";
-import { useObservable, useValue } from "@legendapp/state/react";
+import { useValue } from "@legendapp/state/react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { InteractionManager, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import {
@@ -342,7 +340,6 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
   });
 
   const workspaceColors = displayTheme.colors;
-  const sidebarEdge$ = useObservable(0);
 
   if (e2eRun) {
     const editorSmokeVariant = editorSmokeVariantForScenario(e2eRun.scenario);
@@ -409,10 +406,14 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
 
   return (
     <View style={styles.root}>
-      <WindowGlass backgroundStyle={backgroundStyle} dark={nativeWindowAppearance === "dark"} left$={sidebarEdge$} />
       <SidebarSplitView
         appearance={nativeWindowAppearance}
         content={content}
+        contentGlassTint={{
+          color: backgroundStyle.backgroundColor,
+          // AppKit's sidebar glass frosts more than the content glass in dark mode.
+          opacity: nativeWindowAppearance === "dark" ? 0.88 : 0.8,
+        }}
         dividerColor="#00000000"
         sidebar={(
           <View style={styles.root}>
@@ -432,7 +433,6 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
             />
           </View>
         )}
-        onResize={({ sidebarWidth, sidebarX }) => sidebarEdge$.set(sidebarX + sidebarWidth)}
         onSidebarCollapsedChange={collapsed => workspace.setSidebarOpen(!collapsed)}
         sidebarCollapsed={!sidebarOpen}
         sidebarWidth={220}
@@ -442,23 +442,8 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
   );
 }
 
-/**
- * The window's chrome is Liquid Glass tinted with the page color at 0.8, behind the sidebar, the title bar and the
- * gutters; only the pane cards differ. AppKit already puts the sidebar in its own glass, which would frost this glass
- * a second time, so this glass starts at the sidebar's edge and the sidebar takes only the tint.
- */
-function WindowGlass({ backgroundStyle, dark, left$ }: { backgroundStyle: { backgroundColor: string }; dark: boolean; left$: Observable<number> }) {
-  return (
-    <View pointerEvents="none" style={[styles.chrome, { left: useValue(left$) }]}>
-      <GlassView style={styles.glass} />
-      {/* AppKit's sidebar glass frosts more than plain glass in dark mode; a little more tint here matches it. */}
-      <ChromeTint backgroundStyle={backgroundStyle} opacity={dark ? 0.88 : 0.8} />
-    </View>
-  );
-}
-
-function ChromeTint({ backgroundStyle, opacity = 0.8 }: { backgroundStyle: { backgroundColor: string }; opacity?: number }) {
-  return <View pointerEvents="none" style={[StyleSheet.absoluteFillObject, backgroundStyle, { opacity }]} />;
+function ChromeTint({ backgroundStyle }: { backgroundStyle: { backgroundColor: string } }) {
+  return <View pointerEvents="none" style={[StyleSheet.absoluteFillObject, backgroundStyle, { opacity: 0.8 }]} />;
 }
 
 type WindowMenuOptions = Pick<Parameters<typeof useMarkdownMenus>[0], "hasFolders" | "onAddFolder" | "onNewFile" | "onNewFolder" | "onOpenSettings" | "onSaveWorkspace">;
@@ -946,18 +931,6 @@ const MarkdownDocumentSurface = memo(function MarkdownDocumentSurface({
 });
 
 const styles = StyleSheet.create({
-  chrome: {
-    ...StyleSheet.absoluteFillObject,
-    overflow: "hidden",
-  },
-  glass: {
-    // Keep the rounded glass edges outside the window and the sidebar.
-    position: "absolute",
-    top: -48,
-    bottom: -48,
-    left: -48,
-    right: -48,
-  },
   document: {
     flex: 1,
   },
