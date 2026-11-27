@@ -376,6 +376,9 @@ function waitForAnimationFrame() {
   return new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 }
 
+// Shared across editors, so a document generation from one editor instance never matches another's.
+let lastLoadVersion = 0;
+
 function activeInputMarkdownForBlock(_block: MarkdownBlockSnapshot | undefined, markdown: string) {
   return markdown;
 }
@@ -2644,7 +2647,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         return;
       }
       savedAsRef.current = undefined;
-      loadVersionRef.current += 1;
+      loadVersionRef.current = ++lastLoadVersion;
       const loadVersion = loadVersionRef.current;
       conflictRef.current = false;
       onConflictChangeRef.current?.(null);
@@ -2774,7 +2777,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
 
       return () => {
         isCanceled = true;
-        loadVersionRef.current += 1;
+        loadVersionRef.current = ++lastLoadVersion;
         cancelHydration();
         cancelPendingVerticalNavigationFrame();
         clearAutosaveTimer();

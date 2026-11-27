@@ -985,6 +985,18 @@ describe("MarkdownDocument mounted editing", () => {
       expect(onCommandStateChange).toHaveBeenLastCalledWith(expect.objectContaining({ canUndo: false }));
     });
 
+    it("does not apply a fix from a previous editor instance on the same commands ref", async () => {
+      const adapter = pluginDocument();
+      const { commandsRef, renderer } = await renderDocument({ adapter });
+      const { generation } = await read(commandsRef);
+      await act(async () => renderer.update(<MarkdownDocument key="remounted" adapter={adapter} autoFocusFirstBlock
+        commandsRef={commandsRef} filename="test.md" savePolicy={{ autosave: false }} />));
+      await flushPromises();
+      const transactionCount = adapter.applyTransactions.length;
+      expect(await settle(commandsRef.current!.updateBlockMarkdown(generation, "d1:b0", replaceText(original, fixed)))).toBe(false);
+      expect(adapter.applyTransactions).toHaveLength(transactionCount);
+    });
+
     it("rejects a read that a document load interrupts", async () => {
       const adapter = pluginDocument();
       const { commandsRef, renderer } = await renderDocument({ adapter });
