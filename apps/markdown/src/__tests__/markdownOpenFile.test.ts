@@ -21,6 +21,14 @@ describe("findOpenFileResults", () => {
     ]);
   });
 
+  it("tells same-named roots apart by their parent folders, and searches by them", () => {
+    const roots = ["/a/Notes", "/b/Notes", "/c/x/Docs", "/d/x/Docs"];
+    const todos = roots.map(root => `${root}/archive/todo.md`);
+    expect(findOpenFileResults(todos, roots, [], "todo").map(result => result.directory))
+      .toEqual(["a/Notes/archive", "b/Notes/archive", "c/x/Docs/archive", "d/x/Docs/archive"]);
+    expect(findOpenFileResults(todos, roots, [], "b/notes todo").map(result => result.path)).toEqual(["/b/Notes/archive/todo.md"]);
+  });
+
   it("ranks names starting with the query first, then names holding it, then recent files", () => {
     expect(findOpenFileResults(files, folders, ["/b/work/plans/q4.md"], "plan").map(result => result.path))
       .toEqual(["/a/notes/deep/nested/plan.md", "/b/work/plans/q4.md"]);

@@ -5,10 +5,19 @@ export type OpenFileResult = { directory: string; name: string; path: string };
 const maxRecentResults = 10;
 const maxResults = 50;
 
+/** The root folder's name, with as many parent folders as tell it apart from other roots of the same name. */
+function getRootLabel(root: string, folders: readonly string[]) {
+  const parts = root.split("/").filter(Boolean);
+  for (let count = 1; ; count++) {
+    const label = parts.slice(-count).join("/");
+    if (count >= parts.length || !folders.some(folder => folder !== root && folder.endsWith(`/${label}`))) return label;
+  }
+}
+
 /** The file's folder, from its root folder's name, so files sharing a name tell apart. */
 function describe(path: string, folders: readonly string[]): OpenFileResult {
   const root = folders.filter(folder => path.startsWith(`${folder}/`)).sort((a, b) => b.length - a.length)[0];
-  const relative = root ? `${getPathName(root)}/${path.slice(root.length + 1)}` : path;
+  const relative = root ? `${getRootLabel(root, folders)}/${path.slice(root.length + 1)}` : path;
   return { directory: relative.slice(0, relative.lastIndexOf("/")), name: getPathName(path), path };
 }
 
