@@ -32,6 +32,7 @@ const manifest = {
       "@legend-apps/markdown-block-editor",
       "@legend-apps/markdown-parser",
       "@legendapp/spark/menus",
+      "@legendapp/spark/processes",
       "@legendapp/spark/windows",
       "react-native-enriched-markdown",
       "react-native-worklets",

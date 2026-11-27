@@ -97,6 +97,8 @@ import { MarkdownLinkPopover } from "./MarkdownLinkPopover";
 import { loadMarkdownUserThemesSync } from "./userThemes";
 import { untitledMarkdownAdapter } from "./untitledMarkdownAdapter";
 import { refreshMarkdownEditorMenuState } from "./markdownEditorActions";
+import { createMarkdownAssistant } from "./markdownAssistant";
+import { MarkdownAssistantPanel } from "./MarkdownAssistantPanel";
 
 const newMarkdownFileName = "Untitled.md";
 /** A dragged tab carries its path under this type. */
@@ -269,9 +271,20 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
   const cardColor = getPaneCardColor(displayTheme.colors.background, nativeWindowAppearance);
   const cardStyle = useMemo(() => ({ backgroundColor: cardColor }), [cardColor]);
   const documentTheme = useMemo(() => ({ ...displayTheme.markdownDocument, backgroundColor: cardColor }), [cardColor, displayTheme.markdownDocument]);
-  const formattingToolbarMode = useMarkdownFormattingToolbarModeSetting();
+  const [assistant] = useState(createMarkdownAssistant);
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const toggleAssistant = useCallback(() => {
+    if (assistantOpen) assistant.close();
+    setAssistantOpen(!assistantOpen);
+  }, [assistant, assistantOpen]);
+  useEffect(() => () => assistant.close(), [assistant]);
+  // While the Assistant's After is selected, the editor shows its proposal over the stored settings.
+  const preview = useValue(assistant.preview$);
+  const storedToolbarMode = useMarkdownFormattingToolbarModeSetting();
+  const formattingToolbarMode = preview?.formattingToolbarMode ?? storedToolbarMode;
   const autosave = useMarkdownAutosaveSetting();
-  const appearanceSettings = useMarkdownAppearanceSettings();
+  const storedAppearance = useMarkdownAppearanceSettings();
+  const appearanceSettings = useMemo(() => preview ? { ...storedAppearance, ...preview } : storedAppearance, [preview, storedAppearance]);
   const { titleBarHeight } = useMarkdownChromeTheme();
   const markdownStyle = useMemo(
     () => getMarkdownStyleForAppearance(displayTheme, layoutTheme, appearanceSettings),
@@ -330,7 +343,8 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
     onNewFolder: newFolder,
     onOpenSettings: openSettingsWindow,
     onSaveWorkspace: workspace.saveWorkspace,
-  }), [addFolder, newFile, newFolder, openSettingsWindow, workspace.saveWorkspace, workspaceFolders.length]);
+    onToggleAssistant: toggleAssistant,
+  }), [addFolder, newFile, newFolder, openSettingsWindow, toggleAssistant, workspace.saveWorkspace, workspaceFolders.length]);
 
   const e2eRun = getMarkdownE2ERunFromLaunchArguments(launchArguments);
   useMarkdownWindowCloseRequest({
@@ -364,7 +378,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
 
   const hairlineColor = displayTheme.colors.border;
   const content = (
-    <View style={styles.root}>
+    <View style={styles.row}>
       <MarkdownPaneArea
         animate={animate}
         cardColor={cardColor}
@@ -401,6 +415,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
         splits={splits}
         tabBarHeight={titleBarHeight}
       />
+      {assistantOpen ? <MarkdownAssistantPanel assistant={assistant} onClose={toggleAssistant} /> : null}
     </View>
   );
 
@@ -446,7 +461,7 @@ function ChromeTint({ backgroundStyle }: { backgroundStyle: { backgroundColor: s
   return <View pointerEvents="none" style={[StyleSheet.absoluteFillObject, backgroundStyle, { opacity: 0.8 }]} />;
 }
 
-type WindowMenuOptions = Pick<Parameters<typeof useMarkdownMenus>[0], "hasFolders" | "onAddFolder" | "onNewFile" | "onNewFolder" | "onOpenSettings" | "onSaveWorkspace">;
+type WindowMenuOptions = Pick<Parameters<typeof useMarkdownMenus>[0], "hasFolders" | "onAddFolder" | "onNewFile" | "onNewFolder" | "onOpenSettings" | "onSaveWorkspace" | "onToggleAssistant">;
 
 type MarkdownPaneProps = {
   actions: PaneActions;
@@ -954,5 +969,9 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     position: "relative",
+  },
+  row: {
+    flex: 1,
+    flexDirection: "row",
   },
 });

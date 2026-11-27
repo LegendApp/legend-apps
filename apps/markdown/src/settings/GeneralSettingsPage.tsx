@@ -15,19 +15,13 @@ import {
   useMarkdownStartupBehaviorSetting,
 } from "../markdownSettings";
 import { PluginSettingsSection } from "./PluginSettingsSection";
+import { formattingToolbarModeOptions } from "./settingOptions";
 import { ToolbarLayoutEditor } from "./ToolbarLayoutEditor";
 
 const startupBehaviorOptions = [
   { label: "New", value: "newDocument" },
   { label: "Last", value: "lastDocument" },
 ] as const satisfies readonly { label: string; value: MarkdownStartupBehaviorSetting }[];
-
-const formattingToolbarModeOptions = [
-  { label: "Floating", value: "selection" },
-  { label: "Top", value: "top" },
-  { label: "Bottom", value: "bottom" },
-  { label: "Hidden", value: "hidden" },
-] as const satisfies readonly { label: string; value: MarkdownFormattingToolbarModeSetting }[];
 
 export function GeneralSettingsContent() {
   const startupBehavior = useMarkdownStartupBehaviorSetting();

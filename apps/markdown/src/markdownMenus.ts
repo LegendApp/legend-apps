@@ -135,6 +135,8 @@ export const markdownMenuConfig: MenuRootItem[] = [
       { id: "focusNextPane", type: "action", label: "Focus Next Pane", shortcut: "Cmd+Alt+Right", disabled: true },
       { id: "focusPreviousPane", type: "action", label: "Focus Previous Pane", shortcut: "Cmd+Alt+Left", disabled: true },
       { type: "separator" },
+      { id: "assistant", type: "action", label: "Assistant", shortcut: "Cmd+Shift+a" },
+      { type: "separator" },
       {
         id: "increaseFontSize",
         type: "action", label: "Increase Font Size", shortcut: "Cmd+=",

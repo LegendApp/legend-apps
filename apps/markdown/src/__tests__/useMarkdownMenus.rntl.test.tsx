@@ -48,6 +48,7 @@ function MenuOwner({ hasFolders = false, split = false, windowId, sessionState$ 
     onSaveDocument: save,
     onSaveDocumentAs: save,
     onSaveWorkspace: transition,
+    onToggleAssistant: noop,
     paneCommands,
     paneCommandState: { canSplitDown: false, canSplitRight: true, hasOtherPanes: split },
     sessionState$,

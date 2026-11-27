@@ -31,38 +31,7 @@ import {
   useMarkdownLineHeightSetting,
 } from "../markdownSettings";
 import { loadMarkdownUserThemesSync } from "../userThemes";
-
-const fontFamilyOptions = [
-  { label: "Theme", value: "system" },
-  { label: "Serif", value: "serif" },
-  { label: "Mono", value: "mono" },
-] as const satisfies readonly { label: string; value: MarkdownFontFamilySetting }[];
-
-const fontSizeOptions = [
-  { label: "Small", value: "small" },
-  { label: "Default", value: "default" },
-  { label: "Large", value: "large" },
-  { label: "XL", value: "xlarge" },
-] as const satisfies readonly { label: string; value: MarkdownFontSizeSetting }[];
-
-const lineHeightOptions = [
-  { label: "Compact", value: "compact" },
-  { label: "Normal", value: "normal" },
-  { label: "Relaxed", value: "relaxed" },
-] as const satisfies readonly { label: string; value: MarkdownLineHeightSetting }[];
-
-const contentWidthOptions = [
-  { label: "Narrow", value: "narrow" },
-  { label: "Standard", value: "standard" },
-  { label: "Wide", value: "wide" },
-  { label: "Full", value: "full" },
-] as const satisfies readonly { label: string; value: MarkdownContentWidthSetting }[];
-
-const densityOptions = [
-  { label: "Compact", value: "compact" },
-  { label: "Comfortable", value: "comfortable" },
-  { label: "Spacious", value: "spacious" },
-] as const satisfies readonly { label: string; value: MarkdownDocumentDensitySetting }[];
+import { contentWidthOptions, densityOptions, fontFamilyOptions, fontSizeOptions, lineHeightOptions } from "./settingOptions";
 
 function formatThemeLabel(name: string) {
   return name

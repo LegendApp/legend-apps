@@ -30,6 +30,7 @@ type MarkdownMenuOptions = {
   onSaveDocument: () => Promise<boolean>;
   onSaveDocumentAs: () => Promise<boolean>;
   onSaveWorkspace: () => Promise<void>;
+  onToggleAssistant: () => void;
   /** Close Tab, Close Window and the split pane commands of the window. */
   paneCommands: Record<MarkdownPaneMenuItem, () => void>;
   paneCommandState: { canSplitDown: boolean; canSplitRight: boolean; hasOtherPanes: boolean };
@@ -83,6 +84,7 @@ export function useMarkdownMenus({
   onSaveDocument,
   onSaveDocumentAs,
   onSaveWorkspace,
+  onToggleAssistant,
   paneCommands,
   paneCommandState,
   sessionState$,
@@ -91,6 +93,7 @@ export function useMarkdownMenus({
   const menuHandlers = useMemo<MarkdownMenuHandlers>(() => ({
     ...paneCommands,
     addFolder: onAddFolder,
+    assistant: onToggleAssistant,
     newFile: onNewFile,
     newFolder: onNewFolder,
     bold: () => documentCommandsRef.current?.toggleBold(),
@@ -143,6 +146,7 @@ export function useMarkdownMenus({
     onSaveDocument,
     onSaveDocumentAs,
     onSaveWorkspace,
+    onToggleAssistant,
     paneCommands,
     sessionState$,
   ]);
