@@ -69,8 +69,8 @@ function createMarkdownMenuHandlers(controller: DocumentAppController): MenuHand
   }, reportMarkdownAppControllerError);
   return {
     ...workspaceHandlers,
-    // Without an editor window, Add Folder opens one on the chosen folders.
     assistant: dispatchMarkdownEditorMenuAction,
+    // Without an editor window, Add Folder opens one on the chosen folders.
     addFolder: (action: MenuAction) => {
       if (!dispatchMarkdownEditorMenuAction(action)) workspaceHandlers.openFolder();
     },
