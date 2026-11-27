@@ -41,3 +41,15 @@ export function flattenWorkspaceTree(
   for (const root of roots) visit(root, 0, null);
   return rows;
 }
+
+/** Every file under the folders, nested and collapsed ones included, hiding what the sidebar hides. */
+export async function listWorkspaceFiles(folders: readonly string[], onError: (error: unknown) => void): Promise<string[]> {
+  const files = new Set<string>();
+  const visit = async (directory: string, scopes: readonly IgnoreScope[]): Promise<void> => {
+    const listing = await listWorkspaceDirectory(directory, scopes).catch((error: unknown) => { onError(error); return undefined; });
+    if (!listing) return;
+    await Promise.all(listing.entries.map(entry => entry.isDirectory ? visit(entry.path, listing.scopes) : void files.add(entry.path)));
+  };
+  await Promise.all(folders.map(folder => visit(folder, [])));
+  return [...files];
+}

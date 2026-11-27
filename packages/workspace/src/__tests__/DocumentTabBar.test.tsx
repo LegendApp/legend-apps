@@ -56,6 +56,20 @@ describe("DocumentTabBar", () => {
     expect(onToggleSidebar).toHaveBeenCalledTimes(1);
   });
 
+  it("shows a New Tab button after the tabs when asked, and titles tabs as told", async () => {
+    await render();
+    expect(renderer.root.findAll(node => node.props.accessibilityLabel === "New Tab")).toHaveLength(0);
+    const onNewTab = jest.fn();
+    await render({ onNewTab, title: path => path === "/x/c.md" ? "New Tab" : path.slice(3) });
+    expect(tabs().map(tab => tab.props.accessibilityLabel)).toEqual(["a.md", "b.md", "New Tab"]);
+    const button = renderer.root.find(node => node.type === ("Pressable" as never) && node.props.accessibilityLabel === "New Tab" && node.props.accessibilityRole === "button");
+    await act(async () => button.props.onPress());
+    expect(onNewTab).toHaveBeenCalledTimes(1);
+    // The button and its gap come out of the tabs' share.
+    await layout(renderer.root.findByType("View" as never), 500);
+    expect(flat(tabs()[0].props.style).width).toBe(Math.round((500 - 8 - 36 - 6 - 32 - 4) / 3));
+  });
+
   it("adds alpha to hex colors only", () => {
     expect(withAlpha("#abc", 0.5)).toBe("#aabbcc80");
     expect(withAlpha("#102030", 1)).toBe("#102030");

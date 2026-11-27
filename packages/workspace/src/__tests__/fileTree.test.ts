@@ -1,4 +1,4 @@
-import { flattenWorkspaceTree, listWorkspaceDirectory } from "../fileTree";
+import { flattenWorkspaceTree, listWorkspaceDirectory, listWorkspaceFiles } from "../fileTree";
 
 const tree: Record<string, string | null> = {
   "/repo": null,
@@ -11,10 +11,15 @@ const tree: Record<string, string | null> = {
   "/repo/src/index.ts": "",
   "/repo/src/debug.log": "",
   "/repo/README.md": "",
+  "/other": null,
+  "/other/deep": null,
+  "/other/deep/er": null,
+  "/other/deep/er/notes.md": "",
+  "/other/deep/locked": null,
 };
 
 jest.mock("@legendapp/spark/files", () => ({
-  list: jest.fn(async (directory: string) => Object.keys(tree)
+  list: jest.fn(async (directory: string) => directory.endsWith("/locked") ? Promise.reject(new Error("denied")) : Object.keys(tree)
     .filter(path => path.startsWith(`${directory}/`) && !path.slice(directory.length + 1).includes("/"))
     .sort()
     .map(path => ({ name: path.slice(directory.length + 1), path }))),
@@ -67,5 +72,17 @@ describe("flattenWorkspaceTree", () => {
       ["/repo/README.md", 1, "/repo"],
       ["/x/a.md", 0, null],
     ]);
+  });
+});
+
+describe("listWorkspaceFiles", () => {
+  it("lists nested files of every folder once, hiding ignored ones and skipping unreadable directories", async () => {
+    const onError = jest.fn();
+    const files = await listWorkspaceFiles(["/repo", "/other", "/repo/src"], onError);
+    // As in the sidebar, the src root applies only its own .gitignore, so it shows debug.log.
+    expect(files.sort()).toEqual([
+      "/other/deep/er/notes.md", "/repo/.gitignore", "/repo/README.md", "/repo/src/.gitignore", "/repo/src/debug.log", "/repo/src/index.ts",
+    ]);
+    expect(onError).toHaveBeenCalledWith(new Error("denied"));
   });
 });
