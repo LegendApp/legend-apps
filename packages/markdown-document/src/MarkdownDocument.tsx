@@ -3295,32 +3295,63 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       selectDocument().catch(reportAsyncError);
     }, [commitActiveBlock, getBlockCount, getBlockIdAtIndex, reportAsyncError, setKeyboardBlockSelection]);
 
-    /** Commits the active draft, then applies `transform` to the block's current markdown as one undoable edit. Returns whether it changed. */
-    const updateBlockMarkdown = useCallback(async (blockId: string, transform: (markdown: string) => string) => {
-      if (!adapter.applyTransaction) return false;
-      await commitActiveBlock({ updateReactState: true, throwOnError: true });
-      const state = documentState$.peek();
-      if (state.status !== "loaded") return false;
-      const block = await loadBlockAtIndex(blockId, getBlockIndexById(blockId));
-      if (!block) return false;
-      const markdown = transform(block.markdown);
-      if (markdown === block.markdown) return false;
-      const result = await adapter.applyTransaction(state.snapshot.documentId, {
-        type: "updateBlockMarkdown",
-        blockId,
-        markdown,
-      });
-      validateTransactionResult(result);
-      pushUpdateBlockHistoryEntry({
-        type: "updateBlockMarkdown",
-        blockId,
-        beforeMarkdown: block.markdown,
-        afterMarkdown: markdown,
-      });
-      applyTransactionResult(result);
-      markDirty();
-      return true;
-    }, [adapter, applyTransactionResult, commitActiveBlock, documentState$, getBlockIndexById, loadBlockAtIndex, markDirty, pushUpdateBlockHistoryEntry, validateTransactionResult]);
+    /**
+     * Applies `transform` to a block of document `generation` as one undoable edit. It runs in the commit queue, so
+     * no typing commit or other queued edit interleaves, and nothing is awaited between the final checks, `transform`
+     * and the adapter write. Returns whether it wrote.
+     */
+    const updateBlockMarkdown = useCallback((generation: number, blockId: string, transform: (markdown: string) => string) => {
+      const run = async () => {
+        await runCommitActiveBlock({ updateReactState: true, throwOnError: true });
+        const block = await loadBlockAtIndex(blockId, getBlockIndexById(blockId));
+        const state = documentState$.peek();
+        const isActive = activeEditor$.blockId.peek() === blockId;
+        const committedMarkdown = committedMarkdownRef.current;
+        if (!block || !adapter.applyTransaction || state.status !== "loaded" || generation !== loadVersionRef.current) return false;
+        if (isActive && draftMarkdown$.peek() !== committedMarkdown) return false;
+        const markdown = transform(block.markdown);
+        if (markdown === block.markdown) return false;
+        const result = await adapter.applyTransaction(state.snapshot.documentId, { type: "updateBlockMarkdown", blockId, markdown });
+        if (generation !== loadVersionRef.current) return false;
+        validateTransactionResult(result);
+        // The reparse can split the block or absorb following source; then the inverse covers the whole changed range.
+        const nextBlock = result.changedBlocks.find((candidate) => candidate.id === blockId) ?? result.changedBlocks[0];
+        const absorbed = nextBlock?.markdown.startsWith(markdown) ? nextBlock.markdown.slice(markdown.length) : "";
+        const { blockIds } = result.changedRange;
+        if (blockIds.length === 1 && blockIds[0] === blockId && !absorbed) {
+          pushUpdateBlockHistoryEntry({ type: "updateBlockMarkdown", blockId, beforeMarkdown: block.markdown, afterMarkdown: markdown });
+        } else if (blockIds.length > 0) {
+          clearTypingHistoryGroup();
+          pushHistoryEntry({
+            type: "replaceBlockRange",
+            startBlockId: blockIds[0]!,
+            endBlockId: blockIds[blockIds.length - 1]!,
+            replacementMarkdown: block.markdown + absorbed,
+            inverseMarkdown: markdown + absorbed,
+          });
+          redoStackRef.current = [];
+          publishCommandState();
+        }
+        applyTransactionResult(result);
+        if (isActive && nextBlock) {
+          if (draftMarkdown$.peek() === committedMarkdown) {
+            const caret = Math.min(activeInputSelectionRef.current.start, nextBlock.markdown.length);
+            setActiveBlock(nextBlock, caret);
+            activeInputRef.current?.setValue(activeInputMarkdownForBlock(nextBlock, nextBlock.markdown));
+            activeInputRef.current?.setSelection(caret, caret);
+          } else {
+            // Typing arrived during the write; its queued commit records it on top of this edit.
+            activeBlockSnapshotRef.current = nextBlock;
+            committedMarkdownRef.current = nextBlock.markdown;
+          }
+        }
+        markDirty();
+        return true;
+      };
+      const promise = commitQueueRef.current.catch(() => {}).then(run);
+      commitQueueRef.current = promise.then(() => {}, () => {});
+      return promise;
+    }, [adapter, activeEditor$, applyTransactionResult, clearTypingHistoryGroup, documentState$, draftMarkdown$, getBlockIndexById, loadBlockAtIndex, markDirty, publishCommandState, pushHistoryEntry, pushUpdateBlockHistoryEntry, runCommitActiveBlock, setActiveBlock, validateTransactionResult]);
 
     const find = useCallback(async (query: string, backwards = false) => {
       if (!query) return false;
@@ -3469,22 +3500,18 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
         },
         undo,
         async readBlocks() {
+          const generation = loadVersionRef.current;
           await commitActiveBlock({ updateReactState: true, throwOnError: true });
-          const blocks: { id: string; markdown: string }[] = [];
-          for (let index = 0; index < getBlockCount(); index += 1) {
-            const block = await loadBlockAtIndex(getBlockIdAtIndex(index), index);
-            if (block) blocks.push({ id: block.id, markdown: block.markdown });
-          }
-          return blocks;
+          const blocks = await loadBlocksForRange(0, getBlockCount());
+          if (generation !== loadVersionRef.current) throw new Error("The document changed while it was being read.");
+          return { generation, blocks: blocks.map(({ id, markdown }) => ({ id, markdown })) };
         },
-        replaceBlockMarkdown(blockId, expectedMarkdown, markdown) {
-          return updateBlockMarkdown(blockId, (current) => (current === expectedMarkdown ? markdown : current));
-        },
+        updateBlockMarkdown,
       }),
       [commitAndBlurActiveBlock,
         commitActiveBlock,
         getBlockCount,
-        loadBlockAtIndex,
+        loadBlocksForRange,
         updateBlockMarkdown,
         getBlockIdAtIndex,
         getBlockIndexById,
@@ -3586,7 +3613,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       [theme?.selectionColor],
     );
     const handleTaskListItemPress = useCallback((blockId: string, taskIndex: number, checked: boolean) => {
-      updateBlockMarkdown(blockId, (markdown) => {
+      updateBlockMarkdown(loadVersionRef.current, blockId, (markdown) => {
         let index = 0;
         return markdown.replace(/^([ \t]*[-*+][ \t]+\[)[ xX](\])/gm, (match, prefix, suffix) => (
           index++ === taskIndex ? `${prefix}${checked ? "x" : " "}${suffix}` : match

@@ -54,6 +54,7 @@ describe("markdown plugin manifests and presets", () => {
     ["an unnamespaced rule", (json: any) => { json.rules[0].id = "sign-in"; }, /must start with "com.example.house-style."/],
     ["a duplicate ID", (json: any) => { json.rules[0].id = commandId; }, /declared twice/],
     ["an unsupported command kind", (json: any) => { json.commands[0].kind = "script"; }, /kind must be "checkDocument"/],
+    ["a non-boolean enabled", (json: any) => { json.rules[0].enabled = "false"; }, /enabled must be a boolean/],
   ])("rejects a manifest with %s", (_name, change, message) => {
     expect(() => parseMarkdownPluginManifest(manifestWith(change))).toThrow(message);
   });
@@ -67,6 +68,16 @@ describe("markdown plugin manifests and presets", () => {
       .toThrow(/find is not a supported option/);
   });
 
+  it.each([
+    ["an unknown placement", { bottom: [] }, /toolbar.bottom is not a supported placement/],
+    ["a null placement", { top: null }, /toolbar.top must be an array/],
+    ["no placement", {}, /toolbar.top must be an array/],
+  ])("rejects a preset toolbar with %s", (_name, toolbar, message) => {
+    const manifest = parseMarkdownPluginManifest(manifestSource);
+    expect(() => parseMarkdownPreset(JSON.stringify({ schemaVersion: 1, toolbar }), [manifest])).toThrow(message);
+    expect(parseMarkdownPreset(JSON.stringify({ schemaVersion: 1, toolbar: { top: [] } }), [manifest]).toolbar).toEqual({ top: [] });
+  });
+
   it("suggests the first whole-word match of enabled rules only", () => {
     const manifest = parseMarkdownPluginManifest(manifestSource);
     const blocks = [{ id: "b0", markdown: "A blog in the log." }, { id: "b1", markdown: "Please log in to continue." }];
@@ -76,6 +87,7 @@ describe("markdown plugin manifests and presets", () => {
       before: "Please log in to continue.",
       after: "Please sign in to continue.",
       commandId,
+      ruleId,
       find: "log in",
       replace: "sign in",
     });
@@ -99,6 +111,21 @@ describe("markdown plugin settings", () => {
 
     setMarkdownPluginEnabled(manifest.id, false);
     expect(getMarkdownPluginCommand(commandId)).toBeUndefined();
+  });
+
+  it("rejects a plugin whose contribution IDs another installed plugin owns, without changing settings", () => {
+    const manifest = parseMarkdownPluginManifest(manifestSource);
+    installMarkdownPlugin(manifest);
+    const colliding = parseMarkdownPluginManifest(JSON.stringify({
+      ...JSON.parse(manifestSource),
+      id: "com.example",
+      commands: [{ id: commandId, title: "Other check", kind: "checkDocument" }],
+      rules: [],
+    }));
+    expect(() => installMarkdownPlugin(colliding)).toThrow(`"${commandId}" is already declared by com.example.house-style`);
+    expect(getMarkdownInstalledPlugins().map(({ manifest: installed }) => installed.id)).toEqual([manifest.id]);
+    installMarkdownPlugin({ ...manifest, version: "1.0.1" });
+    expect(getMarkdownInstalledPlugins().map(({ manifest: installed }) => installed.version)).toEqual(["1.0.1"]);
   });
 
   it("re-renders toolbar commands and the plugin switch when a plugin is disabled", async () => {

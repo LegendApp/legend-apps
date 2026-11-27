@@ -15,6 +15,15 @@ import {
 import { findMarkdownSuggestion, type MarkdownSuggestion } from "./markdownPlugins";
 import { markdownToolbarItemMap } from "./markdownToolbarItems";
 
+type PluginFix = { generation: number; suggestion: MarkdownSuggestion };
+
+/** Whether the suggestion's command is still enabled and its rule still makes the same replacement. */
+function isSuggestionCurrent(suggestion: MarkdownSuggestion) {
+  return getMarkdownPluginCommand(suggestion.commandId)?.rules.some((rule) => (
+    rule.id === suggestion.ruleId && rule.find === suggestion.find && rule.replace === suggestion.replace
+  )) ?? false;
+}
+
 declare module "react-native" {
   interface PressableProps {
     tooltip?: string;
@@ -48,24 +57,31 @@ export function MarkdownFormattingToolbar({
     [toolbarLayout],
   );
   const pluginCommands = useMarkdownPluginToolbarCommands(layoutId);
-  const [pluginResult, setPluginResult] = useState<{ message: string; suggestion?: MarkdownSuggestion }>();
+  const [pluginResult, setPluginResult] = useState<{ message: string; fix?: PluginFix }>();
   const runPluginCommand = async (commandId: string) => {
     const command = getMarkdownPluginCommand(commandId);
     const commands = commandsRef.current;
     if (!command || !commands) return;
-    const suggestion = findMarkdownSuggestion(await commands.readBlocks(), command.rules, command.id);
+    const { generation, blocks } = await commands.readBlocks();
+    const suggestion = findMarkdownSuggestion(blocks, command.rules, command.id);
     setPluginResult(suggestion
-      ? { message: `Replace “${suggestion.find}” with “${suggestion.replace}”`, suggestion }
+      ? { message: `Replace “${suggestion.find}” with “${suggestion.replace}”`, fix: { generation, suggestion } }
       : { message: `${command.title}: no issues` });
   };
-  const applySuggestion = async (suggestion: MarkdownSuggestion) => {
+  const applyFix = async ({ generation, suggestion }: PluginFix) => {
     const commands = commandsRef.current;
-    if (!getMarkdownPluginCommand(suggestion.commandId) || !commands) {
-      setPluginResult({ message: "Plugin is disabled" });
-      return;
+    if (!commands) return;
+    // The document runs this transform just before its write, so the text and the originating rule are checked there.
+    const applied = await commands.updateBlockMarkdown(generation, suggestion.blockId, (markdown) => (
+      markdown === suggestion.before && isSuggestionCurrent(suggestion) ? suggestion.after : markdown
+    ));
+    let message = "Fix applied";
+    if (!applied) {
+      message = isSuggestionCurrent(suggestion)
+        ? "Document changed; suggestion withdrawn. Check again."
+        : "The plugin rule changed or was disabled; suggestion withdrawn.";
     }
-    const applied = await commands.replaceBlockMarkdown(suggestion.blockId, suggestion.before, suggestion.after);
-    setPluginResult({ message: applied ? "Fix applied" : "Document changed; suggestion withdrawn. Check again." });
+    setPluginResult({ message });
   };
   const pluginButtons = pluginCommands.map((command) => (
     <Pressable
@@ -144,14 +160,14 @@ export function MarkdownFormattingToolbar({
       {pluginResult ? (
         <View style={[styles.toolbarContent, styles.dockedToolbarContent]}>
           <Text accessibilityLabel="Plugin result" className="text-foreground" style={styles.buttonText}>{pluginResult.message}</Text>
-          {pluginResult.suggestion ? (
+          {pluginResult.fix ? (
             <Pressable
               accessibilityLabel="Apply Fix"
               accessibilityRole="button"
               className="border"
               onPress={() => {
-                const { suggestion } = pluginResult;
-                if (suggestion) applySuggestion(suggestion).catch((error: unknown) => setPluginResult({ message: String(error) }));
+                const { fix } = pluginResult;
+                if (fix) applyFix(fix).catch((error: unknown) => setPluginResult({ message: String(error) }));
               }}
               style={[styles.button, buttonStyle]}
             >

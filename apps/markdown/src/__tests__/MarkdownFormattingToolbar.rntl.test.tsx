@@ -12,10 +12,11 @@ const mockToolbarLayouts = {
   },
 };
 
+const mockRule = { enabled: true, find: "log in", id: "com.example.house-style.sign-in", replace: "sign in", title: "Sign in" };
 const mockPluginCommand = {
   id: "com.example.house-style.check-document",
   kind: "checkDocument",
-  rules: [{ enabled: true, find: "log in", id: "com.example.house-style.sign-in", replace: "sign in", title: "Sign in" }],
+  rules: [mockRule],
   title: "Check Document",
 };
 const mockPlugin = { enabled: false };
@@ -55,6 +56,7 @@ function commandsRefFixture(commands = commandsFixture()) {
 describe("MarkdownFormattingToolbar", () => {
   beforeEach(() => {
     mockPlugin.enabled = false;
+    mockPluginCommand.rules = [mockRule];
     mockToolbarLayouts.selection = {
       shown: ["bold", "italic", "link"],
     };
@@ -99,31 +101,44 @@ describe("MarkdownFormattingToolbar", () => {
 
   it("checks the document with a plugin command, applies the fix, and withdraws stale or disabled fixes", async () => {
     mockPlugin.enabled = true;
-    const blocks = [{ id: "b0", markdown: "Please log in to continue." }, { id: "b1", markdown: "Second." }];
+    const source = { markdown: "Please log in to continue." };
+    const written: string[] = [];
     const commands = {
       ...commandsFixture(),
-      readBlocks: jest.fn(async () => blocks),
-      replaceBlockMarkdown: jest.fn(async () => true),
+      readBlocks: jest.fn(async () => ({ generation: 7, blocks: [{ id: "b0", markdown: source.markdown }, { id: "b1", markdown: "Second." }] })),
+      updateBlockMarkdown: jest.fn(async (_generation: number, _blockId: string, transform: (markdown: string) => string) => {
+        const next = transform(source.markdown);
+        if (next === source.markdown) return false;
+        written.push(next);
+        return true;
+      }),
     } as unknown as MarkdownDocumentCommands;
     const { commandsRef } = commandsRefFixture(commands);
     const view = await render(<MarkdownFormattingToolbar commandsRef={commandsRef} />);
+    const result = () => view.getByLabelText("Plugin result").props.children;
 
     await fireEvent.press(view.getByLabelText("Check Document"));
-    expect(view.getByLabelText("Plugin result").props.children).toBe("Replace “log in” with “sign in”");
+    expect(result()).toBe("Replace “log in” with “sign in”");
     await fireEvent.press(view.getByLabelText("Apply Fix"));
-    expect(commands.replaceBlockMarkdown).toHaveBeenCalledWith("b0", "Please log in to continue.", "Please sign in to continue.");
-    expect(view.getByLabelText("Plugin result").props.children).toBe("Fix applied");
+    expect(commands.updateBlockMarkdown).toHaveBeenCalledWith(7, "b0", expect.any(Function));
+    expect(written).toEqual(["Please sign in to continue."]);
+    expect(result()).toBe("Fix applied");
 
-    jest.mocked(commands.replaceBlockMarkdown).mockResolvedValueOnce(false);
     await fireEvent.press(view.getByLabelText("Check Document"));
+    source.markdown = "Please log in to proceed.";
     await fireEvent.press(view.getByLabelText("Apply Fix"));
-    expect(view.getByLabelText("Plugin result").props.children).toBe("Document changed; suggestion withdrawn. Check again.");
+    expect(result()).toBe("Document changed; suggestion withdrawn. Check again.");
+
+    await fireEvent.press(view.getByLabelText("Check Document"));
+    mockPluginCommand.rules = [{ ...mockPluginCommand.rules[0]!, replace: "sign on" }];
+    await fireEvent.press(view.getByLabelText("Apply Fix"));
+    expect(result()).toBe("The plugin rule changed or was disabled; suggestion withdrawn.");
 
     await fireEvent.press(view.getByLabelText("Check Document"));
     mockPlugin.enabled = false;
     await fireEvent.press(view.getByLabelText("Apply Fix"));
-    expect(commands.replaceBlockMarkdown).toHaveBeenCalledTimes(2);
-    expect(view.getByLabelText("Plugin result").props.children).toBe("Plugin is disabled");
+    expect(result()).toBe("The plugin rule changed or was disabled; suggestion withdrawn.");
+    expect(written).toEqual(["Please sign in to continue."]);
     await view.unmount();
   });
 });

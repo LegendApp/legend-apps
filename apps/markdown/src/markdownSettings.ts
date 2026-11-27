@@ -513,8 +513,14 @@ function setMarkdownPlugin(pluginId: string, plugin: MarkdownInstalledPlugin) {
   markdownSettings$.plugins.set({ ...markdownSettings$.plugins.peek(), [pluginId]: plugin });
 }
 
-/** Installing replaces any earlier version of the same plugin and enables it. */
+/** Installing replaces any earlier version of the same plugin and enables it. Contribution IDs must be unique across plugins. */
 export function installMarkdownPlugin(manifest: MarkdownPluginManifest) {
+  for (const { manifest: installed } of getMarkdownInstalledPlugins()) {
+    if (installed.id === manifest.id) continue;
+    const owned = new Set([...installed.commands, ...installed.rules].map(({ id }) => id));
+    const duplicate = [...manifest.commands, ...manifest.rules].find(({ id }) => owned.has(id));
+    if (duplicate) throw new Error(`"${duplicate.id}" is already declared by ${installed.id}`);
+  }
   setMarkdownPlugin(manifest.id, { enabled: true, manifest });
 }
 

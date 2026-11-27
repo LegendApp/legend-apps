@@ -43,6 +43,7 @@ export type MarkdownSuggestion = {
   before: string;
   after: string;
   commandId: string;
+  ruleId: string;
   find: string;
   replace: string;
 };
@@ -60,6 +61,10 @@ function record(value: unknown, path: string): Record<string, unknown> {
 
 function text(value: unknown, path: string): string {
   return typeof value === "string" && value.trim() ? value : fail(`${path} must be a non-empty string`);
+}
+
+function boolean(value: unknown, path: string): boolean {
+  return typeof value === "boolean" ? value : fail(`${path} must be a boolean`);
 }
 
 function list(value: unknown, path: string): unknown[] {
@@ -102,7 +107,7 @@ export function parseMarkdownPluginManifest(source: string): MarkdownPluginManif
       title: text(rule.title, `rules[${index}].title`),
       find: text(rule.find, `rules[${index}].find`),
       replace: text(rule.replace, `rules[${index}].replace`),
-      enabled: rule.enabled !== false,
+      enabled: rule.enabled === undefined ? true : boolean(rule.enabled, `rules[${index}].enabled`),
     };
   });
   return { schemaVersion: 1, id, name: text(json.name, "name"), version: text(json.version, "version"), commands, rules };
@@ -123,7 +128,11 @@ export function parseMarkdownPreset(source: string, manifests: readonly Markdown
   }
 
   if (json.toolbar !== undefined) {
-    const top = list(record(json.toolbar, "toolbar").top ?? [], "toolbar.top").map((value, index) => {
+    const toolbar = record(json.toolbar, "toolbar");
+    for (const key of Object.keys(toolbar)) {
+      if (key !== "top") fail(`toolbar.${key} is not a supported placement`);
+    }
+    const top = list(toolbar.top, "toolbar.top").map((value, index) => {
       const id = text(value, `toolbar.top[${index}]`);
       return commandIds.has(id) ? id : fail(`toolbar.top[${index}] "${id}" is not a command of an installed plugin`);
     });
@@ -138,9 +147,8 @@ export function parseMarkdownPreset(source: string, manifests: readonly Markdown
       for (const key of Object.keys(override)) {
         if (key !== "enabled" && key !== "replace") fail(`rules["${id}"].${key} is not a supported option`);
       }
-      if (override.enabled !== undefined && typeof override.enabled !== "boolean") fail(`rules["${id}"].enabled must be a boolean`);
       return [id, {
-        ...(override.enabled === undefined ? {} : { enabled: override.enabled as boolean }),
+        ...(override.enabled === undefined ? {} : { enabled: boolean(override.enabled, `rules["${id}"].enabled`) }),
         ...(override.replace === undefined ? {} : { replace: text(override.replace, `rules["${id}"].replace`) }),
       }];
     }));
@@ -173,7 +181,7 @@ export function findMarkdownSuggestion(
       const match = new RegExp(`\\b${escapeRegExp(rule.find)}\\b`).exec(block.markdown);
       if (match) {
         const after = block.markdown.slice(0, match.index) + rule.replace + block.markdown.slice(match.index + rule.find.length);
-        return { blockId: block.id, before: block.markdown, after, commandId, find: rule.find, replace: rule.replace };
+        return { blockId: block.id, before: block.markdown, after, commandId, ruleId: rule.id, find: rule.find, replace: rule.replace };
       }
     }
   }
