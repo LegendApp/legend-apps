@@ -3296,7 +3296,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
     }, [commitActiveBlock, getBlockCount, getBlockIdAtIndex, reportAsyncError, setKeyboardBlockSelection]);
 
     /** Commits the active draft, then applies `transform` to the block's current markdown as one undoable edit. Returns whether it changed. */
-    const updateBlockMarkdown = useCallback(async (blockId: string, transform: (markdown: string) => string | undefined) => {
+    const updateBlockMarkdown = useCallback(async (blockId: string, transform: (markdown: string) => string) => {
       if (!adapter.applyTransaction) return false;
       await commitActiveBlock({ updateReactState: true, throwOnError: true });
       const state = documentState$.peek();
@@ -3304,7 +3304,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
       const block = await loadBlockAtIndex(blockId, getBlockIndexById(blockId));
       if (!block) return false;
       const markdown = transform(block.markdown);
-      if (markdown === undefined || markdown === block.markdown) return false;
+      if (markdown === block.markdown) return false;
       const result = await adapter.applyTransaction(state.snapshot.documentId, {
         type: "updateBlockMarkdown",
         blockId,
@@ -3478,7 +3478,7 @@ export const MarkdownDocument = forwardRef<MarkdownDocumentCommands, MarkdownDoc
           return blocks;
         },
         replaceBlockMarkdown(blockId, expectedMarkdown, markdown) {
-          return updateBlockMarkdown(blockId, (current) => (current === expectedMarkdown ? markdown : undefined));
+          return updateBlockMarkdown(blockId, (current) => (current === expectedMarkdown ? markdown : current));
         },
       }),
       [commitAndBlurActiveBlock,

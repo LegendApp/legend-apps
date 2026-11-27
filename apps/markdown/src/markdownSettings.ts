@@ -51,6 +51,8 @@ export type {
 
 const fontSizeOrder: MarkdownFontSizeSetting[] = ["small", "default", "large", "xlarge"];
 
+export type MarkdownInstalledPlugin = { enabled: boolean; manifest: MarkdownPluginManifest };
+
 type MarkdownSettingsFile = {
   autosave: MarkdownAutosaveSetting;
   chrome: LegendChromeTheme;
@@ -71,7 +73,7 @@ type MarkdownSettingsFile = {
   /** Preset overrides for plugin-declared rules, keyed by rule ID. */
   pluginRuleOverrides?: Record<string, MarkdownRuleOverride>;
   /** Installed plugin manifests, keyed by plugin ID. */
-  plugins?: Record<string, { enabled: boolean; manifest: MarkdownPluginManifest }>;
+  plugins?: Record<string, MarkdownInstalledPlugin>;
   selectionToolbarLayout: MarkdownToolbarLayout;
   sidebarFolders: string[];
   sidebarOpen: boolean;
@@ -493,8 +495,6 @@ export function applyMarkdownThemeSetting() {
   applyLegendDisplayThemeToUniwind(getMarkdownDisplayThemeSetting());
 }
 
-export type MarkdownInstalledPlugin = { enabled: boolean; manifest: MarkdownPluginManifest };
-
 function installedPlugins(plugins: MarkdownSettingsFile["plugins"]): MarkdownInstalledPlugin[] {
   return plugins && typeof plugins === "object" ? Object.values(plugins) : [];
 }
@@ -525,7 +525,7 @@ export function setMarkdownPluginEnabled(pluginId: string, enabled: boolean) {
 
 export function applyMarkdownPreset(preset: MarkdownPreset) {
   if (preset.formattingToolbarMode) setMarkdownFormattingToolbarModeSetting(preset.formattingToolbarMode);
-  if (preset.toolbar) markdownSettings$.pluginToolbar.set({ top: preset.toolbar.top });
+  if (preset.toolbar) markdownSettings$.pluginToolbar.set(preset.toolbar);
   if (preset.rules) markdownSettings$.pluginRuleOverrides.set(preset.rules);
 }
 
