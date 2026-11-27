@@ -2,35 +2,19 @@ import { Alert } from "react-native";
 
 export type DirtyDocumentTransitionAction = "save" | "discard" | "cancel";
 
-type DirtyDocumentTransitionReason = "new" | "open" | "close" | "quit";
+type DirtyDocumentTransitionReason = "close" | "quit";
 
 type ConfirmDirtyDocumentTransitionOptions = {
   filename: string;
   reason: DirtyDocumentTransitionReason;
 };
 
-function messageForReason(reason: DirtyDocumentTransitionReason, filename: string) {
-  if (reason === "quit") {
-    return `Save changes to ${filename} before quitting?`;
-  }
-
-  if (reason === "close") {
-    return `Save changes to ${filename} before closing?`;
-  }
-
-  if (reason === "new") {
-    return `Save changes to ${filename} before creating a new document?`;
-  }
-
-  return `Save changes to ${filename} before opening another document?`;
-}
-
 export function confirmDirtyDocumentTransition({
   filename,
   reason,
 }: ConfirmDirtyDocumentTransitionOptions): Promise<DirtyDocumentTransitionAction> {
   return new Promise((resolve) => {
-    Alert.alert("Unsaved Changes", messageForReason(reason, filename), [
+    Alert.alert("Unsaved Changes", `Save changes to ${filename} before ${reason === "quit" ? "quitting" : "closing"}?`, [
       {
         onPress: () => resolve("cancel"),
         style: "cancel",

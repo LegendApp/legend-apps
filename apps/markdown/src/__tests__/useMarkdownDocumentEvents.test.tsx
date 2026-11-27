@@ -2,7 +2,7 @@ import { render, waitFor } from "@testing-library/react-native";
 import React from "react";
 import { beforeWindowClose } from "@legendapp/spark/windows";
 import { beforeQuit } from "@legendapp/spark/app";
-import { useMarkdownAppExit, useMarkdownWindowCloseRequest } from "../useMarkdownDocumentEvents";
+import { registerMarkdownWindowQuitGuard, useMarkdownAppExit, useMarkdownWindowCloseRequest } from "../useMarkdownDocumentEvents";
 
 const mockAddAppExitListener = beforeQuit as jest.MockedFunction<typeof beforeQuit>;
 
@@ -31,21 +31,8 @@ jest.mock("../markdownWindows", () => ({
   closeMarkdownEditorWindow: jest.fn(),
 }));
 
-function AppExitHarness({
-  autosaveEnabled,
-  handleError,
-  prepareCurrentDocumentForClose,
-}: {
-  autosaveEnabled: boolean;
-  handleError: (error: unknown) => void;
-  prepareCurrentDocumentForClose: (options: { autosaveEnabled: boolean; reason?: "close" | "quit" }) => Promise<boolean>;
-}) {
-  useMarkdownAppExit({
-    autosaveEnabled,
-    handleError,
-    prepareCurrentDocumentForClose,
-  });
-
+function AppExitHarness({ handleError }: { handleError: (error: unknown) => void }) {
+  useMarkdownAppExit(handleError);
   return null;
 }
 
@@ -55,53 +42,27 @@ describe("useMarkdownAppExit", () => {
     mockAddAppExitListener.mockResolvedValue({ remove: jest.fn(async () => {}) });
   });
 
-  it("prepares the document for quit before completing a requested app exit", async () => {
+  it("discards draft files only after every window approves quit", async () => {
+    const first = { prepare: jest.fn(async () => true), discardDrafts: jest.fn() };
+    const second = { prepare: jest.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true), discardDrafts: jest.fn() };
+    const unregisterFirst = registerMarkdownWindowQuitGuard(first);
+    const unregisterSecond = registerMarkdownWindowQuitGuard(second);
     const handleError = jest.fn();
-    const prepareCurrentDocumentForClose = jest.fn(async () => true);
-    await render(
-      <AppExitHarness
-        autosaveEnabled
-        handleError={handleError}
-        prepareCurrentDocumentForClose={prepareCurrentDocumentForClose}
-      />,
-    );
-
-    expect(await mockAddAppExitListener.mock.calls[0][0]()).toBe(true);
-
-    await waitFor(() => {
-      expect(prepareCurrentDocumentForClose).toHaveBeenCalledWith({
-        autosaveEnabled: true,
-        reason: "quit",
-      });
-    });
-    expect(handleError).not.toHaveBeenCalled();
-  });
-
-  it("keeps the quit guard across Autosave changes and saves the exact draft", async () => {
-    const draftBytes = "Autosave sentinel QUIT.\r\n";
-    let diskBytes = "Autosave sentinel ALPHA.\r\n";
-    const prepare = jest.fn(async ({ autosaveEnabled }: { autosaveEnabled: boolean }) => {
-      if (autosaveEnabled) diskBytes = draftBytes;
-      return autosaveEnabled;
-    });
-    const handleError = jest.fn();
-    const harness = (enabled: boolean) => (
-      <AppExitHarness
-        autosaveEnabled={enabled}
-        handleError={handleError}
-        prepareCurrentDocumentForClose={prepare}
-      />
-    );
-    const view = await render(harness(false));
-    await view.rerender(harness(true));
-    expect(mockAddAppExitListener).toHaveBeenCalledTimes(1);
-    const [guard] = mockAddAppExitListener.mock.calls[0];
-    expect(await guard()).toBe(true);
-    expect(diskBytes).toBe(draftBytes);
-    await view.rerender(harness(false));
-    expect(await guard()).toBe(false);
-    expect(mockAddAppExitListener).toHaveBeenCalledTimes(1);
-    expect(handleError).not.toHaveBeenCalled();
+    const view = await render(<AppExitHarness handleError={handleError} />);
+    try {
+      const [guard] = mockAddAppExitListener.mock.calls[0];
+      expect(await guard()).toBe(false);
+      expect(first.discardDrafts).not.toHaveBeenCalled();
+      expect(second.discardDrafts).not.toHaveBeenCalled();
+      expect(await guard()).toBe(true);
+      expect(first.discardDrafts).toHaveBeenCalledTimes(1);
+      expect(second.discardDrafts).toHaveBeenCalledTimes(1);
+      expect(handleError).not.toHaveBeenCalled();
+    } finally {
+      unregisterFirst();
+      unregisterSecond();
+      await view.unmount();
+    }
   });
 });
 

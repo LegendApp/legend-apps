@@ -29,7 +29,10 @@ jest.mock("@legendapp/spark/menus", () => ({
     createMenu: jest.fn(),
 }));
 jest.mock("@legendapp/spark-desktop-app/src/open-requests", () => ({ subscribeToOpenRequests: jest.fn() }));
-jest.mock("@legendapp/spark/app", () => ({ addAppListener: jest.fn(() => ({ remove: jest.fn() })) }));
+jest.mock("@legendapp/spark/app", () => ({
+    addAppListener: jest.fn(() => ({ remove: jest.fn() })),
+    beforeQuit: jest.fn(async () => ({ remove: jest.fn(async () => {}) })),
+}));
 jest.mock("../markdownSettings", () => ({
     applyMarkdownThemeSetting: jest.fn(),
 }));

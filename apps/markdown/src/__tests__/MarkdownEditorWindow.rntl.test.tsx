@@ -6,12 +6,13 @@ import React from "react";
 import { StyleSheet, Text } from "react-native";
 import type { TestInstance } from "test-renderer";
 import { MarkdownEditorWindow } from "../MarkdownEditorWindow";
+import { createMarkdownDraft, removeMarkdownDraft } from "../markdownDrafts";
 import { newMarkdownDocumentLaunchArgument } from "../markdownFiles";
 import { getLastMarkdownDocumentPath, getMarkdownStartupBehaviorSetting } from "../markdownSettings";
-import { useMarkdownAppExit } from "../useMarkdownDocumentEvents";
+import { registerMarkdownWindowQuitGuard } from "../useMarkdownDocumentEvents";
 import type { MarkdownDocumentSessionState } from "../useMarkdownDocumentSession";
 
-const mockUseMarkdownAppExit = useMarkdownAppExit as jest.MockedFunction<typeof useMarkdownAppExit>;
+const mockRegisterMarkdownWindowQuitGuard = jest.mocked(registerMarkdownWindowQuitGuard);
 const mockBeforeWindowClose = jest.mocked(beforeWindowClose);
 const { useMarkdownDocumentSession: mockUseMarkdownDocumentSession } = jest.requireMock<{
   useMarkdownDocumentSession: jest.Mock<typeof mockSession, []>;
@@ -35,30 +36,27 @@ const mockCheckForExternalChanges = jest.fn(async () => {});
 const mockSessionState$ = observable<MarkdownDocumentSessionState>({
   conflict: null,
   commandState: { canCommitAndBlur: false, canRedo: false, canUndo: false },
-  documentSource: "untitled",
+  documentSource: "file",
   filename: "test.md",
   isDirty: false,
   lastError: null,
   saveState: "idle",
 });
 const mockSession = {
-  clearDocumentError: jest.fn(),
   documentCommandsRef: {
     current: {
       invalidateLayoutMeasurements: mockInvalidateLayoutMeasurements,
       reload: mockReloadDocument,
       checkForExternalChanges: mockCheckForExternalChanges,
+      commitAndBlurActiveBlock: jest.fn(),
     },
   },
-  flushCurrentDocumentBeforeTransition: jest.fn(async () => true),
   handleError: jest.fn(),
   handleDocumentLoaded: jest.fn(),
   handleDocumentLoadError: jest.fn(),
-  newMarkdownDocument: jest.fn(),
   openMarkdownDialog: jest.fn(),
   // Opening a file shows it, as the real session does, so the pane's active tab and its document agree.
   openSelectedFile: jest.fn((path: string) => mockSessionState$.assign({ documentSource: "file", filename: path })),
-  openUntitledDocument: jest.fn(),
   prepareCurrentDocumentForClose: jest.fn(async () => true),
   saveCurrentDocument: jest.fn(async () => true),
   saveCurrentDocumentAs: jest.fn(async () => true),
@@ -121,13 +119,19 @@ jest.mock("../MarkdownFloatingSurface", () => ({
   },
 }));
 
+jest.mock("../markdownDrafts", () => ({
+  createMarkdownDraft: jest.fn(),
+  isMarkdownDraft: (path: string) => path.startsWith("/test-drafts/"),
+  removeMarkdownDraft: jest.fn(),
+}));
+
 jest.mock("../useMarkdownDocumentSession", () => ({
   useMarkdownDocumentSession: jest.fn(() => mockSession),
 }));
 
 jest.mock("../useMarkdownDocumentEvents", () => ({
   getStartupMarkdownPath: jest.requireActual("../useMarkdownDocumentEvents").getStartupMarkdownPath,
-  useMarkdownAppExit: jest.fn(),
+  registerMarkdownWindowQuitGuard: jest.fn(),
   useMarkdownWindowCloseRequest: jest.requireActual("../useMarkdownDocumentEvents").useMarkdownWindowCloseRequest,
   useRecentMarkdownDocumentOpener: jest.fn(),
 }));
@@ -175,22 +179,26 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
   beforeEach(() => {
     mockDisplayTheme = "system";
     jest.mocked(getLastMarkdownDocumentPath).mockReturnValue(null);
-    jest.mocked(getMarkdownStartupBehaviorSetting).mockReturnValue("newDocument");
+    jest.mocked(getMarkdownStartupBehaviorSetting).mockReturnValue("lastDocument");
     mockCheckForExternalChanges.mockClear();
     (globalThis as typeof globalThis & { __DEV__?: boolean }).__DEV__ = true;
     mockMarkdownE2EEditorSmoke.mockClear();
     mockMarkdownE2ERunner.mockClear();
     mockMarkdownDocument.mockClear();
+    mockSession.openSelectedFile.mockClear();
+    mockSession.prepareCurrentDocumentForClose.mockClear();
+    jest.mocked(createMarkdownDraft).mockReset();
+    jest.mocked(removeMarkdownDraft).mockClear();
     mockInvalidateLayoutMeasurements.mockClear();
     mockReloadDocument.mockClear();
     mockWatchFiles.mockClear();
     mockWatchFiles.mockResolvedValue({ remove: jest.fn(async () => {}) });
-    mockUseMarkdownAppExit.mockClear();
+    mockRegisterMarkdownWindowQuitGuard.mockClear();
     mockBeforeWindowClose.mockClear();
     mockSessionState$.assign({
       conflict: null,
       commandState: { canCommitAndBlur: false, canRedo: false, canUndo: false },
-      documentSource: "untitled",
+      documentSource: "file",
       filename: "test.md",
       isDirty: false,
       lastError: null,
@@ -227,7 +235,7 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
   });
 
   it("preserves the editor selection only while the link popover is open", async () => {
-    const view = await render(<MarkdownEditorWindow />);
+    const view = await render(<MarkdownEditorWindow files={["/tmp/test.md"]} />);
     const { useMarkdownMenus } = jest.requireMock("../useMarkdownMenus");
     const documentProps = () => mockMarkdownDocument.mock.calls.at(-1)![0] as { preserveEditingOnBlur: boolean };
     expect(documentProps().preserveEditingOnBlur).toBe(false);
@@ -269,17 +277,15 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
   });
 
   it("uses the autosave-aware close preparation for app quit", async () => {
-    const view = await render(<MarkdownEditorWindow />);
+    const view = await render(<MarkdownEditorWindow files={["/docs/a.md"]} />);
 
-    expect(mockUseMarkdownAppExit).toHaveBeenCalledWith({
-      autosaveEnabled: true,
-      handleError: mockSession.handleError,
-      prepareCurrentDocumentForClose: mockSession.prepareCurrentDocumentForClose,
-    });
+    const quit = mockRegisterMarkdownWindowQuitGuard.mock.lastCall?.[0];
+    expect(await quit?.prepare()).toBe(true);
+    expect(mockSession.prepareCurrentDocumentForClose).toHaveBeenCalledWith({ autosaveEnabled: true, reason: "quit" });
     await view.unmount();
   });
 
-  it("switches and closes file tabs through the dirty-document flow", async () => {
+  it("keeps a file tab open when switching and confirms on close", async () => {
     // The sidebar lists the same files, so tabs are found by role.
     const tab = (view: Awaited<ReturnType<typeof render>>, label: string) => view.queryAllByLabelText(label).find(node => node.props.accessibilityRole === "tab");
     mockSessionState$.assign({ documentSource: "file", filename: "/docs/a.md" });
@@ -288,7 +294,7 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
     expect(view.getByLabelText("Show Sidebar")).toBeTruthy();
 
     await act(async () => fireEvent.press(tab(view, "b.md")!));
-    expect(mockSession.prepareCurrentDocumentForClose).toHaveBeenLastCalledWith({ autosaveEnabled: true, reason: "open" });
+    expect(mockSession.prepareCurrentDocumentForClose).not.toHaveBeenCalled();
     expect(mockSession.openSelectedFile).toHaveBeenLastCalledWith("/docs/b.md");
 
     mockSession.prepareCurrentDocumentForClose.mockClear();
@@ -299,7 +305,7 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
     expect(mockSession.prepareCurrentDocumentForClose).toHaveBeenCalledTimes(2);
     expect(mockSession.prepareCurrentDocumentForClose).toHaveBeenLastCalledWith({ autosaveEnabled: true, reason: "close" });
     expect(tab(view, "b.md")).toBeUndefined();
-    expect(mockSession.openSelectedFile).toHaveBeenLastCalledWith("/docs/a.md");
+    expect(mockSession.openSelectedFile.mock.calls).toEqual([["/docs/a.md"], ["/docs/b.md"]]);
 
     await act(async () => fireEvent.press(view.getByLabelText("Show Sidebar")));
     expect(view.getByLabelText("Hide Sidebar")).toBeTruthy();
@@ -333,31 +339,51 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
     }
   });
 
-  it("leaves a clean untitled document blank and focused", async () => {
-    mockSessionState$.assign({
-      documentSource: "untitled",
-      isDirty: false,
-      lastError: null,
-    });
-
+  it("opens two real draft tabs without confirming the existing document", async () => {
+    const { useMarkdownMenus } = jest.requireMock("../useMarkdownMenus");
+    const newDocument = () => useMarkdownMenus.mock.calls.at(-1)[0].onNewDocument();
+    jest.mocked(createMarkdownDraft)
+      .mockReturnValueOnce("/test-drafts/Untitled.md")
+      .mockReturnValueOnce("/test-drafts/Untitled 2.md");
     const view = await render(<MarkdownEditorWindow />);
+    expect(view.getByText("New Document")).toBeTruthy();
+    expect(mockMarkdownDocument).not.toHaveBeenCalled();
 
-    expect(view.queryByText("Untitled")).toBeNull();
-    expect(view.queryByText("Start writing")).toBeNull();
-    expect(mockMarkdownDocument).toHaveBeenLastCalledWith(expect.objectContaining({ autoFocusFirstBlock: true }));
+    await act(async () => newDocument());
+    await act(async () => { mockSessionState$.isDirty.set(true); });
+    await act(async () => newDocument());
+    expect(mockSession.openSelectedFile.mock.calls).toEqual([["/test-drafts/Untitled.md"], ["/test-drafts/Untitled 2.md"]]);
+    expect(mockSession.prepareCurrentDocumentForClose).not.toHaveBeenCalled();
+    const tab = (label: string) => view.getAllByLabelText(label).find(node => node.props.accessibilityRole === "tab")!;
+    expect(tab("Untitled 2.md").props.accessibilityState.selected).toBe(true);
+    await fireEvent.press(tab("Untitled.md"));
+    expect(tab("Untitled.md").props.accessibilityState.selected).toBe(true);
+    expect(mockSession.openSelectedFile).toHaveBeenCalledTimes(2);
+    expect(removeMarkdownDraft).not.toHaveBeenCalled();
+
     await view.unmount();
   });
 
-  it("opens an untitled pane on a new-document launch even when the startup setting restores the last document", async () => {
+  it("opens a draft tab for the New startup setting", async () => {
+    jest.mocked(getMarkdownStartupBehaviorSetting).mockReturnValue("newDocument");
+    jest.mocked(createMarkdownDraft).mockReturnValue("/test-drafts/Untitled.md");
+    const view = await render(<MarkdownEditorWindow />);
+
+    expect(createMarkdownDraft).toHaveBeenCalledTimes(1);
+    expect(mockSession.openSelectedFile).toHaveBeenCalledWith("/test-drafts/Untitled.md");
+    await view.unmount();
+  });
+
+  it("creates a draft tab on a new-document launch even when startup restores the last document", async () => {
     jest.mocked(getMarkdownStartupBehaviorSetting).mockReturnValue("lastDocument");
     jest.mocked(getLastMarkdownDocumentPath).mockReturnValue("/tmp/recent.md");
-    mockSession.openSelectedFile.mockClear();
-    mockSession.openUntitledDocument.mockClear();
+    jest.mocked(createMarkdownDraft).mockReturnValue("/test-drafts/Untitled.md");
 
     const view = await render(<MarkdownEditorWindow launchArguments={[newMarkdownDocumentLaunchArgument]} />);
 
-    expect(mockSession.openUntitledDocument).toHaveBeenCalledTimes(1);
-    expect(mockSession.openSelectedFile).not.toHaveBeenCalled();
+    expect(createMarkdownDraft).toHaveBeenCalledTimes(1);
+    expect(mockSession.openSelectedFile).toHaveBeenCalledWith("/test-drafts/Untitled.md");
+    expect(mockSession.openSelectedFile).not.toHaveBeenCalledWith("/tmp/recent.md");
     await view.unmount();
   });
 
@@ -375,7 +401,7 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
   });
 
   it("keeps session chrome state changes out of the document render path", async () => {
-    const view = await render(<MarkdownEditorWindow />);
+    const view = await render(<MarkdownEditorWindow files={["/tmp/test.md"]} />);
     const initialDocumentRenderCount = mockMarkdownDocument.mock.calls.length;
 
     await act(async () => {
@@ -409,7 +435,7 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
 
   it("offers all conflict resolutions and hides Use disk for deleted files", async () => {
     mockSessionState$.conflict.set("changed");
-    const view = await render(<MarkdownEditorWindow />);
+    const view = await render(<MarkdownEditorWindow files={["/tmp/test.md"]} />);
     await fireEvent.press(view.getByText("Use disk"));
     await fireEvent.press(view.getByText("Overwrite with local"));
     await fireEvent.press(view.getByText("Save local separately"));

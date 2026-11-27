@@ -38,7 +38,7 @@ export function useMarkdownEditorWindowOptions({
       appearance,
       filename: state.filename,
       isDirty: state.isDirty,
-      isUntitledDocument: state.documentSource === "untitled",
+      isUntitledDocument: state.documentSource === "draft",
       saveState: state.saveState,
       windowId,
     }).catch(onError);

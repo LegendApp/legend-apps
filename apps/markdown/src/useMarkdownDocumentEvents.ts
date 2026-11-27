@@ -10,14 +10,6 @@ import {
   getMarkdownStartupBehaviorSetting,
 } from "./markdownSettings";
 
-type DocumentEventsOptions = {
-  flushCurrentDocumentBeforeTransition: (reason?: "new" | "open" | "quit") => Promise<boolean>;
-  handleError: (error: unknown) => void;
-  openSelectedFile: (path: string) => void;
-  prepareCurrentDocumentForClose: (options: { autosaveEnabled: boolean; reason?: "close" | "quit" }) => Promise<boolean>;
-  windowId: string;
-};
-
 export function getStartupMarkdownPath(launchArguments: string[] | undefined) {
   if (shouldLaunchNewMarkdownDocument(launchArguments)) {
     return null;
@@ -38,38 +30,56 @@ export function getStartupMarkdownPath(launchArguments: string[] | undefined) {
 }
 
 export function useRecentMarkdownDocumentOpener({
-  flushCurrentDocumentBeforeTransition,
   openSelectedFile,
   windowId,
-}: Pick<DocumentEventsOptions, "flushCurrentDocumentBeforeTransition" | "openSelectedFile" | "windowId">) {
+}: { openSelectedFile: (path: string) => void; windowId: string }) {
   useEffect(() => {
     const unregister = registerMarkdownEditorRecentDocumentHandler(windowId, async (path: string) => {
       if (!isMarkdownPath(path)) {
         return;
       }
 
-      const didFlush = await flushCurrentDocumentBeforeTransition("open");
-      if (didFlush) {
-        openSelectedFile(path);
-      }
+      openSelectedFile(path);
     });
 
     return () => {
       unregister();
     };
-  }, [flushCurrentDocumentBeforeTransition, openSelectedFile, windowId]);
+  }, [openSelectedFile, windowId]);
 }
 
-export function useMarkdownAppExit({ autosaveEnabled, handleError, prepareCurrentDocumentForClose }: Pick<DocumentEventsOptions, "handleError" | "prepareCurrentDocumentForClose"> & { autosaveEnabled: boolean }) {
-  const latest = useRef({ autosaveEnabled, handleError, prepareCurrentDocumentForClose });
-  latest.current = { autosaveEnabled, handleError, prepareCurrentDocumentForClose };
+type WindowQuitGuard = { prepare: () => Promise<boolean>; discardDrafts: () => void };
+
+const windowQuitGuards = new Set<WindowQuitGuard>();
+
+export function registerMarkdownWindowQuitGuard(guard: WindowQuitGuard) {
+  windowQuitGuards.add(guard);
+  return () => { windowQuitGuards.delete(guard); };
+}
+
+export function useMarkdownAppExit(handleError: (error: unknown) => void) {
+  const handleErrorRef = useRef(handleError);
+  handleErrorRef.current = handleError;
   const teardown = useRef(Promise.resolve());
   useEffect(() => {
     let active = true;
-    const onError = (error: unknown) => latest.current.handleError(error);
-    const subscription = ownRegistration(teardown.current.then(() => beforeQuit(() => active
-      ? latest.current.prepareCurrentDocumentForClose({ autosaveEnabled: latest.current.autosaveEnabled, reason: "quit" })
-      : false, { onError })), onError);
+    const onError = (error: unknown) => handleErrorRef.current(error);
+    const subscription = ownRegistration(teardown.current.then(() => beforeQuit(async () => {
+      const guards = [...windowQuitGuards];
+      for (const guard of guards) {
+        if (!active || !await guard.prepare()) return false;
+      }
+      if (!active) return false;
+      for (const guard of guards) {
+        if (!windowQuitGuards.has(guard)) continue;
+        try {
+          guard.discardDrafts();
+        } catch (error) {
+          onError(error);
+        }
+      }
+      return true;
+    }, { onError })), onError);
     return () => {
       active = false;
       teardown.current = subscription.remove().catch(onError);

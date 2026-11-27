@@ -18,6 +18,7 @@ import {
 import { isMarkdownPath, newMarkdownDocumentLaunchArgument } from "./markdownFiles";
 import { markdownMenuConfig, markdownMenuState$ } from "./markdownMenus";
 import { applyMarkdownThemeSetting } from "./markdownSettings";
+import { useMarkdownAppExit } from "./useMarkdownDocumentEvents";
 import { loadMarkdownUserThemesSync } from "./userThemes";
 import {
   openMarkdownEditorWindow,
@@ -62,9 +63,8 @@ async function openNewMarkdownEditorWindow(controller: DocumentAppController) {
 }
 
 function createMarkdownMenuHandlers(controller: DocumentAppController): MenuHandlers {
-  // New, folder, and workspace windows start on an untitled document rather than the last one.
   const workspaceHandlers = createWorkspaceMenuHandlers(async (props) => {
-    await openMarkdownEditorWindow({ launchArguments: [newMarkdownDocumentLaunchArgument], ...props });
+    await openMarkdownEditorWindow(props);
     controller.setDocumentWindowOpen(true);
   }, reportMarkdownAppControllerError);
   return {
@@ -149,6 +149,7 @@ async function openInitialMarkdownEditor(launchArguments: string[] | undefined, 
 }
 
 export function App({ launchArguments }: MarkdownAppProps) {
+  useMarkdownAppExit(reportMarkdownAppControllerError);
   const menuState = useValue(markdownMenuState$);
   const menus = withMenuState(markdownMenuConfig, menuState);
   useDocumentAppController({

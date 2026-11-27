@@ -46,7 +46,7 @@ export const markdownPaneMenuItems = ["closeTab", "closeWindow", "splitRight", "
 type MarkdownPaneMenuItem = (typeof markdownPaneMenuItems)[number];
 
 function getCurrentFilePath(state: MarkdownDocumentSessionState) {
-  return state.documentSource === "untitled" ? null : state.filename;
+  return state.documentSource === "draft" ? null : state.filename;
 }
 
 const disabledDocumentMenuItems = [
@@ -162,7 +162,7 @@ export function useMarkdownMenus({
     const currentFilePath = getCurrentFilePath(state);
 
     markdownMenuState$.set(Object.fromEntries([
-      { id: "save", enabled: hasDocument && state.isDirty && state.saveState !== "saving" },
+      { id: "save", enabled: hasDocument && (state.isDirty || state.documentSource === "draft") && state.saveState !== "saving" },
       { id: "saveAs", enabled: hasDocument && state.saveState !== "saving" },
       { id: "revealInFinder", enabled: currentFilePath !== null },
       { id: "settings", enabled: true },
