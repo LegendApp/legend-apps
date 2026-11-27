@@ -1,5 +1,5 @@
 import { observable } from "@legendapp/state";
-import { buildAIInvocation, getAICommandAvailability, parseAIJson, selectPreferredAITool } from "@legendapp/spark/ai";
+import { getAICommandAvailability } from "@legendapp/spark/ai";
 import { getDirectory } from "@legendapp/spark/files";
 import { runCommand } from "@legendapp/spark/processes";
 import {
@@ -74,12 +74,11 @@ export function buildAssistantPrompt(settings: AssistantSettings, messages: read
 
 /** Reads a model reply into a message and the changes it proposes against `current`. Throws on anything else. */
 export function parseAssistantReply(output: string, current: AssistantSettings): { message: string; changes: SettingChange[] } {
-  const value = strictJson(output) ?? parseAIJson(output);
-  if (!isPlainObject(value) || typeof value.message !== "string" || !value.message.trim()) {
+  const value = strictJson(output);
+  const proposed = isPlainObject(value) ? value.changes : undefined;
+  if (!isPlainObject(value) || typeof value.message !== "string" || !value.message.trim() || !isPlainObject(proposed)) {
     throw new Error("The Assistant's reply was not in the expected format.");
   }
-  const proposed = value.changes ?? {};
-  if (!isPlainObject(proposed)) throw new Error("The Assistant's reply was not in the expected format.");
   const changes: SettingChange[] = [];
   for (const [key, to] of Object.entries(proposed)) {
     if (!isSettingKey(key) || !isValidValue(key, to)) throw new Error(`The Assistant proposed an unsupported setting: ${key} = ${JSON.stringify(to)}.`);
@@ -88,50 +87,54 @@ export function parseAssistantReply(output: string, current: AssistantSettings):
   return { message: value.message.trim(), changes };
 }
 
+/** The whole output must be one JSON value, optionally as one whole fenced block. */
 function strictJson(output: string): unknown {
-  try { return JSON.parse(output.trim()); } catch { return null; }
+  const text = output.trim();
+  try { return JSON.parse(/^```(?:json)?\n([\s\S]*)\n```$/.exec(text)?.[1] ?? text); } catch { return null; }
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
-/** Runs the user's Claude or Codex CLI with no tools (Claude) or a read-only sandbox (Codex) from the app's data folder. */
+/**
+ * Claude CLI arguments for a reply from the prompt alone: no tools, MCP servers, user or project settings
+ * (hooks, plugins), slash commands or saved session. Codex has no equivalent that disables file reads, so it is not used.
+ */
+export const assistantClaudeArgs = ["-p", "--tools", "", "--strict-mcp-config", "--setting-sources", "", "--disable-slash-commands", "--no-session-persistence"];
+
+/** Runs the user's Claude CLI with `assistantClaudeArgs` from the app's data folder and returns its stdout. */
 export async function runAssistantModel(prompt: string, signal: AbortSignal): Promise<string> {
-  const tool = selectPreferredAITool(await getAICommandAvailability());
-  if (!tool) throw new Error("Install the Claude or Codex command-line tool and sign in to use the Assistant.");
-  const invocation = buildAIInvocation(tool, prompt);
-  const args = tool === "claude"
-    ? ["-p", "--tools", "", "--strict-mcp-config", "--disable-slash-commands", "--no-session-persistence"]
-    : [...invocation.args.slice(0, -1), "--sandbox", "read-only", "-"];
-  const result = await runCommand({ target: { type: "command", name: invocation.command }, args, input: prompt, cwd: await getDirectory("data"), signal, timeoutMs: 120_000 });
+  if (!(await getAICommandAvailability()).claude) throw new Error("Install the Claude command-line tool and sign in to use the Assistant.");
+  const result = await runCommand({ target: { type: "command", name: "claude" }, args: assistantClaudeArgs, input: prompt, cwd: await getDirectory("data"), signal, timeoutMs: 120_000 });
   const decoder = new TextDecoder();
-  const output = decoder.decode(result.stdout).trim() || decoder.decode(result.stderr).trim();
   if (result.aborted) throw new Error("Cancelled.");
   if (result.timedOut || result.outputTruncated || result.exit.type !== "exited" || result.exit.code !== 0) {
-    throw new Error(result.timedOut ? "The Assistant timed out. Try again." : output.slice(0, 500) || `Could not run ${tool}. Install it and sign in, then retry.`);
+    throw new Error(result.timedOut ? "The Assistant timed out. Try again." : decoder.decode(result.stderr).trim().slice(0, 500) || "Could not run Claude. Install it and sign in, then retry.");
   }
-  return output;
+  return decoder.decode(result.stdout);
 }
 
 /**
  * One window's Assistant conversation. A proposal previews through `preview$` and writes settings only on `apply`.
- * A reply that arrives after `close` is dropped.
+ * `close` cancels a pending turn: its reply is dropped and its request leaves the conversation.
  */
 export function createMarkdownAssistant({ run = runAssistantModel }: { run?: (prompt: string, signal: AbortSignal) => Promise<string> } = {}) {
   const state$ = observable({
     messages: [] as AssistantMessage[],
     pending: false,
     showAfter: false,
+    /** Whether the composer has keyboard focus, so document commands stay off the document. */
+    composerFocused: false,
   });
   let nextId = 1;
-  let active: AbortController | null = null;
+  let active: { controller: AbortController; turnId: number } | null = null;
 
   // At most one proposal is open: a new one settles the last.
   const findOpen = (messages: AssistantMessage[]) => messages.find(entry => entry.proposal?.status === "open");
-  const settle = (status: Proposal["status"]) => {
+  const settle = (status: Proposal["status"], id?: number) => {
     const open = findOpen(state$.messages.peek());
-    if (!open) return;
+    if (!open || (id !== undefined && open.id !== id)) return;
     state$.messages.set(messages => messages.map(entry => entry === open ? { ...open, proposal: { ...open.proposal!, status } } : entry));
     state$.showAfter.set(false);
   };
@@ -146,7 +149,8 @@ export function createMarkdownAssistant({ run = runAssistantModel }: { run?: (pr
   async function send(text: string) {
     const request = text.trim();
     if (!request || state$.pending.peek()) return;
-    const controller = active = new AbortController();
+    const controller = new AbortController();
+    active = { controller, turnId: nextId };
     push({ role: "user", text: request });
     state$.pending.set(true);
     try {
@@ -158,31 +162,46 @@ export function createMarkdownAssistant({ run = runAssistantModel }: { run?: (pr
     } catch (error) {
       if (!controller.signal.aborted) push({ role: "error", text: error instanceof Error ? error.message : String(error) });
     } finally {
-      if (active === controller) {
+      if (active?.controller === controller) {
         active = null;
         state$.pending.set(false);
       }
     }
   }
 
-  /** Writes only the reviewed fields, through the same setters the Settings window uses. */
-  function apply() {
-    const changes = findOpen(state$.messages.peek())?.proposal!.changes;
-    if (!changes?.every(change => isValidValue(change.key, change.to))) return;
-    for (const { key, to } of changes) (writers[key] as (value: string) => void)(to);
+  /**
+   * Writes only the reviewed fields of proposal `id`, through the same setters the Settings window uses.
+   * A settled proposal does nothing; one whose reviewed fields changed since is discarded without writing.
+   */
+  function apply(id: number) {
+    const open = findOpen(state$.messages.peek());
+    if (open?.id !== id) return;
+    const current = readAssistantSettings();
+    const changed = open.proposal!.changes.filter(change => current[change.key] !== change.from);
+    if (changed.length) {
+      settle("discarded");
+      push({ role: "error", text: `${changed.map(change => settingLabel(change.key)).join(", ")} changed since this proposal, so nothing was applied. Ask again for a fresh proposal.` });
+      return;
+    }
+    for (const { key, to } of open.proposal!.changes) (writers[key] as (value: string) => void)(to);
     settle("applied");
   }
 
   return {
     apply,
-    /** Cancels a pending reply and drops an unapplied proposal; settings stay as they are. */
+    /** Cancels a pending turn and drops an unapplied proposal; settings stay as they are. */
     close() {
-      active?.abort();
-      active = null;
+      if (active) {
+        active.controller.abort();
+        const { turnId } = active;
+        state$.messages.set(messages => messages.filter(message => message.id !== turnId));
+        active = null;
+      }
       state$.pending.set(false);
+      state$.composerFocused.set(false);
       settle("discarded");
     },
-    discard: () => settle("discarded"),
+    discard: (id: number) => settle("discarded", id),
     preview$,
     send,
     setShowAfter: (showAfter: boolean) => { if (findOpen(state$.messages.peek())) state$.showAfter.set(showAfter); },

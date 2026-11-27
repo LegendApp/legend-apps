@@ -4,6 +4,7 @@ import type {
 import { revealInFileManager } from "@legendapp/spark/files";
 import type { MarkdownMenuHandlers } from "./markdownEditorActions";
 import { markdownMenuState$ } from "./markdownMenus";
+import type { Observable } from "@legendapp/state";
 import { useObserveEffect } from "@legendapp/state/react";
 import { useCallback, useEffect, useMemo, type RefObject } from "react";
 import { refreshMarkdownEditorMenuState, registerMarkdownEditorMenuHandlers } from "./markdownEditorActions";
@@ -15,6 +16,8 @@ import {
 import type { MarkdownDocumentSessionState, MarkdownDocumentSessionState$ } from "./useMarkdownDocumentSession";
 
 type MarkdownMenuOptions = {
+  /** While the Assistant composer has keyboard focus, document editing commands are disabled. */
+  composerFocused$: Observable<boolean>;
   /** Whether the window has root folders, which New File and New Folder need. */
   hasFolders: boolean;
   onAddFolder: () => void;
@@ -70,6 +73,7 @@ function disableDocumentMenuItems() {
 }
 
 export function useMarkdownMenus({
+  composerFocused$,
   hasFolders,
   onAddFolder,
   onNewFile,
@@ -154,6 +158,7 @@ export function useMarkdownMenus({
   const refreshMenuState = useCallback(() => {
     const state = sessionState$.peek();
     const hasDocument = state.filename !== null;
+    const canEdit = hasDocument && !composerFocused$.peek();
     const currentFilePath = getCurrentFilePath(state);
 
     markdownMenuState$.set(Object.fromEntries([
@@ -161,16 +166,16 @@ export function useMarkdownMenus({
       { id: "saveAs", enabled: hasDocument && state.saveState !== "saving" },
       { id: "revealInFinder", enabled: currentFilePath !== null },
       { id: "settings", enabled: true },
-      { id: "undo", enabled: hasDocument && state.commandState.canUndo },
-      { id: "redo", enabled: hasDocument && state.commandState.canRedo },
-      { id: "selectAll", enabled: hasDocument },
-      { id: "find", enabled: hasDocument },
-      { id: "bold", enabled: hasDocument },
-      { id: "italic", enabled: hasDocument },
-      { id: "underline", enabled: hasDocument },
-      { id: "strikethrough", enabled: hasDocument },
-      { id: "spoiler", enabled: hasDocument },
-      { id: "link", enabled: hasDocument },
+      { id: "undo", enabled: canEdit && state.commandState.canUndo },
+      { id: "redo", enabled: canEdit && state.commandState.canRedo },
+      { id: "selectAll", enabled: canEdit },
+      { id: "find", enabled: canEdit },
+      { id: "bold", enabled: canEdit },
+      { id: "italic", enabled: canEdit },
+      { id: "underline", enabled: canEdit },
+      { id: "strikethrough", enabled: canEdit },
+      { id: "spoiler", enabled: canEdit },
+      { id: "link", enabled: canEdit },
       { id: "newFile", enabled: hasFolders },
       { id: "newFolder", enabled: hasFolders },
       { id: "closeWindow", enabled: true },
@@ -181,7 +186,7 @@ export function useMarkdownMenus({
       { id: "focusNextPane", enabled: paneCommandState.hasOtherPanes },
       { id: "focusPreviousPane", enabled: paneCommandState.hasOtherPanes },
     ].map(({ id, enabled }) => [id, { disabled: !enabled }])));
-  }, [hasFolders, paneCommandState, sessionState$]);
+  }, [composerFocused$, hasFolders, paneCommandState, sessionState$]);
 
   useEffect(() => {
     const unregister = registerMarkdownEditorMenuHandlers(windowId, menuHandlers, refreshMenuState);
@@ -194,6 +199,7 @@ export function useMarkdownMenus({
 
   useObserveEffect(() => {
     sessionState$.get();
+    composerFocused$.get();
     refreshMarkdownEditorMenuState();
-  }, [sessionState$]);
+  }, [composerFocused$, sessionState$]);
 }

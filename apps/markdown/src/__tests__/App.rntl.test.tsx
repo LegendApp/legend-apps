@@ -145,6 +145,18 @@ describe("App markdown shell actions", () => {
         expect(command).toHaveBeenCalledTimes(1);
         unregister();
     });
+    it("routes View > Assistant and its shortcut from the native menu to the editor", async () => {
+        const assistant = jest.fn();
+        const unregister = registerMarkdownEditorMenuHandlers("markdown-editor", { assistant }, jest.fn());
+        const view = markdownMenuConfig.find(item => item.id === "view");
+        expect(view?.type === "submenu" && view.items.find(item => item.type !== "separator" && item.id === "assistant"))
+            .toMatchObject({ shortcut: "Cmd+Shift+a" });
+        await render(<App />);
+        await waitFor(() => expect(mockUseNativeMenu).toHaveBeenCalled());
+        await act(async () => mockUseNativeMenu.mock.lastCall![0].onAction?.({ type: "action", itemId: "assistant" }));
+        expect(assistant).toHaveBeenCalledTimes(1);
+        unregister();
+    });
     it("routes the native Select All menu action to the document", async () => {
         const selectAll = jest.fn();
         const unregister = registerMarkdownEditorMenuHandlers("markdown-editor", { selectAll }, jest.fn());

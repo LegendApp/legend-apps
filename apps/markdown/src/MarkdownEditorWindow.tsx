@@ -344,7 +344,8 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
     onOpenSettings: openSettingsWindow,
     onSaveWorkspace: workspace.saveWorkspace,
     onToggleAssistant: toggleAssistant,
-  }), [addFolder, newFile, newFolder, openSettingsWindow, toggleAssistant, workspace.saveWorkspace, workspaceFolders.length]);
+    composerFocused$: assistant.state$.composerFocused,
+  }), [addFolder, assistant, newFile, newFolder, openSettingsWindow, toggleAssistant, workspace.saveWorkspace, workspaceFolders.length]);
 
   const e2eRun = getMarkdownE2ERunFromLaunchArguments(launchArguments);
   useMarkdownWindowCloseRequest({
@@ -461,7 +462,7 @@ function ChromeTint({ backgroundStyle }: { backgroundStyle: { backgroundColor: s
   return <View pointerEvents="none" style={[StyleSheet.absoluteFillObject, backgroundStyle, { opacity: 0.8 }]} />;
 }
 
-type WindowMenuOptions = Pick<Parameters<typeof useMarkdownMenus>[0], "hasFolders" | "onAddFolder" | "onNewFile" | "onNewFolder" | "onOpenSettings" | "onSaveWorkspace" | "onToggleAssistant">;
+type WindowMenuOptions = Pick<Parameters<typeof useMarkdownMenus>[0], "composerFocused$" | "hasFolders" | "onAddFolder" | "onNewFile" | "onNewFolder" | "onOpenSettings" | "onSaveWorkspace" | "onToggleAssistant">;
 
 type MarkdownPaneProps = {
   actions: PaneActions;

@@ -32,8 +32,9 @@ function state(filename: string) {
   });
 }
 
-function MenuOwner({ hasFolders = false, split = false, windowId, sessionState$ }: { hasFolders?: boolean; split?: boolean; windowId: string; sessionState$: ReturnType<typeof state> }) {
+function MenuOwner({ composerFocused$ = observable(false), hasFolders = false, split = false, windowId, sessionState$ }: { composerFocused$?: ReturnType<typeof observable<boolean>>; hasFolders?: boolean; split?: boolean; windowId: string; sessionState$: ReturnType<typeof state> }) {
   useMarkdownMenus({
+    composerFocused$,
     hasFolders,
     onAddFolder: noop,
     onNewFile: noop,
@@ -89,4 +90,19 @@ it("enables the pane commands from the focused window's layout", async () => {
   await view.unmount();
   untrack();
   expect(markdownMenuState$.splitRight.disabled.peek()).toBe(true);
+});
+
+it("disables document editing commands while the Assistant composer has focus", async () => {
+  const untrack = trackDocumentWindow("composer", refreshMarkdownEditorMenuState);
+  const composerFocused$ = observable(false);
+  const view = await render(<MenuOwner composerFocused$={composerFocused$} windowId="composer" sessionState$={state("/a.md")} />);
+  const editing = ["selectAll", "find", "bold", "link"] as const;
+  expect(editing.map(id => markdownMenuState$[id].disabled.peek())).toEqual([false, false, false, false]);
+  await act(async () => composerFocused$.set(true));
+  expect(editing.map(id => markdownMenuState$[id].disabled.peek())).toEqual([true, true, true, true]);
+  expect(markdownMenuState$.saveAs.disabled.peek()).toBe(false);
+  await act(async () => composerFocused$.set(false));
+  expect(markdownMenuState$.selectAll.disabled.peek()).toBe(false);
+  await view.unmount();
+  untrack();
 });

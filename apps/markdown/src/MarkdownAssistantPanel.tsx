@@ -16,8 +16,9 @@ export function MarkdownAssistantPanel({ assistant, onClose }: { assistant: Mark
   const showAfter = useValue(assistant.state$.showAfter);
   const [text, setText] = useState("");
   const scroll = useRef<ScrollView>(null);
+  const canSend = !pending && !!text.trim();
   const send = () => {
-    if (!text.trim() || pending) return;
+    if (!canSend) return;
     setText("");
     void assistant.send(text);
   };
@@ -35,8 +36,8 @@ export function MarkdownAssistantPanel({ assistant, onClose }: { assistant: Mark
           <Message
             key={message.id}
             message={message}
-            onApply={assistant.apply}
-            onDiscard={assistant.discard}
+            onApply={() => assistant.apply(message.id)}
+            onDiscard={() => assistant.discard(message.id)}
             onPreview={value => assistant.setShowAfter(value === "after")}
             showAfter={showAfter}
           />
@@ -48,7 +49,9 @@ export function MarkdownAssistantPanel({ assistant, onClose }: { assistant: Mark
           accessibilityLabel="Ask Assistant"
           className="text-sm text-foreground"
           editable={!pending}
+          onBlur={() => assistant.state$.composerFocused.set(false)}
           onChangeText={setText}
+          onFocus={() => assistant.state$.composerFocused.set(true)}
           onSubmitEditing={send}
           placeholder="Ask Assistant…"
           returnKeyType="send"
@@ -60,11 +63,11 @@ export function MarkdownAssistantPanel({ assistant, onClose }: { assistant: Mark
           <Pressable
             accessibilityLabel="Send"
             accessibilityRole="button"
-            accessibilityState={{ disabled: pending || !text.trim() }}
+            accessibilityState={{ disabled: !canSend }}
             className="h-6 w-6 items-center justify-center rounded-full bg-primary"
-            disabled={pending || !text.trim()}
+            disabled={!canSend}
             onPress={send}
-            style={pending || !text.trim() ? styles.disabled : undefined}
+            style={canSend ? undefined : styles.disabled}
           >
             <Text className="text-sm font-semibold text-primary-foreground">↑</Text>
           </Pressable>
