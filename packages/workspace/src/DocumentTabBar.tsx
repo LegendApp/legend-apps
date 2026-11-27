@@ -82,7 +82,7 @@ export function DocumentTabBar({ activePath, colors, focused = true, onClose, on
         scrollEventThrottle={32}
         showsHorizontalScrollIndicator={false}
         showsVerticalScrollIndicator={false}
-        style={styles.scroll}
+        style={[styles.scroll, barWidth > 0 && { maxWidth: Math.max(0, available) }]}
       >
         {paths.map((path, index) => (
           <DocumentTab

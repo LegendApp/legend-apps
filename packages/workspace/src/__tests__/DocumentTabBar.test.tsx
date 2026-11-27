@@ -70,6 +70,17 @@ describe("DocumentTabBar", () => {
     expect(flat(tabs()[0].props.style).width).toBe(Math.round((500 - 8 - 36 - 6 - 32 - 4) / 3));
   });
 
+  it("keeps the strip within the bar so the New Tab button stays in a crowded pane after it narrows", async () => {
+    const crowded = Array.from({ length: 7 }, (_, index) => `/x/${index}.md`);
+    await render({ activePath: crowded[0], onNewTab: jest.fn(), onToggleSidebar: jest.fn(), paths: crowded, sidebarOpen: false });
+    const strip = () => flat(renderer.root.find(node => node.type === ("ScrollView" as never)).props.style).maxWidth;
+    await layout(renderer.root.findByType("View" as never), 522);
+    // 522 - 80 inset - toggle and gap - New Tab and gap - 36 drag space - 6 gap.
+    expect(strip()).toBe(522 - 80 - 38 - 32 - 36 - 6);
+    await layout(renderer.root.findByType("View" as never), 220);
+    expect(strip()).toBe(28);
+  });
+
   it("adds alpha to hex colors only", () => {
     expect(withAlpha("#abc", 0.5)).toBe("#aabbcc80");
     expect(withAlpha("#102030", 1)).toBe("#102030");
