@@ -432,13 +432,9 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
   const openInFocusedPane = useCallback((path: string) => paneActions.openTab(layoutStateRef.current.layout.focused, path), [paneActions]);
   const addFolder = useCallback(() => { chooseFolders().then(addFolders).catch(reportError); }, [addFolders, reportError]);
   const newEntryDirectory = getNewEntryDirectory(workspaceFolders, currentFile);
-  const newFile = useCallback(() => {
-    try {
-      openInFocusedPane(createMarkdownDraft());
-    } catch (error) {
-      reportError(error);
-    }
-  }, [openInFocusedPane, reportError]);
+  const newFile = useCallback(async () => {
+    openInFocusedPane(createMarkdownDraft());
+  }, [openInFocusedPane]);
   const newFolder = useCallback(() => {
     if (newEntryDirectory) createWorkspaceFolder(newEntryDirectory).catch(reportError);
   }, [newEntryDirectory, reportError]);
@@ -462,8 +458,8 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
   useEffect(() => {
     if (!newOnLaunch.current) return;
     newOnLaunch.current = false;
-    newFile();
-  }, [newFile]);
+    newFile().catch(reportError);
+  }, [newFile, reportError]);
   useMarkdownWindowCloseRequest({
     windowId: e2eRun ? undefined : windowId,
     handleError: reportError,

@@ -21,7 +21,7 @@ type MarkdownMenuOptions = {
   /** Whether the window has root folders, which New Folder needs. */
   hasFolders: boolean;
   onAddFolder: () => void;
-  onNewFile: () => void;
+  onNewFile: () => Promise<void>;
   onNewFolder: () => void;
   onNewTab: () => void;
   documentCommandsRef: RefObject<MarkdownDocumentCommands | null>;
@@ -98,7 +98,9 @@ export function useMarkdownMenus({
     ...paneCommands,
     addFolder: onAddFolder,
     assistant: onToggleAssistant,
-    newFile: onNewFile,
+    newFile: () => {
+      onNewFile().catch(onError);
+    },
     newFolder: onNewFolder,
     newTab: onNewTab,
     bold: () => documentCommandsRef.current?.toggleBold(),

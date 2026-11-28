@@ -2,7 +2,7 @@ import { act, render } from "@testing-library/react-native";
 import { observable } from "@legendapp/state";
 import { trackDocumentWindow } from "@legend-apps/workspace";
 import React from "react";
-import { refreshMarkdownEditorMenuState } from "../markdownEditorActions";
+import { dispatchMarkdownEditorMenuAction, refreshMarkdownEditorMenuState } from "../markdownEditorActions";
 import { markdownMenuState$ } from "../markdownMenus";
 import type { MarkdownDocumentSessionState } from "../useMarkdownDocumentSession";
 import { markdownPaneMenuItems, useMarkdownMenus } from "../useMarkdownMenus";
@@ -32,15 +32,23 @@ function state(filename: string) {
   });
 }
 
-function MenuOwner({ composerFocused$ = observable(false), hasFolders = false, split = false, windowId, sessionState$ }: { composerFocused$?: ReturnType<typeof observable<boolean>>; hasFolders?: boolean; split?: boolean; windowId: string; sessionState$: ReturnType<typeof state> }) {
+function MenuOwner({ composerFocused$ = observable(false), hasFolders = false, onError = noop, onNewFile = transition, split = false, windowId, sessionState$ }: {
+  composerFocused$?: ReturnType<typeof observable<boolean>>;
+  hasFolders?: boolean;
+  onError?: (error: unknown) => void;
+  onNewFile?: () => Promise<void>;
+  split?: boolean;
+  windowId: string;
+  sessionState$: ReturnType<typeof state>;
+}) {
   useMarkdownMenus({
     composerFocused$,
     hasFolders,
     onAddFolder: noop,
-    onNewFile: noop,
+    onNewFile,
     onNewFolder: noop,
     documentCommandsRef: commands,
-    onError: noop,
+    onError,
     onNewTab: noop,
     onOpenDocument: transition,
     onOpenSettings: noop,
@@ -77,6 +85,19 @@ it("uses the focused editor's menu state and restores the remaining editor after
   expect(markdownMenuState$.save.disabled.peek()).toBe(false);
   await view.unmount();
   untrackFirst();
+});
+
+it("reports a New File failure to the active editor", async () => {
+  const error = new Error("Cannot create the draft");
+  const onError = jest.fn();
+  const rejectedDraft = Promise.reject(error);
+  rejectedDraft.catch(noop);
+  const view = await render(<MenuOwner windowId="draft" sessionState$={state("/a.md")} onError={onError} onNewFile={() => rejectedDraft} />);
+
+  await act(async () => { dispatchMarkdownEditorMenuAction({ type: "action", itemId: "newFile" }); });
+
+  expect(onError).toHaveBeenCalledWith(error);
+  await view.unmount();
 });
 
 it("enables the pane commands from the focused window's layout", async () => {
