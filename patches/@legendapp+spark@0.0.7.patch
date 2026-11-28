@@ -1,3 +1,15 @@
+diff --git a/vendor/node_modules/@legendapp/spark-desktop-windows/macos/window-manager/RNWindowManager.mm b/vendor/node_modules/@legendapp/spark-desktop-windows/macos/window-manager/RNWindowManager.mm
+index 6247314..daaa9b0 100644
+--- a/vendor/node_modules/@legendapp/spark-desktop-windows/macos/window-manager/RNWindowManager.mm
++++ b/vendor/node_modules/@legendapp/spark-desktop-windows/macos/window-manager/RNWindowManager.mm
+@@ -2246,6 +2246,7 @@ - (void)openWindow:(NSString *)optionsJson resolve:(RCTPromiseResolveBlock)resol
+                                                      backing:NSBackingStoreBuffered
+                                                        defer:NO];
+     objc_setAssociatedObject(window, NSSelectorFromString(@"sparkWindowInstanceId"), NSUUID.UUID.UUIDString, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
++    window.autorecalculatesKeyViewLoop = YES;
+     if ([options[@"sparkOverlay"] boolValue]) {
+       ((NSPanel *)window).hidesOnDeactivate = NO;
+       window.styleMask |= NSWindowStyleMaskNonactivatingPanel;
 diff --git a/vendor/node_modules/@legendapp/spark-ui/macos/appkit-split-view/RNSidebarSplitViewComponent.mm b/vendor/node_modules/@legendapp/spark-ui/macos/appkit-split-view/RNSidebarSplitViewComponent.mm
 index d122726..62acc9c 100644
 --- a/vendor/node_modules/@legendapp/spark-ui/macos/appkit-split-view/RNSidebarSplitViewComponent.mm

@@ -17,11 +17,15 @@ export function MarkdownAssistantPanel({ assistant, onClose }: { assistant: Mark
   const showAfter = useValue(assistant.state$.showAfter);
   const [text, setText] = useState("");
   const scroll = useRef<ScrollView>(null);
+  const composer = useRef<TextInput>(null);
+  // macOS blurs a single-line field on Return, and Apply and Discard unmount their focused button.
+  const focusComposer = () => composer.current?.focus();
   const canSend = !pending && !!text.trim();
   const send = () => {
     if (!canSend) return;
     setText("");
     void assistant.send(text);
+    focusComposer();
   };
 
   return (
@@ -40,8 +44,14 @@ export function MarkdownAssistantPanel({ assistant, onClose }: { assistant: Mark
           <Message
             key={message.id}
             message={message}
-            onApply={() => assistant.apply(message.id)}
-            onDiscard={() => assistant.discard(message.id)}
+            onApply={() => {
+              assistant.apply(message.id);
+              focusComposer();
+            }}
+            onDiscard={() => {
+              assistant.discard(message.id);
+              focusComposer();
+            }}
             onPreview={value => assistant.setShowAfter(value === "after")}
             showAfter={showAfter}
           />
@@ -52,12 +62,12 @@ export function MarkdownAssistantPanel({ assistant, onClose }: { assistant: Mark
         <TextInput
           accessibilityLabel="Ask Assistant"
           className="text-sm text-foreground"
-          editable={!pending}
           onBlur={() => assistant.state$.composerFocused.set(false)}
           onChangeText={setText}
           onFocus={() => assistant.state$.composerFocused.set(true)}
           onSubmitEditing={send}
           placeholder="Ask Assistant…"
+          ref={composer}
           returnKeyType="send"
           submitBehavior="submit"
           value={text}

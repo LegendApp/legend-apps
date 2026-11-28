@@ -15,6 +15,15 @@ import {
 
 jest.mock("@legendapp/spark/processes", () => ({ resolveCommand: jest.fn(), runCommand: jest.fn() }));
 jest.mock("@legendapp/spark/files", () => ({ getDirectory: jest.fn(async () => "/app-data"), watch: jest.fn() }));
+// The composer's focus() reports focus the way the native field does.
+jest.mock("react-native", () => {
+  const { createElement, forwardRef, useImperativeHandle } = jest.requireActual<typeof React>("react");
+  const TextInput = forwardRef<{ focus: () => void }, { onFocus?: () => void }>((props, ref) => {
+    useImperativeHandle(ref, () => ({ focus: () => props.onFocus?.() }));
+    return createElement("TextInput", props);
+  });
+  return { ...jest.requireActual("react-native"), TextInput };
+});
 
 const defaults: AssistantSettings = { contentWidth: "standard", density: "comfortable", fontFamily: "system", fontSize: "default", formattingToolbarMode: "top", lineHeight: "normal" };
 const longForm = JSON.stringify({
@@ -265,6 +274,34 @@ it("runs send, After, Discard, then send and Apply through the panel", async () 
   await fireEvent(await waitFor(() => nativeButton(view, "Apply 4 changes")), "buttonPress");
   expect(readAssistantSettings()).toMatchObject({ contentWidth: "narrow", fontFamily: "serif", fontSize: "large", formattingToolbarMode: "selection" });
   expect(view.getByText("Applied")).toBeTruthy();
+  await view.unmount();
+});
+
+it("returns focus to the composer after send, Discard and Apply", async () => {
+  const reply = deferred();
+  const replies = [reply.promise, Promise.resolve(longForm)];
+  const assistant = createMarkdownAssistant({ run: () => replies.shift()! });
+  const view = await render(<MarkdownAssistantPanel assistant={assistant} onClose={jest.fn()} />);
+  const composer = () => view.getByLabelText("Ask Assistant");
+  const focused = () => assistant.state$.composerFocused.peek();
+
+  await fireEvent.changeText(composer(), "long-form");
+  // macOS blurs a single-line field on Return before the submit reaches JS.
+  await fireEvent(composer(), "blur");
+  await fireEvent(composer(), "submitEditing");
+  expect(focused()).toBe(true);
+  // A non-editable macOS field is disabled and cannot hold focus while the reply is pending.
+  expect(composer().props.editable).not.toBe(false);
+  reply.resolve(longForm);
+  await fireEvent(composer(), "blur");
+  await fireEvent(await waitFor(() => nativeButton(view, "Discard")), "buttonPress");
+  expect(focused()).toBe(true);
+
+  await fireEvent.changeText(composer(), "again");
+  await fireEvent(composer(), "submitEditing");
+  await fireEvent(composer(), "blur");
+  await fireEvent(await waitFor(() => nativeButton(view, "Apply 4 changes")), "buttonPress");
+  expect(focused()).toBe(true);
   await view.unmount();
 });
 
