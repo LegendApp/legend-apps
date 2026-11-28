@@ -15,11 +15,17 @@ import {
 
 jest.mock("@legendapp/spark/processes", () => ({ resolveCommand: jest.fn(), runCommand: jest.fn() }));
 jest.mock("@legendapp/spark/files", () => ({ getDirectory: jest.fn(async () => "/app-data"), watch: jest.fn() }));
-// The composer's focus() reports focus the way the native field does.
+// The composer's focus() reports focus the way the native field does. Focusing a macOS field also selects its whole text.
+const mockFocus = jest.fn();
 jest.mock("react-native", () => {
   const { createElement, forwardRef, useImperativeHandle } = jest.requireActual<typeof React>("react");
   const TextInput = forwardRef<{ focus: () => void }, { onFocus?: () => void }>((props, ref) => {
-    useImperativeHandle(ref, () => ({ focus: () => props.onFocus?.() }));
+    useImperativeHandle(ref, () => ({
+      focus: () => {
+        mockFocus();
+        props.onFocus?.();
+      },
+    }));
     return createElement("TextInput", props);
   });
   return { ...jest.requireActual("react-native"), TextInput };
@@ -286,9 +292,7 @@ it("returns focus to the composer after send, Discard and Apply", async () => {
   const focused = () => assistant.state$.composerFocused.peek();
 
   await fireEvent.changeText(composer(), "long-form");
-  // macOS blurs a single-line field on Return before the submit reaches JS.
-  await fireEvent(composer(), "blur");
-  await fireEvent(composer(), "submitEditing");
+  await fireEvent.press(view.getByLabelText("Send"));
   expect(focused()).toBe(true);
   // A non-editable macOS field is disabled and cannot hold focus while the reply is pending.
   expect(composer().props.editable).not.toBe(false);
@@ -305,30 +309,25 @@ it("returns focus to the composer after send, Discard and Apply", async () => {
   await view.unmount();
 });
 
-it("keeps the draft and composer focus on a blank or pending Return, then sends the draft once after an error", async () => {
+it("keeps the draft and its selection on a blank or pending Return, then sends the draft once after an error", async () => {
   const reply = deferred();
   const run = jest.fn().mockReturnValueOnce(reply.promise).mockResolvedValueOnce(longForm);
   const assistant = createMarkdownAssistant({ run });
   const view = await render(<MarkdownAssistantPanel assistant={assistant} onClose={jest.fn()} />);
   const composer = () => view.getByLabelText("Ask Assistant");
-  const focused = () => assistant.state$.composerFocused.peek();
-  // macOS blurs a single-line field on every Return before the submit reaches JS.
-  const pressReturn = async () => {
-    await fireEvent(composer(), "blur");
-    await fireEvent(composer(), "submitEditing");
-  };
+  const pressReturn = () => fireEvent(composer(), "submitEditing");
+  mockFocus.mockClear();
 
   await pressReturn();
-  expect(focused()).toBe(true);
   expect(run).not.toHaveBeenCalled();
 
   await fireEvent.changeText(composer(), "first");
   await pressReturn();
   await fireEvent.changeText(composer(), "next");
   await pressReturn();
-  expect(focused()).toBe(true);
   expect(composer().props.value).toBe("next");
   expect(run).toHaveBeenCalledTimes(1);
+  expect(mockFocus).not.toHaveBeenCalled();
 
   reply.reject(new Error("Claude exited with code 1"));
   await view.findByText("Claude exited with code 1");

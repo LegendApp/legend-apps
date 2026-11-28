@@ -18,15 +18,13 @@ export function MarkdownAssistantPanel({ assistant, onClose }: { assistant: Mark
   const [text, setText] = useState("");
   const scroll = useRef<ScrollView>(null);
   const composer = useRef<TextInput>(null);
-  // macOS blurs a single-line field on every Return, and Apply and Discard unmount their focused button.
+  // Apply and Discard unmount their focused button. Return keeps focus, and refocusing would select the whole draft.
   const focusComposer = () => composer.current?.focus();
   const canSend = !pending && !!text.trim();
   const send = () => {
-    if (!assistant.state$.pending.peek() && text.trim()) {
-      setText("");
-      void assistant.send(text);
-    }
-    focusComposer();
+    if (assistant.state$.pending.peek() || !text.trim()) return;
+    setText("");
+    void assistant.send(text);
   };
 
   return (
@@ -81,7 +79,10 @@ export function MarkdownAssistantPanel({ assistant, onClose }: { assistant: Mark
             accessibilityState={{ disabled: !canSend }}
             className="h-6 w-6 items-center justify-center rounded-full bg-primary"
             disabled={!canSend}
-            onPress={send}
+            onPress={() => {
+              send();
+              focusComposer();
+            }}
             style={canSend ? undefined : styles.disabled}
           >
             <Text className="text-sm font-semibold text-primary-foreground">↑</Text>

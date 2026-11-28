@@ -14,6 +14,20 @@ index 2758cc7..4903c05 100644
    }
  }
  
+diff --git a/Libraries/Text/TextInput/RCTBackedTextInputDelegateAdapter.mm b/Libraries/Text/TextInput/RCTBackedTextInputDelegateAdapter.mm
+index 18bbe64..8dfaa65 100644
+--- a/Libraries/Text/TextInput/RCTBackedTextInputDelegateAdapter.mm
++++ b/Libraries/Text/TextInput/RCTBackedTextInputDelegateAdapter.mm
+@@ -239,7 +239,8 @@ - (BOOL)control:(NSControl *)control textView:(NSTextView *)fieldEditor doComman
+   // enter/return
+   if (commandSelector == @selector(insertNewline:) || commandSelector == @selector(insertNewlineIgnoringFieldEditor:)) {
+     [self textFieldDidEndEditingOnExit];
+-    if ([textInputDelegate textInputShouldSubmitOnReturn]) {
++    // Only blurAndSubmit ends editing; submit keeps the field focused, as on iOS.
++    if ([textInputDelegate textInputShouldSubmitOnReturn] && [textInputDelegate textInputShouldReturn]) {
+       [[_backedTextInputView window] makeFirstResponder:nil];
+     }
+     commandHandled = YES;
 diff --git a/Libraries/Text/TextInput/Singleline/RCTUITextField.mm b/Libraries/Text/TextInput/Singleline/RCTUITextField.mm
 index 0f988c1..c7fe0fb 100644
 --- a/Libraries/Text/TextInput/Singleline/RCTUITextField.mm
