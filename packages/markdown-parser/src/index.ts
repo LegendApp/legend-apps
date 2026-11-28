@@ -14,6 +14,10 @@ function getMarkdownParser() {
   return markdownParser;
 }
 
+export function resolveMarkdownFilePath(filePath: string) {
+  return getMarkdownParser().resolveFilePath(filePath);
+}
+
 export function loadMarkdownFile(filePath: string, options: MarkdownFileLoadOptions = {}) {
   return getMarkdownParser().loadMarkdownFile(filePath, options.initialBlockCount ?? DEFAULT_INITIAL_BLOCK_COUNT);
 }

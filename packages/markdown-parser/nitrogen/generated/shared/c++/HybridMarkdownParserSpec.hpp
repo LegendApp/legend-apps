@@ -16,9 +16,9 @@
 // Forward declaration of `MarkdownFileLoadResult` to properly resolve imports.
 namespace margelo::nitro::legendapps::markdownparser { struct MarkdownFileLoadResult; }
 
+#include <string>
 #include "MarkdownFileLoadResult.hpp"
 #include <NitroModules/Promise.hpp>
-#include <string>
 
 namespace margelo::nitro::legendapps::markdownparser {
 
@@ -51,6 +51,7 @@ namespace margelo::nitro::legendapps::markdownparser {
 
     public:
       // Methods
+      virtual std::string resolveFilePath(const std::string& filePath) = 0;
       virtual std::shared_ptr<Promise<MarkdownFileLoadResult>> createMarkdownDocument(const std::string& markdown, double initialBlockCount) = 0;
       virtual std::shared_ptr<Promise<MarkdownFileLoadResult>> loadMarkdownFile(const std::string& filePath, double initialBlockCount) = 0;
 

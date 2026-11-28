@@ -48,7 +48,7 @@ export function useRecentMarkdownDocumentOpener({
   }, [openSelectedFile, windowId]);
 }
 
-type WindowQuitGuard = { prepare: () => Promise<boolean>; discardDrafts: () => void };
+type WindowQuitGuard = { prepare: (approvedDocuments?: Set<object>) => Promise<boolean>; discardDrafts: () => void };
 
 const windowQuitGuards = new Set<WindowQuitGuard>();
 
@@ -66,8 +66,9 @@ export function useMarkdownAppExit(handleError: (error: unknown) => void) {
     const onError = (error: unknown) => handleErrorRef.current(error);
     const subscription = ownRegistration(teardown.current.then(() => beforeQuit(async () => {
       const guards = [...windowQuitGuards];
+      const approvedDocuments = new Set<object>();
       for (const guard of guards) {
-        if (!active || !await guard.prepare()) return false;
+        if (!active || !await guard.prepare(approvedDocuments)) return false;
       }
       if (!active) return false;
       for (const guard of guards) {

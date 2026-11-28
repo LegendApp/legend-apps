@@ -34,6 +34,7 @@ export interface NativeProps extends ViewProps {
     beforeMarkdown: string;
     text: string;
   }>>;
+  onActiveBlockSynchronized?: DirectEventHandler<Readonly<{ blockId: string; before: string; after: string }>>;
   onEditorFrameChange?: DirectEventHandler<EditorFrameEvent>;
 }
 
@@ -44,7 +45,8 @@ interface NativeCommands {
   completeKeyboardHandoff: (viewRef: React.ElementRef<ComponentType>, blockId: string) => void;
   setSelectionForMarkdownRange: (viewRef: React.ElementRef<ComponentType>, blockId: string, start: Double, end: Double) => void;
   setSelectionAfterMarkdown: (viewRef: React.ElementRef<ComponentType>, blockId: string, markdownPrefix: string) => void;
+  synchronizeActiveBlock: (viewRef: React.ElementRef<ComponentType>, blockId: string, before: string, after: string) => void;
   writeSelectionClipboard: (viewRef: React.ElementRef<ComponentType>, markdown: string) => void;
 }
-export const Commands = codegenNativeCommands<NativeCommands>({ supportedCommands: ["beginKeyboardHandoff", "cancelKeyboardHandoff", "completeKeyboardHandoff", "writeSelectionClipboard", "setSelectionAfterMarkdown", "setSelectionForMarkdownRange"] });
+export const Commands = codegenNativeCommands<NativeCommands>({ supportedCommands: ["beginKeyboardHandoff", "cancelKeyboardHandoff", "completeKeyboardHandoff", "writeSelectionClipboard", "setSelectionAfterMarkdown", "setSelectionForMarkdownRange", "synchronizeActiveBlock"] });
 export default codegenNativeComponent<NativeProps>("MarkdownEditorHost") as ComponentType;

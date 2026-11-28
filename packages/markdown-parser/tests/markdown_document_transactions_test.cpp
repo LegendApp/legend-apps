@@ -974,6 +974,31 @@ void testExternalFileConflicts() {
   expectEqual(status(), "unchanged", "explicitly recreate deleted file");
 }
 
+void testSharedFileIdentityAndSaveCopy() {
+  LoadedDocument original("Original");
+  TempFile copy;
+  TempFile alias;
+  std::remove(alias.path.c_str());
+  expect(symlink(original.file.path.c_str(), alias.path.c_str()) == 0, "create symbolic link");
+
+  HybridMarkdownParser parser;
+  const auto identity = parser.resolveFilePath(original.file.path);
+  expectEqual(parser.resolveFilePath("file://" + alias.path), identity, "alias resolves to the original entry");
+  expect(parser.resolveFilePath(copy.path) != identity, "different files retain their own identity");
+
+  original.document->applyTransaction(updateBlock(original.document->getBlockKey(0), "Edited"));
+  original.document->saveCopy(copy.path);
+  auto separate = parser.loadMarkdownFile(copy.path, 1)->get().document;
+  expectEqual(separate->getRenderBlockById(separate->getBlockKey(0)).markdown, "Edited", "copy contains local edits");
+  expectEqual(original.document->getFileStatus()->get(), "unchanged", "copy keeps original baseline");
+  expectEqual(pathForRegisteredBlockId(original.document->getBlockKey(0)), original.file.path, "copy retains original resource path");
+
+  original.document->applyTransaction(updateBlock(original.document->getBlockKey(0), "Edited again"));
+  original.document->save();
+  expectEqual(parser.resolveFilePath(original.file.path), identity, "atomic save preserves document identity");
+  expectEqual(separate->getFileStatus()->get(), "unchanged", "saving the original does not alter the copy");
+}
+
 using TestFunction = void (*)();
 
 struct TestCase {
@@ -986,6 +1011,7 @@ struct TestCase {
 int main() {
   const TestCase tests[] = {
       {"external file conflicts", testExternalFileConflicts},
+      {"shared file identity and Save As copy", testSharedFileIdentityAndSaveCopy},
       {"loads baseline blocks", testLoadsBaselineBlocks},
       {"empty documents remain editable", testEmptyDocumentsRemainEditable},
       {"save preserves temporary file neighbors", testSavePreservesTemporaryFileNeighbors},

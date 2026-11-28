@@ -44,6 +44,7 @@ const mockSessionState$ = observable<MarkdownDocumentSessionState>({
   isDirty: false,
   lastError: null,
   saveState: "idle",
+  watchedFilename: null,
 });
 const mockSession = {
   documentCommandsRef: {
@@ -171,6 +172,7 @@ jest.mock("../useMarkdownWindows", () => ({
 
 const mockChromeTheme = { titleBarHeight: 36 };
 let mockDisplayTheme = "system";
+let mockAutosave: "enabled" | "disabled" = "enabled";
 let mockSidebarFolders: string[] = [];
 let mockSavedPaneLayout: unknown;
 
@@ -186,7 +188,7 @@ jest.mock("../markdownSettings", () => ({
   setMarkdownSidebarFoldersSetting: jest.fn(),
   setMarkdownSidebarOpenSetting: jest.fn(),
   useMarkdownAppearanceSettings: () => ({}),
-  useMarkdownAutosaveSetting: () => "enabled",
+  useMarkdownAutosaveSetting: () => mockAutosave,
   useMarkdownChromeTheme: () => mockChromeTheme,
   useMarkdownDisplayThemeSetting: () => mockDisplayTheme,
   useMarkdownFormattingToolbarModeSetting: () => "selection",
@@ -306,7 +308,7 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
 
     const quit = mockRegisterMarkdownWindowQuitGuard.mock.lastCall?.[0];
     expect(await quit?.prepare()).toBe(true);
-    expect(mockSession.prepareCurrentDocumentForClose).toHaveBeenCalledWith({ autosaveEnabled: true, reason: "quit" });
+    expect(mockSession.prepareCurrentDocumentForClose).toHaveBeenCalledWith(expect.objectContaining({ autosaveEnabled: true, reason: "quit" }));
     await view.unmount();
   });
 
@@ -561,7 +563,9 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
         expect(tabs(view)).toEqual(["a.md*", "b.md"]);
 
         await pick("/notes/c.md");
-        expect(prepare.mock.calls).toEqual([[{ autosaveEnabled: true, reason: "close" }], [{ autosaveEnabled: true, reason: "close" }]]);
+        expect(prepare).toHaveBeenCalledTimes(2);
+        expect(prepare).toHaveBeenNthCalledWith(1, expect.objectContaining({ autosaveEnabled: true, reason: "close" }));
+        expect(prepare).toHaveBeenNthCalledWith(2, expect.objectContaining({ autosaveEnabled: true, reason: "close" }));
         expect(tabs(view)).toEqual(["c.md*", "b.md"]);
         expect(mockSession.openSelectedFile).toHaveBeenLastCalledWith("/notes/c.md");
         await view.unmount();
@@ -816,8 +820,8 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
       const view = await render(<MarkdownEditorWindow />);
       try {
         await act(async () => { expect(await guard!()).toBe(false); });
-        expect(first.prepareCurrentDocumentForClose).toHaveBeenCalledWith({ autosaveEnabled: true, reason: "close" });
-        expect(second.prepareCurrentDocumentForClose).toHaveBeenCalledWith({ autosaveEnabled: true, reason: "close" });
+        expect(first.prepareCurrentDocumentForClose).toHaveBeenCalledWith(expect.objectContaining({ autosaveEnabled: true, reason: "close" }));
+        expect(second.prepareCurrentDocumentForClose).toHaveBeenCalledWith(expect.objectContaining({ autosaveEnabled: true, reason: "close" }));
         expect(first.sessionState$.isDirty.peek()).toBe(false);
         expect(second.sessionState$.isDirty.peek()).toBe(true);
 
@@ -883,7 +887,7 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
       mockSession.prepareCurrentDocumentForClose.mockClear();
       await drag("p1", "/docs/c.md");
       await act(async () => targets("p0").find(node => !node.props.onLayout)!.props.onDrop({ operation: "move", x: -10, y: 10 }));
-      expect(mockSession.prepareCurrentDocumentForClose).toHaveBeenCalledWith({ autosaveEnabled: true, reason: "close" });
+      expect(mockSession.prepareCurrentDocumentForClose).toHaveBeenCalledWith(expect.objectContaining({ autosaveEnabled: true, reason: "close" }));
       expect(view.queryByTestId("markdown-pane-p1")).toBeNull();
       expect(tabsOf("p0")).toEqual(["c.md", "a.md"]);
 
@@ -981,6 +985,7 @@ describe("MarkdownEditorWindow save identity", () => {
   afterEach(() => {
     mockUseMarkdownDocumentSession.mockImplementation(() => mockSession);
     mockMarkdownDocument.mockImplementation(() => <Text>markdown-document</Text>);
+    mockAutosave = "enabled";
     mockSavedPaneLayout = undefined;
   });
 
@@ -1057,5 +1062,64 @@ describe("MarkdownEditorWindow save identity", () => {
     expect(left.queryByText(`document:${destination}`, { includeHiddenElements: true })).toBeNull();
     expect(right.getByText(`document:${destination}`)).toBe(otherDocument);
     await view.unmount();
+  });
+
+  it.each(["enabled", "disabled"] as const)("protects the last dirty view when Open File replaces a pane with autosave %s", async autosave => {
+    const { createPaneLayout, focusPane, splitPane } = jest.requireActual("@legend-apps/workspace");
+    const original = "/docs/original.md";
+    const document = {};
+    const views = new Set<object>();
+    const save = jest.fn(async () => {});
+    const confirm = jest.mocked(confirmDirtyDocumentTransition);
+    confirm.mockClear();
+    mockAutosave = autosave;
+    mockSavedPaneLayout = focusPane(splitPane(createPaneLayout({ active: original, paths: [original] }), "horizontal"), "p0");
+    mockMarkdownDocument.mockImplementation(props => {
+      const { commandsRef, filename, onDirtyChange } = props as MarkdownDocumentProps;
+      React.useEffect(() => {
+        if (!commandsRef || typeof commandsRef === "function" || filename !== original) return;
+        const view = {};
+        views.add(view);
+        commandsRef.current = {
+          save, getCloseState: () => ({ document, view, views }), commitAndBlurActiveBlock: jest.fn(),
+        } as unknown as NonNullable<typeof commandsRef.current>;
+        onDirtyChange?.(true);
+        return () => {
+          views.delete(view);
+          commandsRef.current = null;
+        };
+      }, [commandsRef, filename, onDirtyChange]);
+      return <Text>{`document:${filename}`}</Text>;
+    });
+    const pick = async () => {
+      jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: [destination] });
+      await act(async () => menu().onOpenDocument());
+    };
+    const rendered = await render(<MarkdownEditorWindow />);
+    const left = within(rendered.getByTestId("markdown-pane-p0"));
+    const right = within(rendered.getByTestId("markdown-pane-p1"));
+    const peer = right.getByText(`document:${original}`);
+    expect(views.size).toBe(2);
+    await pick();
+    expect(left.getByText(`document:${destination}`)).toBeTruthy();
+    expect(right.getByText(`document:${original}`)).toBe(peer);
+    expect(views.size).toBe(1);
+    expect(save).not.toHaveBeenCalled();
+    expect(confirm).not.toHaveBeenCalled();
+
+    await act(async () => fireEvent(rendered.getByTestId("markdown-pane-p1"), "startShouldSetResponderCapture"));
+    if (autosave === "disabled") {
+      confirm.mockResolvedValueOnce("cancel");
+      await pick();
+      expect(right.getByText(`document:${original}`)).toBe(peer);
+      expect(confirm).toHaveBeenCalledTimes(1);
+      expect(save).not.toHaveBeenCalled();
+      confirm.mockResolvedValueOnce("save");
+    }
+    await pick();
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(right.getByText(`document:${destination}`)).toBeTruthy();
+    expect(views.size).toBe(0);
+    await rendered.unmount();
   });
 });

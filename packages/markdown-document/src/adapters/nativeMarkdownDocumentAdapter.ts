@@ -1,6 +1,7 @@
 import {
   createMarkdownDocument,
   loadMarkdownFile,
+  resolveMarkdownFilePath,
   type MarkdownFileLoadResult,
   type MarkdownDocument as NativeMarkdownDocument,
   type MarkdownBlockMetadata as NativeMarkdownBlockMetadata,
@@ -221,8 +222,18 @@ export const nativeMarkdownDocumentAdapter: NativeMarkdownDocumentAdapter = {
   },
 
   async saveAs(documentId: string, filename: string): Promise<void> {
+    nativeMarkdownDocumentAdapter.saveAsSync!(documentId, filename);
+  },
+
+  saveAsSync(documentId: string, filename: string) {
     getSession(documentId).nativeDocument.saveAs(filename);
   },
+
+  saveCopy(documentId: string, filename: string) {
+    getSession(documentId).nativeDocument.saveCopy(filename);
+  },
+
+  resolveFilePath: resolveMarkdownFilePath,
 
   async close(documentId: string): Promise<void> {
     sessions.delete(documentId);

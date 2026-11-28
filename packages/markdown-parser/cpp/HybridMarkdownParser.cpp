@@ -4,6 +4,7 @@
 #include "MarkdownBlockParser.hpp"
 
 #include <chrono>
+#include <filesystem>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -60,6 +61,16 @@ std::shared_ptr<HybridMarkdownDocument> createDocument(std::string filePath, Mar
 } // namespace
 
 HybridMarkdownParser::HybridMarkdownParser() : HybridObject(TAG) {}
+
+std::string HybridMarkdownParser::resolveFilePath(const std::string& filePath) {
+  const auto normalized = normalizeFilePath(filePath);
+  // Saves atomically replace a directory entry. Key by the resolved entry,
+  // which stays stable across saves and still distinguishes hard links.
+  const auto absolute = std::filesystem::absolute(normalized);
+  std::error_code error;
+  const auto resolved = std::filesystem::weakly_canonical(absolute, error);
+  return error ? absolute.string() : resolved.string();
+}
 
 std::shared_ptr<Promise<MarkdownFileLoadResult>> HybridMarkdownParser::createMarkdownDocument(
     const std::string& markdown,

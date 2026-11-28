@@ -29,6 +29,7 @@ function state(filename: string) {
     isDirty: false,
     lastError: null,
     saveState: "idle",
+    watchedFilename: null,
   });
 }
 

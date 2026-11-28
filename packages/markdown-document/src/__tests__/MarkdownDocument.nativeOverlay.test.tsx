@@ -3,7 +3,7 @@ import React from "react";
 import TestRenderer, { act } from "react-test-renderer";
 import { Image, Modal, Platform, Pressable, Text, View } from "react-native";
 import { EnrichedMarkdownText } from "react-native-enriched-markdown";
-import { MarkdownDocument } from "../MarkdownDocument";
+import { MarkdownDocument, MarkdownDocumentView } from "../MarkdownDocument";
 import { MarkdownBlockRow, MarkdownRowEditorInput } from "../MarkdownBlockRow";
 import { defaultMarkdownStyle } from "../styles";
 import type {
@@ -295,6 +295,12 @@ class NativeOverlayAdapter implements MarkdownDocumentAdapter {
 
   async saveAs() {}
 
+  saveCopy(_documentId: string, _path: string) {}
+
+  async getFileStatus() { return "unchanged"; }
+
+  resolveFilePath(filename: string) { return filename; }
+
   async close() {}
 
   private nextBlockId() {
@@ -329,6 +335,257 @@ function nativeHost(renderer: TestRenderer.ReactTestRenderer) {
     typeof node.props.onEditorFrameChange === "function"
   ));
 }
+
+describe("shared Markdown files", () => {
+  it("joins unsaved edits, shares history, and keeps the backing alive until the last view closes", async () => {
+    const adapter = new NativeOverlayAdapter(snapshot([block("first", 0, "Original")]));
+    jest.spyOn(adapter, "resolveFilePath").mockImplementation(filename => filename.replace(/^alias\//, ""));
+    const load = jest.spyOn(adapter, "load");
+    const close = jest.spyOn(adapter, "close");
+    const save = jest.spyOn(adapter, "save");
+    const first = React.createRef<MarkdownDocumentCommands>();
+    const second = React.createRef<MarkdownDocumentCommands>();
+    const third = React.createRef<MarkdownDocumentCommands>();
+    const dirty = jest.fn();
+    const policy = { autosave: false };
+    function panes(showFirst: boolean, showThird = false) {
+      return <>
+        {showFirst && <MarkdownDocument key="first" adapter={adapter} filename="test.md" shareFile
+          ref={first} autoFocusFirstBlock savePolicy={policy} />}
+        <MarkdownDocument key="second" adapter={adapter} filename="alias/test.md" shareFile
+          ref={second} onDirtyChange={dirty} savePolicy={policy} />
+        {showThird && <MarkdownDocument key="third" adapter={adapter} filename="test.md" shareFile
+          ref={third} savePolicy={policy} />}
+      </>;
+    }
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => { renderer = TestRenderer.create(panes(true)); });
+    try {
+      expect(load).toHaveBeenCalledTimes(1);
+      const peerRevision = () => renderer.root.findAllByType(EnrichedMarkdownText)[1]!.props.nativeMarkdownRevision;
+      const before = peerRevision();
+      await act(async () => editorInput(renderer).props.onChangeMarkdown("Unsaved"));
+      expect(adapter.applyTransactions).toHaveLength(1);
+      expect(dirty).toHaveBeenLastCalledWith(true);
+      expect(peerRevision()).toBeGreaterThan(before);
+      expect((await second.current!.readBlocks()).blocks[0]?.markdown).toBe("Unsaved");
+      await act(async () => renderer.update(panes(true, true)));
+      expect(load).toHaveBeenCalledTimes(1);
+      expect((await third.current!.readBlocks()).blocks[0]?.markdown).toBe("Unsaved");
+      expect(save).not.toHaveBeenCalled();
+
+      await act(async () => second.current!.undo());
+      expect(adapter.applyTransactions).toHaveLength(2);
+      expect((await first.current!.readBlocks()).blocks[0]?.markdown).toBe("Original");
+      await act(async () => renderer.update(panes(false, true)));
+      expect(close).not.toHaveBeenCalled();
+      await act(async () => third.current!.redo());
+      expect(adapter.applyTransactions).toHaveLength(3);
+      expect((await second.current!.readBlocks()).blocks[0]?.markdown).toBe("Unsaved");
+      await act(async () => { await Promise.all([second.current!.save(), third.current!.save()]); });
+      expect(save).toHaveBeenCalledTimes(1);
+      expect(dirty).toHaveBeenLastCalledWith(false);
+    } finally {
+      await act(async () => renderer.unmount());
+    }
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it("merges rapid native input from two views and does not replay a peer update", async () => {
+    const adapter = new NativeOverlayAdapter(snapshot([block("first", 0, "Original"), block("next", 1, "Next")]));
+    const left = React.createRef<MarkdownDocumentCommands>();
+    const right = React.createRef<MarkdownDocumentCommands>();
+    const policy = { autosave: false };
+    let release!: () => void;
+    adapter.pendingTransactionGate = new Promise<void>(resolve => { release = resolve; });
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(<>
+        <View testID="left"><MarkdownDocument adapter={adapter} filename="test.md" shareFile
+          autoFocusFirstBlock ref={left} savePolicy={policy} /></View>
+        <View testID="right"><MarkdownDocument adapter={adapter} filename="test.md" shareFile
+          autoFocusFirstBlock ref={right} savePolicy={policy} /></View>
+      </>);
+    });
+    const leftInput = () => editorInput(renderer.root.findByProps({ testID: "left" }));
+    const rightInput = () => editorInput(renderer.root.findByProps({ testID: "right" }));
+    try {
+      await act(async () => {
+        leftInput().props.onChangeMarkdown("α Original");
+        await Promise.resolve();
+        rightInput().props.onChangeMarkdown("Original β");
+        rightInput().props.onChangeMarkdown("Original βγ");
+        release();
+      });
+      expect(adapter.applyTransactions).toHaveLength(2);
+      expect(adapter.sourceMarkdown).toBe("α Original βγ\n\nNext");
+      const rightHost = renderer.root.findByProps({ testID: "right" }).find((node) => (
+        typeof node.props.activeBlockId === "string" && typeof node.props.onActiveBlockSynchronized === "function"
+      ));
+      // A peer update is acknowledged only after native has safely applied it.
+      await act(async () => rightHost.props.onActiveBlockSynchronized({ nativeEvent: {
+        blockId: "first", before: "Original βγ", after: "α Original βγ",
+      } }));
+      expect(adapter.applyTransactions).toHaveLength(2);
+      await act(async () => rightInput().props.onChangeMarkdown("α Original βγδ"));
+      expect(adapter.sourceMarkdown).toBe("α Original βγδ\n\nNext");
+      await act(async () => left.current!.undo());
+      expect(adapter.sourceMarkdown).toBe("α Original\n\nNext");
+
+      adapter.pendingTransactionGate = new Promise<void>(resolve => { release = resolve; });
+      await act(async () => {
+        leftInput().props.onChangeMarkdown("α Original left");
+        await Promise.resolve();
+        rightInput().props.onChangeMarkdown("α Original βγδ right");
+        rightHost.props.onBeginEditing({ nativeEvent: {
+          blockId: "next", markdown: "Next", height: 25, rowHeight: 25, width: 600, x: 0, y: 40,
+        } });
+        release();
+      });
+      expect(adapter.sourceMarkdown).toBe("α Original left right\n\nNext");
+      expect(rightHost.props.activeBlockId).toBe("next");
+
+      adapter.pendingTransactionGate = new Promise<void>(resolve => { release = resolve; });
+      await act(async () => {
+        leftInput().props.onChangeMarkdown("α Original left!");
+        await Promise.resolve();
+        rightInput().props.onChangeMarkdown("Next with draft");
+        right.current!.focusPreviousBlock();
+        await Promise.resolve();
+        release();
+      });
+      expect(adapter.sourceMarkdown).toBe("α Original left right!\n\nNext with draft");
+      expect(rightHost.props.activeBlockId).toBe("first");
+
+      await act(async () => right.current!.focusNextBlock());
+      expect(rightHost.props.activeBlockId).toBe("next");
+      const leftHost = renderer.root.findByProps({ testID: "left" }).find(node => typeof node.props.onDeleteAtEnd === "function");
+      await act(async () => {
+        leftHost.props.onDeleteAtEnd({ nativeEvent: { blockId: "first" } });
+        rightInput().props.onChangeMarkdown("Next with draft!");
+      });
+      expect(adapter.sourceMarkdown).toBe("α Original left right!Next with draft!");
+      expect(rightHost.props.activeBlockId).toBe("");
+    } finally {
+      await act(async () => renderer.unmount());
+    }
+  });
+
+  it.each([
+    ["split", "Peer Original\n\n suffix\n\nNext"],
+    ["format", "## Peer Original suffix\n\nNext"],
+    ["paste", "Peer Original! suffix\n\nNext"],
+    ["merge", "Peer Original suffixNext"],
+  ] as const)("rebases a native %s while the peer update awaits acknowledgement", async (action, expected) => {
+    const initial = "Original suffix";
+    const adapter = new NativeOverlayAdapter(snapshot([block("first", 0, initial), block("next", 1, "Next")]));
+    const commands = React.createRef<MarkdownDocumentCommands>();
+    const policy = { autosave: false };
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(<>
+        <View testID="left"><MarkdownDocument adapter={adapter} filename="test.md" shareFile
+          autoFocusFirstBlock savePolicy={policy} /></View>
+        <View testID="right"><MarkdownDocument adapter={adapter} filename="test.md" shareFile
+          autoFocusFirstBlock ref={commands} savePolicy={policy} /></View>
+      </>);
+    });
+    try {
+      const leftInput = editorInput(renderer.root.findByProps({ testID: "left" }));
+      const host = renderer.root.findByProps({ testID: "right" }).find(node => typeof node.props.onEnterPressed === "function");
+      await act(async () => leftInput.props.onChangeMarkdown("Peer " + initial));
+      await act(async () => {
+        const nativeEvent = { blockId: "first", beforeMarkdown: "Original", afterMarkdown: " suffix" };
+        if (action === "split") host.props.onEnterPressed({ nativeEvent });
+        if (action === "paste") host.props.onPasteMarkdown({ nativeEvent: { ...nativeEvent, text: "!" } });
+        if (action === "format") commands.current!.setHeading(2);
+        if (action === "merge") host.props.onDeleteAtEnd({ nativeEvent });
+      });
+      expect(adapter.sourceMarkdown).toBe(expected);
+      await act(async () => commands.current!.undo());
+      expect(adapter.sourceMarkdown).toBe("Peer Original suffix\n\nNext");
+    } finally {
+      await act(async () => renderer.unmount());
+    }
+  });
+
+  it("loads the new watch path when another pane opens a sole view's Save As destination", async () => {
+    const adapter = new NativeOverlayAdapter(snapshot([block("first", 0, "Original")]));
+    Object.assign(adapter, { saveAsSync: jest.fn() });
+    const load = jest.spyOn(adapter, "load");
+    const commands = React.createRef<MarkdownDocumentCommands>();
+    const onLoaded = jest.fn();
+    const policy = { autosave: false };
+    const panes = (join: boolean) => <>
+      <MarkdownDocument key="original" adapter={adapter} filename="test.md" shareFile ref={commands} savePolicy={policy} />
+      {join && <MarkdownDocument key="joined" adapter={adapter} filename="copy.md" shareFile
+        onLoaded={onLoaded} savePolicy={policy} />}
+    </>;
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => { renderer = TestRenderer.create(panes(false)); });
+    try {
+      await act(async () => { await commands.current!.saveAs("copy.md"); });
+      await act(async () => renderer.update(panes(true)));
+      expect(load).toHaveBeenCalledTimes(1);
+      expect(onLoaded).toHaveBeenLastCalledWith(expect.objectContaining({ filename: "copy.md" }));
+    } finally {
+      await act(async () => renderer.unmount());
+    }
+  });
+
+  it("preserves the original backing on Save As and publishes one external conflict to both views", async () => {
+    const adapter = new NativeOverlayAdapter(snapshot([block("first", 0, "Original")]));
+    const load = jest.spyOn(adapter, "load");
+    const saveCopy = jest.spyOn(adapter, "saveCopy");
+    const checkFile = jest.spyOn(adapter, "getFileStatus");
+    const left = React.createRef<MarkdownDocumentCommands>();
+    const right = React.createRef<MarkdownDocumentCommands>();
+    const leftConflict = jest.fn();
+    const rightConflict = jest.fn();
+    const rightDirty = jest.fn();
+    const policy = { autosave: false };
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(<>
+        <MarkdownDocument adapter={adapter} filename="test.md" shareFile autoFocusFirstBlock
+          ref={left} onConflictChange={leftConflict} savePolicy={policy} />
+        <MarkdownDocument adapter={adapter} filename="test.md" shareFile
+          ref={right} onConflictChange={rightConflict} onDirtyChange={rightDirty} savePolicy={policy} />
+      </>);
+    });
+    try {
+      await act(async () => editorInput(renderer).props.onChangeMarkdown("Local"));
+      await act(async () => { await left.current!.saveAs("copy.md"); });
+      expect(saveCopy).toHaveBeenCalledWith("test-document", "copy.md");
+      expect(rightDirty).toHaveBeenLastCalledWith(true);
+      expect(right.current!.getCloseState()?.document).toBe(left.current!.getCloseState()?.document);
+      expect(adapter.sourceMarkdown).toBe("Local");
+
+      checkFile.mockResolvedValueOnce("changed");
+      await act(async () => {
+        await Promise.all([left.current!.checkForExternalChanges(), right.current!.checkForExternalChanges()]);
+      });
+      expect(checkFile).toHaveBeenCalledTimes(1);
+      expect(leftConflict).toHaveBeenLastCalledWith("changed");
+      expect(rightConflict).toHaveBeenLastCalledWith("changed");
+      expect(load).toHaveBeenCalledTimes(1);
+
+      const closedWithOldEditor: boolean[] = [];
+      jest.spyOn(adapter, "close").mockImplementationOnce(async () => {
+        closedWithOldEditor.push(renderer.root.findAllByType(MarkdownRowEditorInput)
+          .some(input => input.props.block.markdown === "Local"));
+      });
+      await act(async () => right.current!.reload());
+      expect(closedWithOldEditor).toEqual([false]);
+      expect(load).toHaveBeenCalledTimes(2);
+      expect(leftConflict).toHaveBeenLastCalledWith(null);
+      expect(rightDirty).toHaveBeenLastCalledWith(false);
+      expect((await right.current!.readBlocks()).blocks[0]?.markdown).toBe("Original");
+    } finally {
+      await act(async () => renderer.unmount());
+    }
+  });
+});
 
 describe("native document text selection", () => {
   it.each(["```ts\n", "~~~~swift\n", "  ```js\r\n"])("extends block selection upward from the code body after %j", async (opening) => {
@@ -1977,13 +2234,13 @@ describe("MarkdownDocument native row editor", () => {
     }
   });
 
-  it("persists rendered task checkbox changes with undo and redo without opening the editor", async () => {
+  it.each([false, true])("persists rendered task checkbox changes with undo and redo (shared: %s)", async (shareFile) => {
     const original = "- [ ] First\n- [x] Second";
     const adapter = new NativeOverlayAdapter(snapshot([{ ...block("d1:b0", 0, original), markdownLength: original.length }]), { metadataOnlySyncBlocks: true });
     const commands = React.createRef<MarkdownDocumentCommands>();
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      renderer = TestRenderer.create(<MarkdownDocument ref={commands} adapter={adapter} filename="test.md" savePolicy={{ autosave: false }} />);
+      renderer = TestRenderer.create(<MarkdownDocument ref={commands} adapter={adapter} filename="test.md" shareFile={shareFile} savePolicy={{ autosave: false }} />);
     });
     await act(async () => {
       await activationView(renderer, "d1:b0").findByType(EnrichedMarkdownText).props.onTaskListItemPress({ index: 0, checked: true, text: "First" });
@@ -2071,7 +2328,7 @@ describe("MarkdownDocument native row editor", () => {
 });
 
 it("updates native selection offsets without rendering the document owner", async () => {
-  const renderSpy = jest.spyOn(MarkdownDocument as unknown as { render: (...args: unknown[]) => unknown }, "render");
+  const renderSpy = jest.spyOn(MarkdownDocumentView as unknown as { render: (...args: unknown[]) => unknown }, "render");
   const adapter = new NativeOverlayAdapter(snapshot([block("a", 0, "alpha"), block("b", 1, "bravo")]));
   const onCommandStateChange = jest.fn();
   const commands = React.createRef<MarkdownDocumentCommands>();

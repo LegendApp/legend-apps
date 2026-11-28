@@ -608,6 +608,63 @@ static void collectSelectionTextViews(NSView *view, NSMutableArray<NSTextView *>
   [NSPasteboard.generalPasteboard clearContents];
   [NSPasteboard.generalPasteboard setString:markdown forType:NSPasteboardTypeString];
 }
+- (void)synchronizeActiveBlock:(NSString *)blockId before:(NSString *)before after:(NSString *)after
+{
+  if (![_activeBlockId isEqualToString:blockId]) return;
+  id input = [self activeEditorInput];
+  auto emitter = std::static_pointer_cast<const MarkdownEditorHostEventEmitter>(_eventEmitter);
+  if (input == nil || !emitter) return;
+
+  NSMutableArray<NSTextView *> *textViews = [NSMutableArray new];
+  collectSelectionTextViews(input, textViews);
+  NSTextView *textView = textViews.firstObject;
+  if (textView == nil || textView.hasMarkedText) return;
+
+  SEL currentMarkdownSelector = NSSelectorFromString(@"currentMarkdown");
+  SEL setValue = NSSelectorFromString(@"setValuePreservingSelection:");
+  SEL setSelection = NSSelectorFromString(@"setSelection:end:");
+  if (![input respondsToSelector:currentMarkdownSelector] ||
+      ![input respondsToSelector:setValue] || ![input respondsToSelector:setSelection]) return;
+  NSString *(*readMarkdown)(id, SEL) = (decltype(readMarkdown))[input methodForSelector:currentMarkdownSelector];
+  if (![readMarkdown(input, currentMarkdownSelector) isEqualToString:before]) return;
+
+  const NSRange selection = textView.selectedRange;
+  NSString *previousText = [textView.string copy];
+  NSClipView *clipView = _observedScrollView.contentView;
+  const NSPoint scroll = clipView.bounds.origin;
+  void (*writeMarkdown)(id, SEL, NSString *) = (decltype(writeMarkdown))[input methodForSelector:setValue];
+  writeMarkdown(input, setValue, after);
+  NSString *nextText = textView.string;
+  NSUInteger start = 0;
+  NSUInteger previousEnd = previousText.length;
+  NSUInteger nextEnd = nextText.length;
+  while (start < previousEnd && start < nextEnd &&
+         [previousText characterAtIndex:start] == [nextText characterAtIndex:start]) start++;
+  while (previousEnd > start && nextEnd > start &&
+         [previousText characterAtIndex:previousEnd - 1] == [nextText characterAtIndex:nextEnd - 1]) {
+    previousEnd--;
+    nextEnd--;
+  }
+  const auto mapOffset = [=](NSUInteger offset) {
+    if (offset < start) return offset;
+    if (offset >= previousEnd) return MIN(nextText.length, nextEnd + offset - previousEnd);
+    return MIN(offset, nextEnd);
+  };
+  const NSUInteger selectionStart = mapOffset(selection.location);
+  const NSUInteger selectionEnd = mapOffset(NSMaxRange(selection));
+  if (!NSEqualRanges(textView.selectedRange, NSMakeRange(selectionStart, selectionEnd - selectionStart))) {
+    void (*writeSelection)(id, SEL, NSInteger, NSInteger) = (decltype(writeSelection))[input methodForSelector:setSelection];
+    writeSelection(input, setSelection, selectionStart, selectionEnd);
+  }
+  if (clipView != nil) [clipView scrollToPoint:scroll];
+
+  emitter->onActiveBlockSynchronized({
+    .blockId = std::string(blockId.UTF8String ?: ""),
+    .before = std::string(before.UTF8String ?: ""),
+    .after = std::string(after.UTF8String ?: ""),
+  });
+}
+
 - (void)handleCommand:(const NSString *)commandName args:(const NSArray *)args {
   RCTMarkdownEditorHostHandleCommand(self, commandName, args);
 }

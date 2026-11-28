@@ -22,6 +22,7 @@ export type UpdateBlockHistoryEntry = {
   blockId: string;
   beforeMarkdown: string;
   afterMarkdown: string;
+  selectionOwner?: object;
   beforeSelection?: { start: number; end: number };
   afterSelection?: { start: number; end: number };
 };

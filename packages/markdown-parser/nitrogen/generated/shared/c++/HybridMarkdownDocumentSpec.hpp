@@ -78,6 +78,7 @@ namespace margelo::nitro::legendapps::markdownparser {
       virtual void overwrite() = 0;
       virtual void save() = 0;
       virtual void saveAs(const std::string& filePath) = 0;
+      virtual void saveCopy(const std::string& filePath) = 0;
 
     protected:
       // Hybrid Setup

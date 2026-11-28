@@ -84,12 +84,14 @@ export interface MarkdownDocument
   overwrite(): void;
   save(): void;
   saveAs(filePath: string): void;
+  saveCopy(filePath: string): void;
 }
 
 export interface MarkdownParser
   extends HybridObject<{
     ios: "c++";
   }> {
+  resolveFilePath(filePath: string): string;
   createMarkdownDocument(markdown: string, initialBlockCount: number): Promise<MarkdownFileLoadResult>;
   loadMarkdownFile(filePath: string, initialBlockCount: number): Promise<MarkdownFileLoadResult>;
 }

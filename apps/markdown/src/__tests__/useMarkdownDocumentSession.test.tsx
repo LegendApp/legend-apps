@@ -175,7 +175,7 @@ describe("useMarkdownDocumentSession", () => {
     expect(session.sessionState$.isDirty.peek()).toBe(true);
     dialog.mockResolvedValueOnce({ canceled: false, path: "/tmp/notes copy.md" });
     expect(await session.saveCurrentDocumentAs(true)).toBe(true);
-    expect(saveAs).toHaveBeenCalledWith("/tmp/notes copy.md");
+    expect(saveAs).toHaveBeenCalledWith("/tmp/notes copy.md", true);
     expect(session.sessionState$.filename.peek()).toBe("/tmp/notes copy.md");
     expect(session.sessionState$.conflict.peek()).toBeNull();
     await view.unmount();
@@ -219,7 +219,7 @@ describe("useMarkdownDocumentSession", () => {
     session.documentCommandsRef.current = { saveAs } as unknown as MarkdownDocumentCommands;
     resolveDialog({ canceled: false, path: "/tmp/copy.md" });
     expect(await save).toBe(true);
-    expect(saveAs).toHaveBeenCalledWith("/tmp/copy.md");
+    expect(saveAs).toHaveBeenCalledWith("/tmp/copy.md", true);
     await view.unmount();
   });
 
@@ -268,6 +268,28 @@ describe("useMarkdownDocumentSession", () => {
     session.setIsDirty(true);
     return session;
   }
+
+  it("skips a shared close prompt only while another view survives or the group approved it", async () => {
+    const session = await openSession();
+    const document = {};
+    const view = {};
+    const other = {};
+    const group = { views: new Set([view, other]), approvedDocuments: new Set<object>() };
+    session.documentCommandsRef.current = {
+      getCloseState: () => ({ document, view, views: group.views }),
+    } as unknown as MarkdownDocumentCommands;
+
+    const close = (options = {}) => session.prepareCurrentDocumentForClose({ autosaveEnabled: false, ...options });
+    expect(await close()).toBe(true);
+    expect(mockConfirmDirtyDocumentTransition).not.toHaveBeenCalled();
+
+    mockConfirmDirtyDocumentTransition.mockResolvedValueOnce("cancel").mockResolvedValueOnce("discard");
+    expect(await close({ group })).toBe(false);
+    expect(group.approvedDocuments.size).toBe(0);
+    expect(await close({ group })).toBe(true);
+    expect(await close({ group })).toBe(true);
+    expect(mockConfirmDirtyDocumentTransition).toHaveBeenCalledTimes(2);
+  });
 
   it.each(["close", "quit"] as const)("preserves unsaved work when %s is canceled", async (transition) => {
     const session = await openSession();

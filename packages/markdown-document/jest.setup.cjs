@@ -138,7 +138,7 @@ jest.mock("@legend-apps/markdown-block-editor", () => {
 
   return {
     MarkdownImageViewer: require("../markdown-block-editor/src/MarkdownImageViewer").MarkdownImageViewer,
-    MarkdownEditorHostCommands: { beginKeyboardHandoff: jest.fn(), cancelKeyboardHandoff: jest.fn(), completeKeyboardHandoff: jest.fn(), writeSelectionClipboard: jest.fn(), setSelectionAfterMarkdown: jest.fn() },
+    MarkdownEditorHostCommands: { beginKeyboardHandoff: jest.fn(), cancelKeyboardHandoff: jest.fn(), completeKeyboardHandoff: jest.fn(), writeSelectionClipboard: jest.fn(), setSelectionAfterMarkdown: jest.fn(), synchronizeActiveBlock: jest.fn() },
     MarkdownBlockActivationView: React.forwardRef(({ children, ...props }, ref) => (
       React.createElement(View, { ...props, ref }, children)
     )),

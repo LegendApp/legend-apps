@@ -16,6 +16,11 @@ import { getDirectory, getFilename, isMarkdownPath } from "./markdownFiles";
 import { clearLastMarkdownDocumentPath, setLastMarkdownDocumentPath } from "./markdownSettings";
 import { isMarkdownDraft, removeMarkdownDraft } from "./markdownDrafts";
 
+export type MarkdownCloseGroup = {
+  views: ReadonlySet<object>;
+  approvedDocuments: Set<object>;
+};
+
 export type DocumentSource = "file" | "draft";
 
 export type MarkdownDocumentSessionState = {
@@ -24,6 +29,7 @@ export type MarkdownDocumentSessionState = {
   documentSource: DocumentSource;
   filename: string | null;
   isDirty: boolean;
+  watchedFilename: string | null;
   lastError: string | null;
   saveState: MarkdownSaveState;
 };
@@ -52,16 +58,20 @@ export function useMarkdownDocumentSession({ onOpenFile, onFileSavedAs, windowId
     isDirty: false,
     lastError: null,
     saveState: "idle",
+    watchedFilename: null,
   });
   const documentCommandsRef = useRef<MarkdownDocumentCommands | null>(null);
   const openDialogInFlight = useRef(false);
   const documentGenerationRef = useRef(0);
 
-  const handleDocumentLoaded = useCallback(() => {
+  const handleDocumentLoaded = useCallback((loadedFilename?: string) => {
     documentGenerationRef.current += 1;
     if (sessionState$.lastError.peek()) sessionState$.lastError.set(null);
     const { documentSource, filename } = sessionState$.peek();
-    if (filename && documentSource === "file") markOpenedFile(filename);
+    if (filename && documentSource === "file") {
+      sessionState$.watchedFilename.set(loadedFilename ?? filename);
+      markOpenedFile(filename);
+    }
   }, [sessionState$]);
 
   const handleError = useCallback((error: unknown) => {
@@ -106,6 +116,7 @@ export function useMarkdownDocumentSession({ onOpenFile, onFileSavedAs, windowId
       conflict: null,
       documentSource: isMarkdownDraft(path) ? "draft" : "file",
       filename: path,
+      watchedFilename: null,
       isDirty: false,
       lastError: null,
       saveState: "idle",
@@ -127,6 +138,7 @@ export function useMarkdownDocumentSession({ onOpenFile, onFileSavedAs, windowId
       conflict: null,
       documentSource: "file",
       filename: path,
+      watchedFilename: path,
       isDirty: false,
       lastError: null,
       saveState: "idle",
@@ -168,10 +180,13 @@ export function useMarkdownDocumentSession({ onOpenFile, onFileSavedAs, windowId
       if (saveSeparately && path === originalFilename) {
         throw new Error("Choose a different filename to save your local version separately.");
       }
-      await documentCommandsRef.current.saveAs(path);
+      const commands = documentCommandsRef.current;
+      const original = commands.getCloseState?.();
+      if (saveSeparately) await commands.saveAs(path, true);
+      else await commands.saveAs(path);
       if (!isCurrentDocument()) return false;
       completeSaveAs(originalFilename, path);
-      if (isDraft) {
+      if (isDraft && (!original || ![...original.views].some(view => view !== original.view))) {
         try {
           removeMarkdownDraft(originalFilename);
         } catch (error) {
@@ -206,17 +221,33 @@ export function useMarkdownDocumentSession({ onOpenFile, onFileSavedAs, windowId
   const prepareCurrentDocumentForClose = useCallback(async ({
     autosaveEnabled,
     reason = "close",
+    group,
   }: {
     autosaveEnabled: boolean;
     reason?: "close" | "quit";
+    group?: MarkdownCloseGroup;
   }) => {
     const state = sessionState$.peek();
     if (!state.filename || (!state.isDirty && !state.conflict)) {
       return true;
     }
 
+    const closing = documentCommandsRef.current?.getCloseState?.();
+    if (closing) {
+      if (group?.approvedDocuments.has(closing.document)) return true;
+      if (reason !== "quit") {
+        for (const view of closing.views) {
+          if (view !== closing.view && !group?.views.has(view)) return true;
+        }
+      }
+    }
+    const approve = (approved: boolean) => {
+      if (approved && closing) group?.approvedDocuments.add(closing.document);
+      return approved;
+    };
+
     if (state.documentSource !== "draft" && autosaveEnabled && !state.conflict) {
-      return saveCurrentDocument();
+      return approve(await saveCurrentDocument());
     }
 
     const action = await confirmDirtyDocumentTransition({
@@ -224,13 +255,8 @@ export function useMarkdownDocumentSession({ onOpenFile, onFileSavedAs, windowId
       reason,
     });
 
-    if (action === "discard") {
-      return true;
-    }
-
-    if (action === "save") {
-      return saveCurrentDocument();
-    }
+    if (action === "discard") return approve(true);
+    if (action === "save") return approve(await saveCurrentDocument());
 
     return false;
   }, [saveCurrentDocument, sessionState$]);

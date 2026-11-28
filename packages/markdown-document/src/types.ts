@@ -88,6 +88,9 @@ export type MarkdownDocumentAdapter = {
   overwrite?(documentId: string): Promise<void>;
   save(documentId: string): Promise<void>;
   saveAs(documentId: string, filename: string): Promise<void>;
+  saveAsSync?(documentId: string, filename: string): void;
+  saveCopy?(documentId: string, filename: string): void;
+  resolveFilePath?(filename: string): string;
   close(documentId: string): Promise<void>;
   applyTransaction?: (
     documentId: string,
@@ -99,9 +102,10 @@ export type MarkdownDocumentAdapter = {
 export type MarkdownDocumentCommands = {
   reload(): void;
   checkForExternalChanges(): Promise<void>;
+  getCloseState(): { document: object; view: object; views: Iterable<object> } | undefined;
   overwrite(): Promise<void>;
   save(): Promise<void>;
-  saveAs(filename: string): Promise<void>;
+  saveAs(filename: string, requireDifferentFile?: boolean): Promise<void>;
   undo(): void;
   redo(): void;
   selectAll(): void;
@@ -209,6 +213,8 @@ export type MarkdownDocumentLayout = {
 
 export type MarkdownDocumentProps = {
   filename: string;
+  /** Reuse the open backing when this file is shown in another view. */
+  shareFile?: boolean;
   adapter?: MarkdownDocumentAdapter;
   autoFocusFirstBlock?: boolean;
   /** Retain the active text range while an external formatting control owns focus. */

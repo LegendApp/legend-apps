@@ -29,6 +29,7 @@ namespace margelo::nitro::legendapps::markdownparser {
       prototype.registerHybridMethod("overwrite", &HybridMarkdownDocumentSpec::overwrite);
       prototype.registerHybridMethod("save", &HybridMarkdownDocumentSpec::save);
       prototype.registerHybridMethod("saveAs", &HybridMarkdownDocumentSpec::saveAs);
+      prototype.registerHybridMethod("saveCopy", &HybridMarkdownDocumentSpec::saveCopy);
     });
   }
 

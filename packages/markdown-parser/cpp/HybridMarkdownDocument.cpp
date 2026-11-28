@@ -888,7 +888,7 @@ std::shared_ptr<Promise<std::string>> HybridMarkdownDocument::getFileStatus() {
 void HybridMarkdownDocument::overwrite() {
   std::lock_guard<std::mutex> lock(documentMutex_);
   if (filePath_.empty()) throw std::runtime_error("Cannot save markdown document without a file path.");
-  writeToFilePath(filePath_, false);
+  savedSource_ = writeToFilePath(filePath_, false);
 }
 
 void HybridMarkdownDocument::save() {
@@ -897,7 +897,7 @@ void HybridMarkdownDocument::save() {
     throw std::runtime_error("Cannot save markdown document without a file path.");
   }
 
-  writeToFilePath(filePath_);
+  savedSource_ = writeToFilePath(filePath_);
 }
 
 void HybridMarkdownDocument::saveAs(const std::string& filePath) {
@@ -906,8 +906,17 @@ void HybridMarkdownDocument::saveAs(const std::string& filePath) {
     throw std::runtime_error("Cannot save markdown document without a file path.");
   }
 
-  writeToFilePath(filePath);
+  savedSource_ = writeToFilePath(filePath);
   filePath_ = filePath;
+}
+
+void HybridMarkdownDocument::saveCopy(const std::string& filePath) {
+  std::lock_guard<std::mutex> lock(documentMutex_);
+  if (filePath.empty()) {
+    throw std::runtime_error("Cannot save markdown document without a file path.");
+  }
+
+  writeToFilePath(filePath);
 }
 
 const std::string& HybridMarkdownDocument::documentId() const noexcept {
@@ -924,7 +933,7 @@ std::string HybridMarkdownDocument::markdownForBlockId(const std::string& blockI
   return blockSequence_->markdownForId(blockId);
 }
 
-void HybridMarkdownDocument::writeToFilePath(const std::string& requestedPath, bool checkBaseline) {
+std::shared_ptr<const std::string> HybridMarkdownDocument::writeToFilePath(const std::string& requestedPath, bool checkBaseline) {
   // Atomic replacement must replace the document, not a symbolic link used to open it.
   const std::string filePath = std::filesystem::is_symlink(requestedPath)
       ? std::filesystem::canonical(requestedPath).string()
@@ -995,7 +1004,7 @@ void HybridMarkdownDocument::writeToFilePath(const std::string& requestedPath, b
     std::remove(temporaryPath.c_str());
     throw std::runtime_error("Failed to replace markdown file: " + filePath);
   }
-  savedSource_ = nextBaseline;
+  return nextBaseline;
 }
 
 size_t HybridMarkdownDocument::getExternalMemorySize() noexcept {

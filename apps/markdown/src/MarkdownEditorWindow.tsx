@@ -62,7 +62,7 @@ import {
   useMarkdownWindowCloseRequest,
   useRecentMarkdownDocumentOpener,
 } from "./useMarkdownDocumentEvents";
-import { useMarkdownDocumentSession } from "./useMarkdownDocumentSession";
+import { useMarkdownDocumentSession, type MarkdownCloseGroup } from "./useMarkdownDocumentSession";
 import { useMarkdownKeyboardShortcuts } from "./useMarkdownKeyboardShortcuts";
 import { useMarkdownMenus } from "./useMarkdownMenus";
 import {
@@ -139,7 +139,10 @@ type PaneCommands = Omit<Parameters<typeof useMarkdownMenus>[0]["paneCommands"],
 type PaneCommandState = Parameters<typeof useMarkdownMenus>[0]["paneCommandState"];
 
 type CloseReason = "close" | "quit";
-type PrepareTabForClose = (reason: CloseReason) => Promise<string | null>;
+type PrepareTabForClose = {
+  view: () => object | undefined;
+  prepare: (reason: CloseReason, group?: MarkdownCloseGroup) => Promise<string | null>;
+};
 
 type PaneActions = {
   /** Whether the tab being dragged in this window can drop on that part of the pane. */
@@ -152,9 +155,9 @@ type PaneActions = {
   openTab: (paneId: string, path: string) => void;
   /** Opens a file from the tab `from` (null in an idle pane) unless that tab has since closed, moved or been replaced. */
   openFrom: (paneId: string, from: string | null, editorKey: number | undefined, file: string) => void;
-  /** Open File: like openFrom, but a document tab gives way to the file once it is saved or discarded. */
+  /** Replaces the source tab after its close check. */
   openInPlace: (paneId: string, from: string | null, editorKey: number | undefined, file: string) => Promise<void>;
-  register: (paneId: string, prepareForClose: (reason: CloseReason, path?: string) => Promise<boolean>) => () => void;
+  register: (paneId: string, tabsForClose: (path?: string) => PrepareTabForClose[]) => () => void;
   renameTab: (paneId: string, from: string, to: string) => void;
 };
 
@@ -288,10 +291,17 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
   const canSplitDown = canSplitPane(focusedFrame, "vertical", paneMinHeight);
   const hasOtherPanes = layout.root.kind === "split";
 
-  const paneClosers = useRef(new Map<string, (reason: CloseReason, path?: string) => Promise<boolean>>());
-  const preparePanes = useCallback(async (ids: string[], reason: CloseReason = "close", path?: string) => {
-    for (const id of ids) {
-      if (!await (paneClosers.current.get(id)?.(reason, path) ?? true)) return false;
+  const paneClosers = useRef(new Map<string, (path?: string) => PrepareTabForClose[]>());
+  const preparePanes = useCallback(async (ids: string[], reason: CloseReason = "close", path?: string,
+    approvedDocuments = new Set<object>()) => {
+    const closers = ids.flatMap(id => paneClosers.current.get(id)?.(path) ?? []);
+    const views = new Set<object>();
+    for (const closer of closers) {
+      const view = closer.view();
+      if (view) views.add(view);
+    }
+    for (const closer of closers) {
+      if (!await closer.prepare(reason, { views, approvedDocuments })) return false;
     }
     return true;
   }, []);
@@ -492,7 +502,7 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
     },
   });
   useEffect(() => e2eRun ? undefined : registerMarkdownWindowQuitGuard({
-    prepare: () => preparePanes(getPaneIds(layoutStateRef.current.layout.root), "quit"),
+    prepare: (approvedDocuments) => preparePanes(getPaneIds(layoutStateRef.current.layout.root), "quit", undefined, approvedDocuments),
     discardDrafts: discardWindowDrafts,
   }), [discardWindowDrafts, e2eRun, preparePanes]);
 
@@ -669,12 +679,10 @@ function MarkdownPane({
     tabClosers.current.set(path, prepare);
     return () => { if (tabClosers.current.get(path) === prepare) tabClosers.current.delete(path); };
   }, []);
-  useEffect(() => actions.register(paneId, async (reason, path) => {
-    const prepares = path === undefined ? [...tabClosers.current.values()] : [tabClosers.current.get(path)];
-    for (const prepare of prepares) {
-      if (prepare && !await prepare(reason)) return false;
-    }
-    return true;
+  useEffect(() => actions.register(paneId, (path) => {
+    if (path === undefined) return [...tabClosers.current.values()];
+    const closer = tabClosers.current.get(path);
+    return closer ? [closer] : [];
   }), [actions, paneId]);
 
   const openTab = useCallback((path: string) => actions.openTab(paneId, path), [actions, paneId]);
@@ -699,7 +707,7 @@ function MarkdownPane({
   }, [editorKeys, folders.length]);
   const closeTab = useCallback(async (path: string) => {
     const prepare = tabClosers.current.get(path);
-    const closingPath = prepare ? await prepare("close") : path;
+    const closingPath = prepare ? await prepare.prepare("close") : path;
     if (!closingPath) return;
     actions.closeTab(paneId, closingPath, editorKeys.get(path));
   }, [actions, editorKeys, paneId]);
@@ -842,11 +850,14 @@ function MarkdownTabEditor({
   }, [documentPath, openSelectedFile]);
   useEffect(() => {
     if (!documentPath) return;
-    return registerTab(documentPath, async reason => {
-      const ready = await prepareCurrentDocumentForClose({ autosaveEnabled, reason });
-      return ready ? sessionState$.filename.peek() : null;
+    return registerTab(documentPath, {
+      view: () => documentCommandsRef.current?.getCloseState?.()?.view,
+      prepare: async (reason, group) => {
+        const ready = await prepareCurrentDocumentForClose({ autosaveEnabled, reason, group });
+        return ready ? sessionState$.filename.peek() : null;
+      },
     });
-  }, [autosaveEnabled, documentPath, prepareCurrentDocumentForClose, registerTab, sessionState$]);
+  }, [autosaveEnabled, documentCommandsRef, documentPath, prepareCurrentDocumentForClose, registerTab, sessionState$]);
   useEffect(() => {
     if (!visible) documentCommandsRef.current?.commitAndBlurActiveBlock();
   }, [documentCommandsRef, visible]);
@@ -987,9 +998,11 @@ function FocusedPaneBindings({ closeActiveTab, commandState, commands, nativeWin
 export default MarkdownEditorWindow;
 
 function MarkdownFileWatcher({ session }: { session: MarkdownDocumentSession }) {
-  const filename = useValue(session.sessionState$.filename);
-  const documentSource = useValue(session.sessionState$.documentSource);
-  const watchedFilePath = filename && documentSource !== "draft" ? filename : null;
+  const watchedFilePath = useValue(() => {
+    const state = session.sessionState$;
+    return state.documentSource.get() === "file"
+      ? state.watchedFilename.get() ?? state.filename.get() : null;
+  });
   const checkDocument = useCallback(() => {
     session.documentCommandsRef.current?.checkForExternalChanges().catch(session.handleError);
   }, [session.documentCommandsRef, session.handleError]);
@@ -1181,14 +1194,15 @@ const MarkdownDocumentSurface = memo(function MarkdownDocumentSurface({
         adapter={nativeMarkdownDocumentAdapter}
         commandsRef={session.documentCommandsRef}
         filename={filename}
+        shareFile
         markdownLayout={markdownLayout}
         markdownStyle={markdownStyle}
         onCommandStateChange={session.setCommandState}
         onDirtyChange={session.setIsDirty}
         onError={session.handleError}
         onLoadError={session.handleDocumentLoadError}
-        onLoaded={({ sourceSize }) => {
-          session.handleDocumentLoaded();
+        onLoaded={({ filename, sourceSize }) => {
+          session.handleDocumentLoaded(filename);
           if (sourceSize === 0 && focused) session.documentCommandsRef.current?.focusFirstBlock();
         }}
         onConflictChange={session.setConflict}

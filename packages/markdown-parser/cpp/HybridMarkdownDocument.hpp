@@ -79,6 +79,7 @@ public:
   void overwrite() override;
   void save() override;
   void saveAs(const std::string& filePath) override;
+  void saveCopy(const std::string& filePath) override;
   std::string filePath() const;
   const std::string& documentId() const noexcept;
   std::string markdownForBlockId(const std::string& blockId) const;
@@ -106,7 +107,7 @@ private:
       const std::vector<size_t>& changedBlockIndices,
       std::vector<std::string> retiredBlockIds = {},
       bool retainsFirstChangedBlock = false) const;
-  void writeToFilePath(const std::string& filePath, bool checkBaseline = true);
+  std::shared_ptr<const std::string> writeToFilePath(const std::string& filePath, bool checkBaseline = true);
   void resetDocument(std::string source, std::vector<MarkdownBlockRange> blocks);
   std::string nextBlockId();
 
