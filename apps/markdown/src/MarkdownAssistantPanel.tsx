@@ -33,6 +33,9 @@ export function MarkdownAssistantPanel({ assistant, onClose }: { assistant: Mark
         </Pressable>
       </View>
       <ScrollView className="flex-1" contentContainerClassName="gap-4 px-4 pb-4" onContentSizeChange={() => scroll.current?.scrollToEnd()} ref={scroll}>
+        {messages.length ? null : (
+          <Text className="text-xs text-text-secondary" selectable>Your chat and relevant settings go to Claude. Organization-managed hooks can receive the prompt.</Text>
+        )}
         {messages.map(message => (
           <Message
             key={message.id}

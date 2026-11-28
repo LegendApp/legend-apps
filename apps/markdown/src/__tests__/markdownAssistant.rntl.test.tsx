@@ -242,10 +242,14 @@ describe("createMarkdownAssistant", () => {
 it("runs send, After, Discard, then send and Apply through the panel", async () => {
   const assistant = createMarkdownAssistant({ run: async () => longForm });
   const view = await render(<MarkdownAssistantPanel assistant={assistant} onClose={jest.fn()} />);
+  const notice = "Your chat and relevant settings go to Claude. Organization-managed hooks can receive the prompt.";
+  // Non-selectable text is not an accessibility element on macOS.
+  expect(view.getByText(notice).props.selectable).toBe(true);
 
   await fireEvent.changeText(view.getByLabelText("Ask Assistant"), "Make this nicer for long-form writing");
   await fireEvent(view.getByLabelText("Ask Assistant"), "submitEditing");
   await view.findByText("Here are 4 settings changes. Switch to After to see them in the editor.");
+  expect(view.queryByText(notice)).toBeNull();
   expect(view.getByLabelText("Font: Theme to Serif").props.accessible).toBe(true);
   expect(view.getByLabelText("Formatting Toolbar: Top to Floating")).toBeTruthy();
 
