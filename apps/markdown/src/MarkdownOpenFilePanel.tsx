@@ -1,14 +1,15 @@
 import { useRoutedHotkeys } from "@legendapp/spark/shortcuts/commands";
+import { TextInputSearch, type TextInputSearchRef } from "@legendapp/spark/ui/search";
 import { listWorkspaceFiles } from "@legend-apps/workspace";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { getRecentMarkdownFiles } from "./appMetadata";
 import { isMarkdownPath } from "./markdownFiles";
 import { markdownHotkeyRouter } from "./markdownHotkeys";
 import { findOpenFileResults } from "./markdownOpenFile";
 
 const rowHeight = 28;
-/** The pane body Open File needs: its 26 pt of margins, 2 pt of borders, the 38 pt search field, a 22 pt results viewport and the 32 pt footer. */
+/** The pane body Open File needs: its 26 pt of margins, 2 pt of borders, the 38 pt search header, a 22 pt results viewport and the 32 pt footer. */
 export const openFilePanelMinHeight = 120;
 const panelDefinitions = [
   { id: "next", title: "Next File", defaultBindings: ["Down"], repeat: true },
@@ -33,7 +34,7 @@ export function MarkdownOpenFilePanel({ folders, onBrowse, onDismiss, onError, o
   const [query, setQuery] = useState("");
   const [highlighted, setHighlighted] = useState(0);
   // autoFocus does not take focus on macOS here, so focus once the panel is in the window.
-  const input = useRef<TextInput>(null);
+  const input = useRef<TextInputSearchRef>(null);
   useEffect(() => {
     const timeout = setTimeout(() => input.current?.focus(), 0);
     return () => clearTimeout(timeout);
@@ -79,47 +80,50 @@ export function MarkdownOpenFilePanel({ folders, onBrowse, onDismiss, onError, o
   return (
     <View style={StyleSheet.absoluteFill}>
       <Pressable accessible={false} onPress={onDismiss} style={StyleSheet.absoluteFill} />
-      <View accessibilityLabel="Open File" accessibilityRole="menu" className="border border-border bg-surface" style={styles.panel}>
-        <TextInput
-          accessibilityLabel="Search Markdown files"
-          autoCorrect={false}
-          className="border-b border-border text-foreground"
-          onChangeText={text => { setQuery(text); setHighlighted(0); }}
-          placeholder="Search files"
-          ref={input}
-          style={styles.input}
-          value={query}
-        />
-        <ScrollView
-          keyboardShouldPersistTaps="always"
-          onLayout={event => { viewportHeight.current = event.nativeEvent.layout.height; }}
-          onScroll={event => { offset.current = event.nativeEvent.contentOffset.y; }}
-          ref={scroll}
-          scrollEventThrottle={32}
-          style={styles.results}
-        >
-          {results.map(result => (
-            <Pressable
-              accessibilityLabel={`${result.name}, ${result.directory}`}
-              accessibilityRole="menuitem"
-              accessibilityState={{ selected: result === selected }}
-              className={result === selected ? "bg-surface-muted" : undefined}
-              key={result.path}
-              onHoverIn={() => setHighlighted(results.indexOf(result))}
-              onPress={() => onOpen(result.path)}
-              style={styles.row}
-            >
-              <Text className="text-foreground" numberOfLines={1} style={styles.name}>{result.name}</Text>
-              <Text className="text-muted" numberOfLines={1} style={styles.directory}>{result.directory}</Text>
-            </Pressable>
-          ))}
-          {files && results.length === 0
-            ? <Text className="text-muted" style={styles.empty}>{query.trim() ? "No matching files" : "No recent files"}</Text>
-            : null}
-        </ScrollView>
-        <Pressable accessibilityRole="button" className="border-t border-border" onPress={onBrowse} style={styles.footer}>
-          <Text className="text-foreground" style={styles.name}>Open File</Text>
-        </Pressable>
+      {/* The shadow sits outside the clipped panel, which would clip it too. */}
+      <View className="bg-surface" style={styles.shadow}>
+        <View accessibilityLabel="Open File" accessibilityRole="menu" className="border border-border" style={styles.panel}>
+          <View className="border-b border-border" style={styles.header}>
+            <TextInputSearch
+              accessibilityLabel="Search Markdown files"
+              onChangeText={text => { setQuery(text); setHighlighted(0); }}
+              placeholder="Search files"
+              ref={input}
+              style={styles.input}
+              value={query}
+            />
+          </View>
+          <ScrollView
+            keyboardShouldPersistTaps="always"
+            onLayout={event => { viewportHeight.current = event.nativeEvent.layout.height; }}
+            onScroll={event => { offset.current = event.nativeEvent.contentOffset.y; }}
+            ref={scroll}
+            scrollEventThrottle={32}
+            style={styles.results}
+          >
+            {results.map(result => (
+              <Pressable
+                accessibilityLabel={`${result.name}, ${result.directory}`}
+                accessibilityRole="menuitem"
+                accessibilityState={{ selected: result === selected }}
+                className={result === selected ? "bg-surface-muted" : undefined}
+                key={result.path}
+                onHoverIn={() => setHighlighted(results.indexOf(result))}
+                onPress={() => onOpen(result.path)}
+                style={styles.row}
+              >
+                <Text className="text-foreground" numberOfLines={1} style={styles.name}>{result.name}</Text>
+                <Text className="text-muted" numberOfLines={1} style={styles.directory}>{result.directory}</Text>
+              </Pressable>
+            ))}
+            {files && results.length === 0
+              ? <Text className="text-muted" style={styles.empty}>{query.trim() ? "No matching files" : "No recent files"}</Text>
+              : null}
+          </ScrollView>
+          <Pressable accessibilityRole="button" className="border-t border-border" onPress={onBrowse} style={styles.footer}>
+            <Text className="text-foreground" style={styles.name}>Open File</Text>
+          </Pressable>
+        </View>
       </View>
     </View>
   );
@@ -140,16 +144,24 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 12,
   },
-  input: {
-    fontSize: 14,
+  header: {
     height: 38,
-    paddingHorizontal: 12,
+    justifyContent: "center",
+    paddingHorizontal: 6,
+  },
+  input: {
+    height: 28,
   },
   name: {
     flexShrink: 0,
     fontSize: 13,
   },
   panel: {
+    borderRadius: 8,
+    flexShrink: 1,
+    overflow: "hidden",
+  },
+  shadow: {
     alignSelf: "center",
     borderRadius: 8,
     // The panel shrinks to the pane, taking its rows from the results so the search field and footer stay.
@@ -157,11 +169,10 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     marginTop: 18,
     maxWidth: "90%",
-    overflow: "hidden",
     shadowColor: "#000000",
-    shadowOffset: { height: 4, width: 0 },
-    shadowOpacity: 0.16,
-    shadowRadius: 12,
+    shadowOffset: { height: 8, width: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
     width: 440,
   },
   results: {

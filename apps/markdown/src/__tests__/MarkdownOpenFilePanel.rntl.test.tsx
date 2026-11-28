@@ -28,15 +28,20 @@ const mockFocus = jest.fn();
 const mockScrollTo = jest.fn();
 let mockScrollLayout: ((event: object) => void) | undefined;
 // The search field is focused through its ref once the panel mounts, and the results scroll through theirs.
+jest.mock("@legendapp/spark/ui/search", () => {
+  const React = require("react");
+  return {
+    TextInputSearch: React.forwardRef((props: object, ref: React.Ref<unknown>) => {
+      React.useImperativeHandle(ref, () => ({ focus: mockFocus }));
+      return React.createElement("TextInputSearch", props);
+    }),
+  };
+});
 jest.mock("react-native", () => {
   const React = require("react");
   const actual = jest.requireActual("react-native");
   return {
     ...actual,
-    TextInput: React.forwardRef((props: object, ref: React.Ref<unknown>) => {
-      React.useImperativeHandle(ref, () => ({ focus: mockFocus }));
-      return React.createElement("TextInput", props);
-    }),
     ScrollView: React.forwardRef((props: { onLayout?: (event: object) => void }, ref: React.Ref<unknown>) => {
       React.useImperativeHandle(ref, () => ({ scrollTo: mockScrollTo }));
       mockScrollLayout = props.onLayout;

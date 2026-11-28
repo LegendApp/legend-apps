@@ -140,6 +140,16 @@ jest.mock("@legendapp/spark/ui/symbol", () => ({
   SFSymbol: () => null,
 }));
 
+jest.mock("@legendapp/spark/ui/search", () => {
+  const React = require("react");
+  return {
+    TextInputSearch: React.forwardRef((props, ref) => {
+      React.useImperativeHandle(ref, () => ({ blur() {}, focus() {} }));
+      return React.createElement("TextInputSearch", props);
+    }),
+  };
+});
+
 jest.mock("@legendapp/spark/ui/sidebar", () => {
   const React = require("react");
   return {

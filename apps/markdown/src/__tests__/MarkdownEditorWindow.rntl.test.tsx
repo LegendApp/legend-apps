@@ -543,6 +543,69 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
       expect(tabs(view)).toEqual(["Untitled.md*"]);
       await view.unmount();
     });
+
+    describe("from a document tab", () => {
+      const prepare = mockSession.prepareCurrentDocumentForClose;
+      const pick = async (file: string) => {
+        mockOpenFilePanel = null;
+        await act(async () => menus().onOpenDocument());
+        await act(async () => mockOpenFilePanel!.onOpen(file));
+      };
+      beforeEach(() => { mockSidebarFolders = ["/notes"]; });
+      afterEach(() => { prepare.mockReset().mockResolvedValue(true); });
+
+      it("replaces the tab Open File came from once it is ready to close, and keeps it when that is canceled", async () => {
+        const view = await render(<MarkdownEditorWindow files={["/docs/a.md", "/docs/b.md"]} />);
+        prepare.mockResolvedValueOnce(false);
+        await pick("/notes/c.md");
+        expect(tabs(view)).toEqual(["a.md*", "b.md"]);
+
+        await pick("/notes/c.md");
+        expect(prepare.mock.calls).toEqual([[{ autosaveEnabled: true, reason: "close" }], [{ autosaveEnabled: true, reason: "close" }]]);
+        expect(tabs(view)).toEqual(["c.md*", "b.md"]);
+        expect(mockSession.openSelectedFile).toHaveBeenLastCalledWith("/notes/c.md");
+        await view.unmount();
+      });
+
+      it("leaves a pick of the same file alone, and lets an open file's tab take the place of the one Open File came from", async () => {
+        const view = await render(<MarkdownEditorWindow files={["/docs/a.md", "/docs/b.md"]} />);
+        await pick("/docs/a.md");
+        expect(tabs(view)).toEqual(["a.md*", "b.md"]);
+        expect(prepare).not.toHaveBeenCalled();
+
+        await pick("/docs/b.md");
+        expect(tabs(view)).toEqual(["b.md*"]);
+        expect(prepare).toHaveBeenCalledTimes(1);
+        await view.unmount();
+      });
+
+      it("replaces a draft with the system picker's file after Save As renames it", async () => {
+        mockSidebarFolders = [];
+        jest.mocked(createMarkdownDraft).mockReturnValueOnce("/test-drafts/Untitled.md");
+        const view = await render(<MarkdownEditorWindow files={["/docs/a.md"]} />);
+        await act(async () => menus().onNewFile());
+        await act(async () => menus().onOpenDocument());
+        expect(mockSession.openMarkdownDialog).toHaveBeenCalledTimes(1);
+        const session = mockUseMarkdownDocumentSession.mock.calls.at(-1)![0];
+        prepare.mockImplementationOnce(async () => { session.onFileSavedAs("/test-drafts/Untitled.md", "/docs/saved.md"); return true; });
+        await act(async () => session.onOpenFile("/elsewhere/c.md"));
+        expect(tabs(view)).toEqual(["a.md", "c.md*"]);
+        expect(mockSession.openSelectedFile).toHaveBeenLastCalledWith("/elsewhere/c.md");
+        await view.unmount();
+      });
+
+      it("drops a pick whose tab closed while it waited to close", async () => {
+        const view = await render(<MarkdownEditorWindow files={["/docs/a.md", "/docs/b.md"]} />);
+        let ready!: (value: boolean) => void;
+        prepare.mockImplementationOnce(() => new Promise(resolve => { ready = resolve; }));
+        await pick("/notes/c.md");
+        await act(async () => fireEvent.press(view.getByLabelText("Close a.md")));
+        expect(tabs(view)).toEqual(["b.md*"]);
+        await act(async () => ready(true));
+        expect(tabs(view)).toEqual(["b.md*"]);
+        await view.unmount();
+      });
+    });
   });
 
   it("opens a draft tab for the New startup setting", async () => {
@@ -956,8 +1019,10 @@ describe("MarkdownEditorWindow save identity", () => {
 
     jest.mocked(openFileDialog).mockResolvedValueOnce({ canceled: false, paths: [original] });
     await act(async () => menu().onOpenDocument());
+    // Open File replaces the renamed tab with a fresh editor for the original, and the other pane keeps its own tab.
     expect(left.getByText(`document:${original}`)).not.toBe(sourceDocument);
-    expect(left.getByText(`document:${destination}`, { includeHiddenElements: true })).toBe(sourceDocument);
+    expect(left.queryByText(`document:${destination}`, { includeHiddenElements: true })).toBeNull();
+    expect(right.getByText(`document:${destination}`)).toBe(otherDocument);
     await view.unmount();
   });
 });

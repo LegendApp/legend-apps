@@ -152,6 +152,8 @@ type PaneActions = {
   openTab: (paneId: string, path: string) => void;
   /** Opens a file from the tab `from` (null in an idle pane) unless that tab has since closed, moved or been replaced. */
   openFrom: (paneId: string, from: string | null, editorKey: number | undefined, file: string) => void;
+  /** Open File: like openFrom, but a document tab gives way to the file once it is saved or discarded. */
+  openInPlace: (paneId: string, from: string | null, editorKey: number | undefined, file: string) => Promise<void>;
   register: (paneId: string, prepareForClose: (reason: CloseReason, path?: string) => Promise<boolean>) => () => void;
   renameTab: (paneId: string, from: string, to: string) => void;
 };
@@ -311,6 +313,19 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
         return from !== to && tabs?.paths.includes(from) ? renamePaneTab(current, paneId, from, to) : current;
       }, false, { paneId, from, to });
     };
+    // An empty tab becomes the file, or gives way to the file's tab already in its pane.
+    const openFrom = (paneId: string, from: string | null, editorKey: number | undefined, file: string) => {
+      const { editorKeys, layout } = layoutStateRef.current;
+      const tabs = layout.panes[paneId];
+      if (!tabs || (from === null ? tabs.active !== null : editorKeys[paneId].get(from) !== editorKey)) return;
+      if (from === null || !isEmptyTab(from)) openTab(paneId, file);
+      else if (tabs.paths.includes(file)) {
+        openTab(paneId, file);
+        setLayout(current => closePaneTab(current, paneId, from));
+      } else renameTab(paneId, from, file);
+    };
+    const tabWithKey = (paneId: string, editorKey: number | undefined) =>
+      [...layoutStateRef.current.editorKeys[paneId] ?? []].find(([, key]) => key === editorKey)?.[0];
     return {
       canDropTab: (paneId, zone) => {
         const drag = tabDrag.current;
@@ -342,16 +357,17 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
       },
       focus: paneId => setLayout(current => focusPane(current, paneId), false),
       openTab,
-      // An empty tab becomes the file, or gives way to the file's tab already in its pane.
-      openFrom: (paneId, from, editorKey, file) => {
-        const { editorKeys, layout } = layoutStateRef.current;
-        const tabs = layout.panes[paneId];
-        if (!tabs || (from === null ? tabs.active !== null : editorKeys[paneId].get(from) !== editorKey)) return;
-        if (from === null || !isEmptyTab(from)) openTab(paneId, file);
-        else if (tabs.paths.includes(file)) {
-          openTab(paneId, file);
-          setLayout(current => closePaneTab(current, paneId, from));
-        } else renameTab(paneId, from, file);
+      openFrom,
+      openInPlace: async (paneId, from, editorKey, file) => {
+        if (from === null || isEmptyTab(from) || from === file) return openFrom(paneId, from, editorKey, file);
+        if (tabWithKey(paneId, editorKey) !== from || !await preparePanes([paneId], "close", from)) return;
+        // Saving a draft renames its tab, which keeps its editor key.
+        const replaced = tabWithKey(paneId, editorKey);
+        if (!replaced) return;
+        removeMarkdownDraft(replaced);
+        if (isFileTab(file)) openWorkspaceTab(file);
+        // An existing tab for the file takes the replaced tab's place; otherwise the file opens in a new editor at its position.
+        setLayout(current => renamePaneTab(current, paneId, replaced, file), false);
       },
       register: (paneId, prepareForClose) => {
         paneClosers.current.set(paneId, prepareForClose);
@@ -661,6 +677,10 @@ function MarkdownPane({
     (from: string | null, file: string) => actions.openFrom(paneId, from, from === null ? undefined : editorKeys.get(from), file),
     [actions, editorKeys, paneId],
   );
+  const reportError = useCallback((error: unknown) => console.error(error), []);
+  const openInPlace = useCallback((from: string | null, file: string) => {
+    actions.openInPlace(paneId, from, from === null ? undefined : editorKeys.get(from), file).catch(reportError);
+  }, [actions, editorKeys, paneId, reportError]);
   const newDocument = useCallback(async (from: string | null) => { openFrom(from, createMarkdownDraft()); }, [openFrom]);
   // Open File searches the root folders in a panel over this pane; without folders, or from the panel's footer, it is the system picker.
   const activeKey = active === null ? undefined : editorKeys.get(active);
@@ -677,7 +697,6 @@ function MarkdownPane({
     if (!closingPath) return;
     actions.closeTab(paneId, closingPath, editorKeys.get(path));
   }, [actions, editorKeys, paneId]);
-  const reportError = useCallback((error: unknown) => console.error(error), []);
 
   const closeActiveTab = useCallback(() => {
     if (active) closeTab(active).catch(reportError);
@@ -734,6 +753,7 @@ function MarkdownPane({
               nativeWindowAppearance={nativeWindowAppearance}
               newDocument={newDocument}
               openFrom={openFrom}
+              openInPlace={openInPlace}
               registerTab={registerTab}
               renameTab={renameTab}
               showOpenFile={showOpenFile}
@@ -748,7 +768,7 @@ function MarkdownPane({
               onBrowse={() => { setOpenFile(null); openFile.browse().catch(reportError); }}
               onDismiss={() => setOpenFile(null)}
               onError={reportError}
-              onOpen={file => { setOpenFile(null); actions.openFrom(paneId, openFile.from, openFile.key, file); }}
+              onOpen={file => { setOpenFile(null); actions.openInPlace(paneId, openFile.from, openFile.key, file).catch(reportError); }}
               windowId={windowId}
             />
           ) : null}
@@ -776,6 +796,7 @@ function MarkdownTabEditor({
   nativeWindowAppearance,
   newDocument,
   openFrom,
+  openInPlace,
   registerTab,
   renameTab,
   showOpenFile,
@@ -791,6 +812,7 @@ function MarkdownTabEditor({
   closeActiveTab: () => void;
   newDocument: (from: string | null) => Promise<void>;
   openFrom: (from: string | null, file: string) => void;
+  openInPlace: (from: string | null, file: string) => void;
   registerTab: (path: string, prepare: PrepareTabForClose) => () => void;
   renameTab: (from: string, to: string) => void;
   showOpenFile: (from: string | null, browse: () => Promise<void>) => Promise<void>;
@@ -803,7 +825,9 @@ function MarkdownTabEditor({
   }, []);
   const openFile = useCallback((file: string) => { if (live.current) openFrom(path, file); }, [openFrom, path]);
   const newFile = useCallback(() => newDocument(path), [newDocument, path]);
-  const session = useMarkdownDocumentSession({ onOpenFile: openFile, onFileSavedAs: renameTab, windowId });
+  // The session's picker is Open File's, so its choice replaces this tab.
+  const openPickedFile = useCallback((file: string) => { if (live.current) openInPlace(path, file); }, [openInPlace, path]);
+  const session = useMarkdownDocumentSession({ onOpenFile: openPickedFile, onFileSavedAs: renameTab, windowId });
   const { documentCommandsRef, handleError, openMarkdownDialog, openSelectedFile, prepareCurrentDocumentForClose, sessionState$ } = session;
   const openDocument = useCallback(() => showOpenFile(path, openMarkdownDialog), [openMarkdownDialog, path, showOpenFile]);
   const documentPath = isEmptyTab(path) ? null : path;
