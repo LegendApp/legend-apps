@@ -22,7 +22,7 @@ export function getMarkdownTabTitle(path: string) {
 export function MarkdownEmptyState({ onNewFile, onOpenFile }: { onNewFile: () => void; onOpenFile: () => void }) {
   return (
     <View style={styles.actions}>
-      <EmptyStateAction label="New File" onPress={onNewFile} shortcut={getMarkdownMenuShortcutLabel("new")} />
+      <EmptyStateAction label="New File" onPress={onNewFile} shortcut={getMarkdownMenuShortcutLabel("newFile")} />
       <EmptyStateAction label="Open File" onPress={onOpenFile} shortcut={getMarkdownMenuShortcutLabel("open")} />
     </View>
   );

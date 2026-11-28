@@ -13,8 +13,8 @@ const mockAddRecentDocumentOpenListener = subscribeToOpenRequests as jest.Mocked
 const mockAddWindowClosedListener = addAppListener as jest.MockedFunction<typeof addAppListener>;
 const mockUseNativeMenu = createMenu as jest.MockedFunction<typeof createMenu>;
 const mockOpenMarkdownEditorWindow = openMarkdownEditorWindow as jest.MockedFunction<typeof openMarkdownEditorWindow>;
-function dispatchNew() {
-    mockUseNativeMenu.mock.lastCall![0].onAction?.({ type: "action", itemId: "new" });
+function dispatchCreation(itemId = "newFile") {
+    mockUseNativeMenu.mock.lastCall![0].onAction?.({ type: "action", itemId });
 }
 function openRecent() {
     mockAddRecentDocumentOpenListener.mock.lastCall![0]({ type: "file", id: String(Date.now()), path: "/tmp/recent.md", source: "recent" } as any);
@@ -63,12 +63,12 @@ describe("App markdown shell actions", () => {
         await waitFor(() => expect(showMarkdownEditorWindow).toHaveBeenCalledTimes(1));
         expect(mockOpenMarkdownEditorWindow).toHaveBeenCalledTimes(1);
     });
-    it("opens a fresh untitled editor window for New when no editor is registered", async () => {
+    it("opens a fresh untitled editor window for New File when no editor is registered", async () => {
         await render(<App />);
         await waitFor(() => {
             expect(mockUseNativeMenu).toHaveBeenCalled();
         });
-        await act(async () => dispatchNew());
+        await act(async () => dispatchCreation());
         await waitFor(() => {
             expect(mockOpenMarkdownEditorWindow).toHaveBeenCalledTimes(2);
         });
@@ -119,14 +119,20 @@ describe("App markdown shell actions", () => {
         unregisterMenu();
         unregisterRecent();
     });
-    it("delegates menu actions to the registered editor while it is mounted", async () => {
+    it.each([
+        ["newTab", "New Tab", "Cmd+t"],
+        ["newFile", "New File", "Cmd+n"],
+    ])("registers and routes %s to the active editor", async (itemId, label, shortcut) => {
         const editorNew = jest.fn();
-        const unregister = registerMarkdownEditorMenuHandlers("markdown-editor", { new: editorNew }, jest.fn());
+        const unregister = registerMarkdownEditorMenuHandlers("markdown-editor", { [itemId]: editorNew }, jest.fn());
+        const file = markdownMenuConfig.find(item => item.id === "file");
+        expect(file?.type === "submenu" && file.items.find(item => item.type !== "separator" && item.id === itemId))
+            .toMatchObject({ label, shortcut });
         await render(<App />);
         await waitFor(() => {
             expect(mockUseNativeMenu).toHaveBeenCalled();
         });
-        await act(async () => dispatchNew());
+        await act(async () => dispatchCreation(itemId));
         expect(editorNew).toHaveBeenCalledTimes(1);
         expect(mockOpenMarkdownEditorWindow).toHaveBeenCalledTimes(1);
         unregister();
@@ -178,9 +184,9 @@ describe("App markdown shell actions", () => {
         expect(find).toHaveBeenCalledTimes(1);
         unregister();
     });
-    it("opens a fresh untitled window for New after the editor closes", async () => {
+    it("opens a fresh untitled window for New File after the editor closes", async () => {
         const staleNewHandler = jest.fn();
-        const unregister = registerMarkdownEditorMenuHandlers("markdown-editor", { new: staleNewHandler }, jest.fn());
+        const unregister = registerMarkdownEditorMenuHandlers("markdown-editor", { newFile: staleNewHandler }, jest.fn());
         await render(<App />);
         await waitFor(() => {
             expect(mockUseNativeMenu).toHaveBeenCalled();
@@ -190,7 +196,7 @@ describe("App markdown shell actions", () => {
             expect(mockOpenMarkdownEditorWindow).toHaveBeenCalledTimes(1);
         });
         await act(async () => { closeEditor(); unregister(); });
-        await act(async () => dispatchNew());
+        await act(async () => dispatchCreation());
         await waitFor(() => {
             expect(mockOpenMarkdownEditorWindow).toHaveBeenCalledTimes(2);
         });

@@ -15,7 +15,6 @@ import {
   closePane,
   closePaneTab,
   createPaneLayout,
-  createWorkspaceFile,
   createWorkspaceFolder,
   DocumentTabBar,
   focusAdjacentPane,
@@ -434,8 +433,12 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
   const addFolder = useCallback(() => { chooseFolders().then(addFolders).catch(reportError); }, [addFolders, reportError]);
   const newEntryDirectory = getNewEntryDirectory(workspaceFolders, currentFile);
   const newFile = useCallback(() => {
-    if (newEntryDirectory) createWorkspaceFile(newEntryDirectory, newMarkdownFileName).then(openInFocusedPane).catch(reportError);
-  }, [newEntryDirectory, openInFocusedPane, reportError]);
+    try {
+      openInFocusedPane(createMarkdownDraft());
+    } catch (error) {
+      reportError(error);
+    }
+  }, [openInFocusedPane, reportError]);
   const newFolder = useCallback(() => {
     if (newEntryDirectory) createWorkspaceFolder(newEntryDirectory).catch(reportError);
   }, [newEntryDirectory, reportError]);
@@ -444,11 +447,12 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
     onAddFolder: addFolder,
     onNewFile: newFile,
     onNewFolder: newFolder,
+    onNewTab: () => openInFocusedPane(createEmptyTab()),
     onOpenSettings: openSettingsWindow,
     onSaveWorkspace: workspace.saveWorkspace,
     onToggleAssistant: toggleAssistant,
     composerFocused$: assistant.state$.composerFocused,
-  }), [addFolder, assistant, newFile, newFolder, openSettingsWindow, toggleAssistant, workspace.saveWorkspace, workspaceFolders.length]);
+  }), [addFolder, assistant, newFile, newFolder, openInFocusedPane, openSettingsWindow, toggleAssistant, workspace.saveWorkspace, workspaceFolders.length]);
 
   const e2eRun = getMarkdownE2ERunFromLaunchArguments(launchArguments);
   const newOnLaunch = useRef(shouldLaunchNewMarkdownDocument(launchArguments) || (
@@ -458,12 +462,8 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
   useEffect(() => {
     if (!newOnLaunch.current) return;
     newOnLaunch.current = false;
-    try {
-      openInFocusedPane(createMarkdownDraft());
-    } catch (error) {
-      reportError(error);
-    }
-  }, [openInFocusedPane, reportError]);
+    newFile();
+  }, [newFile]);
   useMarkdownWindowCloseRequest({
     windowId: e2eRun ? undefined : windowId,
     handleError: reportError,
@@ -588,7 +588,7 @@ function ChromeTint({ backgroundStyle }: { backgroundStyle: { backgroundColor: s
   return <View pointerEvents="none" style={[StyleSheet.absoluteFillObject, backgroundStyle, { opacity: 0.8 }]} />;
 }
 
-type WindowMenuOptions = Pick<Parameters<typeof useMarkdownMenus>[0], "composerFocused$" | "hasFolders" | "onAddFolder" | "onNewFile" | "onNewFolder" | "onOpenSettings" | "onSaveWorkspace" | "onToggleAssistant">;
+type WindowMenuOptions = Pick<Parameters<typeof useMarkdownMenus>[0], "composerFocused$" | "hasFolders" | "onAddFolder" | "onNewFile" | "onNewFolder" | "onNewTab" | "onOpenSettings" | "onSaveWorkspace" | "onToggleAssistant">;
 
 type MarkdownPaneProps = {
   actions: PaneActions;
@@ -868,7 +868,6 @@ function MarkdownTabEditor({
           nativeWindowAppearance={nativeWindowAppearance}
           onFind={() => setFindVisible(true)}
           onInsertLink={insertLink}
-          onNewDocument={newFile}
           onOpenDocument={openDocument}
           onOpenFile={openFile}
           session={session}
@@ -913,14 +912,13 @@ function MarkdownTabEditor({
   );
 }
 
-function FocusedPaneBindings({ closeActiveTab, commandState, commands, nativeWindowAppearance, onFind, onInsertLink, onNewDocument, onOpenDocument, onOpenFile, session, windowId, windowMenus }: {
+function FocusedPaneBindings({ closeActiveTab, commandState, commands, nativeWindowAppearance, onFind, onInsertLink, onOpenDocument, onOpenFile, session, windowId, windowMenus }: {
   closeActiveTab: () => void;
   commandState: PaneCommandState;
   commands: PaneCommands;
   nativeWindowAppearance: "dark" | "light";
   onFind: () => void;
   onInsertLink: () => void;
-  onNewDocument: () => Promise<void>;
   onOpenDocument: () => Promise<void>;
   onOpenFile: (path: string) => void;
   session: MarkdownDocumentSession;
@@ -943,7 +941,6 @@ function FocusedPaneBindings({ closeActiveTab, commandState, commands, nativeWin
     onError: session.handleError,
     onFind,
     onInsertLink,
-    onNewDocument,
     onOpenDocument,
     onSaveDocument: session.saveCurrentDocument,
     onSaveDocumentAs: session.saveCurrentDocumentAs,

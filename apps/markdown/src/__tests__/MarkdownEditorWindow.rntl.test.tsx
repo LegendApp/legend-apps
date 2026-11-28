@@ -366,7 +366,7 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
 
   it("opens two real draft tabs without confirming the existing document", async () => {
     const { useMarkdownMenus } = jest.requireMock("../useMarkdownMenus");
-    const newDocument = () => useMarkdownMenus.mock.calls.at(-1)[0].onNewDocument();
+    const newDocument = () => useMarkdownMenus.mock.calls.at(-1)[0].onNewFile();
     jest.mocked(createMarkdownDraft)
       .mockReturnValueOnce("/test-drafts/Untitled.md")
       .mockReturnValueOnce("/test-drafts/Untitled 2.md");
@@ -410,10 +410,10 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
       mockSidebarFolders = [];
     });
 
-    it("opens a New Tab beside a dirty document without preparing it, and New File turns it into a draft", async () => {
+    it("opens a New Tab beside a dirty document, and its New File button turns it into a draft", async () => {
       const view = await render(<MarkdownEditorWindow files={["/docs/a.md"]} />);
       mockSession.openSelectedFile.mockClear();
-      await act(async () => fireEvent.press(button(view, "New Tab")));
+      await act(async () => menus().onNewTab());
       expect(tabs(view)).toEqual(["a.md", "New Tab*"]);
       expect(mockSession.prepareCurrentDocumentForClose).not.toHaveBeenCalled();
       expect(mockSession.openSelectedFile).not.toHaveBeenCalled();
@@ -421,9 +421,22 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
       expect(button(view, "Open File").props.accessibilityHint).toBe("⌘O");
 
       jest.mocked(createMarkdownDraft).mockReturnValueOnce("/test-drafts/Untitled.md");
-      await act(async () => menus().onNewDocument());
+      await act(async () => fireEvent.press(button(view, "New File")));
       expect(tabs(view)).toEqual(["a.md", "Untitled.md*"]);
       expect(mockSession.openSelectedFile).toHaveBeenCalledWith("/test-drafts/Untitled.md");
+      expect(mockSession.prepareCurrentDocumentForClose).not.toHaveBeenCalled();
+      await view.unmount();
+    });
+
+    it("opens a separate draft from File > New File while an empty tab is selected", async () => {
+      const view = await render(<MarkdownEditorWindow files={["/docs/a.md"]} />);
+      jest.mocked(createMarkdownDraft).mockReturnValueOnce("/test-drafts/Untitled.md");
+
+      await act(async () => menus().onNewTab());
+      await act(async () => menus().onNewFile());
+
+      expect(tabs(view)).toEqual(["a.md", "New Tab", "Untitled.md*"]);
+      expect(mockSession.openSelectedFile).toHaveBeenLastCalledWith("/test-drafts/Untitled.md");
       expect(mockSession.prepareCurrentDocumentForClose).not.toHaveBeenCalled();
       await view.unmount();
     });
@@ -481,7 +494,7 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
       await act(async () => menus().onOpenDocument());
       const latePick = mockUseMarkdownDocumentSession.mock.calls.at(-1)![0].onOpenFile;
       jest.mocked(createMarkdownDraft).mockReturnValueOnce("/test-drafts/Untitled.md");
-      await act(async () => menus().onNewDocument());
+      await act(async () => fireEvent.press(button(view, "New File")));
       await act(async () => latePick("/outside/late.md"));
       expect(tabs(view)).toEqual(["Untitled.md*"]);
       expect(view.queryByText("late.md")).toBeNull();
@@ -524,7 +537,7 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
       const panel = await showPanel(view);
       mockOpenFilePanel = null;
       jest.mocked(createMarkdownDraft).mockReturnValueOnce("/test-drafts/Untitled.md");
-      await act(async () => menus().onNewDocument());
+      await act(async () => fireEvent.press(button(view, "New File")));
       expect(mockOpenFilePanel).toBeNull();
       await act(async () => panel.onOpen("/notes/late.md"));
       expect(tabs(view)).toEqual(["Untitled.md*"]);
@@ -878,7 +891,7 @@ describe("MarkdownEditorWindow save identity", () => {
   it.each(["draft", "file"] as const)("preserves the mounted document after saving a %s under a new path", async source => {
     const original = source === "draft" ? draft : "/docs/original.md";
     const view = await render(<MarkdownEditorWindow files={source === "draft" ? [] : [original]} />);
-    if (source === "draft") await act(async () => menu().onNewDocument());
+    if (source === "draft") await act(async () => menu().onNewFile());
     const document = view.getByText(`document:${original}`);
     const save = source === "draft" ? menu().onSaveDocument : menu().onSaveDocumentAs;
     await act(async () => { menu().sessionState$.isDirty.set(true); });
@@ -907,7 +920,7 @@ describe("MarkdownEditorWindow save identity", () => {
   it.each([true, false])("keeps the destination when closing a draft into it (visited: %s)", async visited => {
     const view = await render(<MarkdownEditorWindow files={[destination, ...(visited ? [] : ["/docs/other.md"])]} />);
     const document = view.queryByText(`document:${destination}`);
-    await act(async () => menu().onNewDocument());
+    await act(async () => menu().onNewFile());
     await act(async () => { menu().sessionState$.isDirty.set(true); });
     jest.mocked(confirmDirtyDocumentTransition).mockResolvedValueOnce("cancel");
     await fireEvent.press(view.getByLabelText("Close Untitled.md"));

@@ -74,9 +74,9 @@ function createMarkdownMenuHandlers(controller: DocumentAppController): MenuHand
     addFolder: (action: MenuAction) => {
       if (!dispatchMarkdownEditorMenuAction(action)) workspaceHandlers.openFolder();
     },
-    newFile: dispatchMarkdownEditorMenuAction,
+    newTab: dispatchMarkdownEditorMenuAction,
     newFolder: dispatchMarkdownEditorMenuAction,
-    new: (action: MenuAction) => {
+    newFile: (action: MenuAction) => {
       if (!dispatchMarkdownEditorMenuAction(action)) {
         openNewMarkdownEditorWindow(controller)
           .catch(reportMarkdownAppControllerError);

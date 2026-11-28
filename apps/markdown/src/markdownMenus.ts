@@ -25,12 +25,9 @@ export const markdownMenuConfig: MenuRootItem[] = [
     target: { menu: "file" },
     placement: macMenuPlacement.file,
     items: [
-      {
-        id: "new",
-        type: "action", target: { role: "new" }, label: "New", shortcut: "Cmd+n",
-      },
-      { type: "action", id: "newFile", label: "New File", disabled: true, placement: { after: { role: "new" } } },
-      { type: "action", id: "newFolder", label: "New Folder", disabled: true, placement: { after: { id: "newFile" } } },
+      { type: "action", id: "newTab", label: "New Tab", shortcut: "Cmd+t", disabled: true, placement: { before: { role: "new" } } },
+      { type: "action", id: "newFile", target: { role: "new" }, label: "New File", shortcut: "Cmd+n" },
+      { type: "action", id: "newFolder", label: "New Folder", disabled: true, placement: { after: { role: "new" } } },
       { ...workspaceMenuItems.newWindow, placement: { after: { id: "newFolder" } } },
       { type: "action",
         id: "open",

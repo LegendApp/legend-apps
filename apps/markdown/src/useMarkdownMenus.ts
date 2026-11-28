@@ -18,14 +18,14 @@ import type { MarkdownDocumentSessionState, MarkdownDocumentSessionState$ } from
 type MarkdownMenuOptions = {
   /** While the Assistant composer has keyboard focus, document editing commands are disabled. */
   composerFocused$: Observable<boolean>;
-  /** Whether the window has root folders, which New File and New Folder need. */
+  /** Whether the window has root folders, which New Folder needs. */
   hasFolders: boolean;
   onAddFolder: () => void;
   onNewFile: () => void;
   onNewFolder: () => void;
+  onNewTab: () => void;
   documentCommandsRef: RefObject<MarkdownDocumentCommands | null>;
   onError: (error: unknown) => void;
-  onNewDocument: () => Promise<void>;
   onOpenDocument: () => Promise<void>;
   onOpenSettings: () => void;
   onInsertLink: () => void;
@@ -63,7 +63,7 @@ const disabledDocumentMenuItems = [
   "strikethrough",
   "spoiler",
   "link",
-  "newFile",
+  "newTab",
   "newFolder",
   ...markdownPaneMenuItems.filter(id => id !== "closeTab"),
 ];
@@ -78,9 +78,9 @@ export function useMarkdownMenus({
   onAddFolder,
   onNewFile,
   onNewFolder,
+  onNewTab,
   documentCommandsRef,
   onError,
-  onNewDocument,
   onOpenDocument,
   onOpenSettings,
   onInsertLink,
@@ -100,14 +100,12 @@ export function useMarkdownMenus({
     assistant: onToggleAssistant,
     newFile: onNewFile,
     newFolder: onNewFolder,
+    newTab: onNewTab,
     bold: () => documentCommandsRef.current?.toggleBold(),
     decreaseFontSize: decreaseMarkdownFontSizeSetting,
     italic: () => documentCommandsRef.current?.toggleItalic(),
     increaseFontSize: increaseMarkdownFontSizeSetting,
     link: onInsertLink,
-    new: () => {
-      onNewDocument().catch(onError);
-    },
     open: () => {
       onOpenDocument().catch(onError);
     },
@@ -140,9 +138,9 @@ export function useMarkdownMenus({
     onAddFolder,
     onNewFile,
     onNewFolder,
+    onNewTab,
     documentCommandsRef,
     onError,
-    onNewDocument,
     onOpenDocument,
     onOpenSettings,
     onInsertLink,
@@ -176,7 +174,7 @@ export function useMarkdownMenus({
       { id: "strikethrough", enabled: canEdit },
       { id: "spoiler", enabled: canEdit },
       { id: "link", enabled: canEdit },
-      { id: "newFile", enabled: hasFolders },
+      { id: "newTab", enabled: true },
       { id: "newFolder", enabled: hasFolders },
       { id: "closeWindow", enabled: true },
       { id: "splitRight", enabled: paneCommandState.canSplitRight },

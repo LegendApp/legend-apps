@@ -41,7 +41,7 @@ function MenuOwner({ composerFocused$ = observable(false), hasFolders = false, s
     onNewFolder: noop,
     documentCommandsRef: commands,
     onError: noop,
-    onNewDocument: transition,
+    onNewTab: noop,
     onOpenDocument: transition,
     onOpenSettings: noop,
     onFind: noop,
@@ -67,10 +67,11 @@ it("uses the focused editor's menu state and restores the remaining editor after
   expect(markdownMenuState$.save.disabled.peek()).toBe(true);
   await act(async () => mockFocusListeners.get("first")?.({ focused: true }));
   expect(markdownMenuState$.save.disabled.peek()).toBe(false);
-  expect(markdownMenuState$.newFile.disabled.peek()).toBe(false);
+  expect(markdownMenuState$.newFolder.disabled.peek()).toBe(false);
   await act(async () => mockFocusListeners.get("second")?.({ focused: true }));
   expect(markdownMenuState$.save.disabled.peek()).toBe(true);
   expect(markdownMenuState$.newFolder.disabled.peek()).toBe(true);
+  expect(markdownMenuState$.newTab.disabled.peek()).toBe(false);
   await view.rerender(<MenuOwner windowId="first" sessionState$={first} />);
   untrackSecond();
   expect(markdownMenuState$.save.disabled.peek()).toBe(false);
