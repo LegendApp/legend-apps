@@ -359,15 +359,21 @@ export function MarkdownEditorWindow({ files, folders, launchArguments, windowId
       openTab,
       openFrom,
       openInPlace: async (paneId, from, editorKey, file) => {
-        if (from === null || isEmptyTab(from) || from === file) return openFrom(paneId, from, editorKey, file);
-        if (tabWithKey(paneId, editorKey) !== from || !await preparePanes([paneId], "close", from)) return;
-        // Saving a draft renames its tab, which keeps its editor key.
+        if (from === null || isEmptyTab(from)) return openFrom(paneId, from, editorKey, file);
+        // The tab is found by its editor key, which follows a draft's Save As rename, before and after it is ready to close.
+        const source = tabWithKey(paneId, editorKey);
+        if (!source || source === file || !await preparePanes([paneId], "close", source)) return;
         const replaced = tabWithKey(paneId, editorKey);
-        if (!replaced) return;
+        if (!replaced || replaced === file) return;
         removeMarkdownDraft(replaced);
         if (isFileTab(file)) openWorkspaceTab(file);
-        // An existing tab for the file takes the replaced tab's place; otherwise the file opens in a new editor at its position.
-        setLayout(current => renamePaneTab(current, paneId, replaced, file), false);
+        // The file takes the replaced tab's slot, keeping its editor when it already has a tab in this pane.
+        setLayout(current => {
+          const tabs = current.panes[paneId];
+          if (!tabs?.paths.includes(replaced)) return current;
+          const paths = tabs.paths.filter(path => path !== file).map(path => path === replaced ? file : path);
+          return { ...current, panes: { ...current.panes, [paneId]: { active: tabs.active === replaced ? file : tabs.active, paths } } };
+        }, false);
       },
       register: (paneId, prepareForClose) => {
         paneClosers.current.set(paneId, prepareForClose);

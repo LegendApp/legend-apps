@@ -579,6 +579,39 @@ describe("MarkdownEditorWindow e2e launch routing", () => {
         await view.unmount();
       });
 
+      it("puts an already open file in the slot of the tab Open File came from", async () => {
+        const view = await render(<MarkdownEditorWindow files={["/docs/a.md", "/docs/b.md", "/docs/c.md", "/docs/d.md"]} />);
+        await pick("/docs/c.md");
+        expect(tabs(view)).toEqual(["c.md*", "b.md", "d.md"]);
+        await view.unmount();
+      });
+
+      it("leaves the selection alone when a late system pick names the tab it came from", async () => {
+        mockSidebarFolders = [];
+        const view = await render(<MarkdownEditorWindow files={["/docs/a.md", "/docs/b.md"]} />);
+        await act(async () => menus().onOpenDocument());
+        const latePick = mockUseMarkdownDocumentSession.mock.calls.at(-1)![0].onOpenFile;
+        await act(async () => fireEvent.press(view.getAllByLabelText("b.md").find(node => node.props.accessibilityRole === "tab")!));
+        await act(async () => latePick("/docs/a.md"));
+        expect(tabs(view)).toEqual(["a.md", "b.md*"]);
+        expect(prepare).not.toHaveBeenCalled();
+        await view.unmount();
+      });
+
+      it("follows a draft saved before the system picker answers", async () => {
+        mockSidebarFolders = [];
+        jest.mocked(createMarkdownDraft).mockReturnValueOnce("/test-drafts/Untitled.md");
+        const view = await render(<MarkdownEditorWindow files={["/docs/a.md"]} />);
+        await act(async () => menus().onNewFile());
+        await act(async () => menus().onOpenDocument());
+        const session = mockUseMarkdownDocumentSession.mock.calls.at(-1)![0];
+        await act(async () => session.onFileSavedAs("/test-drafts/Untitled.md", "/docs/saved.md"));
+        expect(tabs(view)).toEqual(["a.md", "saved.md*"]);
+        await act(async () => session.onOpenFile("/elsewhere/c.md"));
+        expect(tabs(view)).toEqual(["a.md", "c.md*"]);
+        await view.unmount();
+      });
+
       it("replaces a draft with the system picker's file after Save As renames it", async () => {
         mockSidebarFolders = [];
         jest.mocked(createMarkdownDraft).mockReturnValueOnce("/test-drafts/Untitled.md");
