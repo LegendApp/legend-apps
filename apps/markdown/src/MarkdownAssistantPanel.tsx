@@ -18,13 +18,14 @@ export function MarkdownAssistantPanel({ assistant, onClose }: { assistant: Mark
   const [text, setText] = useState("");
   const scroll = useRef<ScrollView>(null);
   const composer = useRef<TextInput>(null);
-  // macOS blurs a single-line field on Return, and Apply and Discard unmount their focused button.
+  // macOS blurs a single-line field on every Return, and Apply and Discard unmount their focused button.
   const focusComposer = () => composer.current?.focus();
   const canSend = !pending && !!text.trim();
   const send = () => {
-    if (!canSend) return;
-    setText("");
-    void assistant.send(text);
+    if (!assistant.state$.pending.peek() && text.trim()) {
+      setText("");
+      void assistant.send(text);
+    }
     focusComposer();
   };
 

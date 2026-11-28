@@ -305,6 +305,43 @@ it("returns focus to the composer after send, Discard and Apply", async () => {
   await view.unmount();
 });
 
+it("keeps the draft and composer focus on a blank or pending Return, then sends the draft once after an error", async () => {
+  const reply = deferred();
+  const run = jest.fn().mockReturnValueOnce(reply.promise).mockResolvedValueOnce(longForm);
+  const assistant = createMarkdownAssistant({ run });
+  const view = await render(<MarkdownAssistantPanel assistant={assistant} onClose={jest.fn()} />);
+  const composer = () => view.getByLabelText("Ask Assistant");
+  const focused = () => assistant.state$.composerFocused.peek();
+  // macOS blurs a single-line field on every Return before the submit reaches JS.
+  const pressReturn = async () => {
+    await fireEvent(composer(), "blur");
+    await fireEvent(composer(), "submitEditing");
+  };
+
+  await pressReturn();
+  expect(focused()).toBe(true);
+  expect(run).not.toHaveBeenCalled();
+
+  await fireEvent.changeText(composer(), "first");
+  await pressReturn();
+  await fireEvent.changeText(composer(), "next");
+  await pressReturn();
+  expect(focused()).toBe(true);
+  expect(composer().props.value).toBe("next");
+  expect(run).toHaveBeenCalledTimes(1);
+
+  reply.reject(new Error("Claude exited with code 1"));
+  await view.findByText("Claude exited with code 1");
+  expect(assistant.state$.pending.peek()).toBe(false);
+  expect(composer().props.value).toBe("next");
+  await pressReturn();
+  expect(composer().props.value).toBe("");
+  expect(run).toHaveBeenCalledTimes(2);
+  expect(run.mock.calls[1]![0]).toContain("next");
+  await waitFor(() => nativeButton(view, "Apply 4 changes"));
+  await view.unmount();
+});
+
 it("keeps each card's buttons on its own proposal and reports composer focus", async () => {
   const replies = [longForm, JSON.stringify({ message: "Bigger.", changes: { fontSize: "xlarge" } })];
   const assistant = createMarkdownAssistant({ run: async () => replies.shift()! });
